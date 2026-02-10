@@ -3,17 +3,12 @@ import '@fortawesome/fontawesome-free/css/all.min.css';
 import type {
   CategoryNode,
   NoteboardCard,
-  NodeWorkspaceData,
   PersistedTreeState,
   UserSettings,
 } from './shared/types';
 import {
-  NOTEBOARD_WORLD_HEIGHT,
-  NOTEBOARD_WORLD_MAX_X,
-  NOTEBOARD_WORLD_MAX_Y,
   NOTEBOARD_WORLD_MIN_X,
   NOTEBOARD_WORLD_MIN_Y,
-  NOTEBOARD_WORLD_WIDTH,
 } from './shared/noteboard-constants';
 import {
   countDescendants,
@@ -25,6 +20,23 @@ import {
 import {
   isValidEditorType,
 } from './shared/editor-types';
+import {
+  applyNoteboardWorldStyles,
+  CARD_MIN_HEIGHT,
+  CARD_WIDTH,
+  CANVAS_PADDING,
+  clampCardToWorld,
+  clampViewOffsets,
+  createNoteboardCard,
+  getMinZoomForCanvas,
+  getNodeWorkspaceData as getNodeWorkspaceDataForState,
+  getNoteboardCards as getNoteboardCardsForState,
+  getNoteboardView as getNoteboardViewForState,
+  getWorldPoint,
+  type NoteboardView,
+} from './renderer/noteboard-utils';
+import { createHistoryStack } from './renderer/history-stack';
+import { isPersistedTreeState } from './renderer/persistence-guards';
 import { renderNodeTree } from './renderer/components/node-tree';
 import {
   renderCreateNodeDialog,
@@ -85,6 +97,25 @@ type UiState = {
       }
     | null;
 };
+
+type HistorySnapshot = {
+  state: PersistedTreeState;
+  cardSelection: {
+    nodeId: string | null;
+    cardIds: string[];
+  };
+};
+
+type AppClipboard =
+  | {
+      kind: 'noteboard-cards';
+      cards: Array<{
+        text: string;
+        dx: number;
+        dy: number;
+      }>;
+    }
+  | null;
 
 const app = document.getElementById('app');
 
@@ -148,114 +179,26 @@ const uiState: UiState = {
 const clampSidebarWidth = (value: number): number =>
   Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value));
 
-const CARD_WIDTH = 240;
-const CARD_MIN_HEIGHT = 170;
-const CANVAS_PADDING = 12;
-const BASE_MIN_ZOOM = 0.08;
 const MAX_ZOOM = 2.5;
-const BASE_GRID_STEP = 24;
-const TARGET_GRID_SCREEN_SPACING = 26;
+const MAX_HISTORY_ENTRIES = 120;
 
-const createNoteboardCard = (x: number, y: number): NoteboardCard => ({
-  id: `card-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-  text: '',
-  createdAt: Date.now(),
-  x,
-  y,
-});
-
-const getNodeWorkspaceData = (nodeId: string): NodeWorkspaceData => {
-  if (!state.nodeDataById[nodeId]) {
-    state.nodeDataById[nodeId] = {};
-  }
-
-  return state.nodeDataById[nodeId];
+const historyState: {
+  textEditSessions: Set<string>;
+} = {
+  textEditSessions: new Set<string>(),
 };
+const historyStack = createHistoryStack<HistorySnapshot>(MAX_HISTORY_ENTRIES);
 
-const getNoteboardCards = (nodeId: string): NoteboardCard[] => {
-  const nodeData = getNodeWorkspaceData(nodeId);
-  if (!nodeData.noteboard) {
-    nodeData.noteboard = { cards: [] };
-  }
+let appClipboard: AppClipboard = null;
 
-  nodeData.noteboard.cards.forEach((card, index) => {
-    if (typeof card.x !== 'number' || !Number.isFinite(card.x)) {
-      card.x = (index % 3) * 260 - 260;
-    }
-    if (typeof card.y !== 'number' || !Number.isFinite(card.y)) {
-      card.y = Math.floor(index / 3) * 220 - 220;
-    }
-  });
+const getWorkspaceData = (nodeId: string) =>
+  getNodeWorkspaceDataForState(state, nodeId);
+const getCards = (nodeId: string): NoteboardCard[] =>
+  getNoteboardCardsForState(state, nodeId);
+const getView = (nodeId: string): NoteboardView =>
+  getNoteboardViewForState(state, nodeId);
 
-  return nodeData.noteboard.cards;
-};
-
-const getNoteboardView = (
-  nodeId: string,
-): { zoom: number; offsetX: number; offsetY: number } => {
-  const nodeData = getNodeWorkspaceData(nodeId);
-  if (!nodeData.noteboard) {
-    nodeData.noteboard = { cards: [] };
-  }
-
-  if (!nodeData.noteboard.view) {
-    nodeData.noteboard.view = {
-      zoom: 1,
-      offsetX: NOTEBOARD_WORLD_MIN_X + 180,
-      offsetY: NOTEBOARD_WORLD_MIN_Y + 120,
-    };
-  }
-
-  // Migrate legacy default offsets from the older positive-only camera setup.
-  if (
-    Math.abs(nodeData.noteboard.view.offsetX - 180) < 1 &&
-    Math.abs(nodeData.noteboard.view.offsetY - 120) < 1
-  ) {
-    nodeData.noteboard.view.offsetX += NOTEBOARD_WORLD_MIN_X;
-    nodeData.noteboard.view.offsetY += NOTEBOARD_WORLD_MIN_Y;
-  }
-
-  return nodeData.noteboard.view;
-};
-
-const clampViewOffsets = (
-  canvas: HTMLElement,
-  view: { zoom: number; offsetX: number; offsetY: number },
-): void => {
-  const scaledWorldWidth = NOTEBOARD_WORLD_WIDTH * view.zoom;
-  const scaledWorldHeight = NOTEBOARD_WORLD_HEIGHT * view.zoom;
-
-  if (scaledWorldWidth <= canvas.clientWidth) {
-    view.offsetX = (canvas.clientWidth - scaledWorldWidth) / 2;
-  } else {
-    const minOffsetX = canvas.clientWidth - scaledWorldWidth;
-    const maxOffsetX = 0;
-    view.offsetX = Math.min(maxOffsetX, Math.max(minOffsetX, view.offsetX));
-  }
-
-  if (scaledWorldHeight <= canvas.clientHeight) {
-    view.offsetY = (canvas.clientHeight - scaledWorldHeight) / 2;
-  } else {
-    const minOffsetY = canvas.clientHeight - scaledWorldHeight;
-    const maxOffsetY = 0;
-    view.offsetY = Math.min(maxOffsetY, Math.max(minOffsetY, view.offsetY));
-  }
-};
-
-const getMinZoomForCanvas = (canvas: HTMLElement): number => {
-  const fitZoomX = canvas.clientWidth / NOTEBOARD_WORLD_WIDTH;
-  const fitZoomY = canvas.clientHeight / NOTEBOARD_WORLD_HEIGHT;
-  const fitZoom = Math.min(fitZoomX, fitZoomY) * 0.98;
-  return Math.min(BASE_MIN_ZOOM, fitZoom);
-};
-
-const getGridStepForZoom = (zoom: number): number => {
-  const rawLevel = TARGET_GRID_SCREEN_SPACING / (BASE_GRID_STEP * zoom);
-  const level = Math.max(0, Math.ceil(Math.log2(Math.max(1, rawLevel))));
-  return BASE_GRID_STEP * 2 ** level;
-};
-
-const applyNoteboardWorldStyles = (nodeId: string): void => {
+const applyWorldStylesForNode = (nodeId: string): void => {
   const world = app.querySelector<HTMLElement>(
     `.noteboard-world[data-node-id="${nodeId}"]`,
   );
@@ -263,17 +206,7 @@ const applyNoteboardWorldStyles = (nodeId: string): void => {
     return;
   }
 
-  const view = getNoteboardView(nodeId);
-  const gridStep = getGridStepForZoom(view.zoom);
-  const majorGridStep = gridStep * 4;
-  const lineWidth = 1 / view.zoom;
-  const majorLineWidth = 1.5 / view.zoom;
-
-  world.style.transform = `translate(${view.offsetX}px, ${view.offsetY}px) scale(${view.zoom})`;
-  world.style.setProperty('--grid-step', `${gridStep}px`);
-  world.style.setProperty('--grid-major-step', `${majorGridStep}px`);
-  world.style.setProperty('--grid-line-width', `${lineWidth}px`);
-  world.style.setProperty('--grid-major-line-width', `${majorLineWidth}px`);
+  applyNoteboardWorldStyles(world, getView(nodeId));
 };
 
 const collectSubtreeIds = (root: CategoryNode): string[] => {
@@ -284,23 +217,8 @@ const collectSubtreeIds = (root: CategoryNode): string[] => {
   return ids;
 };
 
-const clampCardToWorld = (
-  x: number,
-  y: number,
-): { x: number; y: number } => {
-  const minX = NOTEBOARD_WORLD_MIN_X + CANVAS_PADDING;
-  const minY = NOTEBOARD_WORLD_MIN_Y + CANVAS_PADDING;
-  const maxX = NOTEBOARD_WORLD_MAX_X - CARD_WIDTH - CANVAS_PADDING;
-  const maxY = NOTEBOARD_WORLD_MAX_Y - CARD_MIN_HEIGHT - CANVAS_PADDING;
-
-  return {
-    x: Math.min(maxX, Math.max(minX, x)),
-    y: Math.min(maxY, Math.max(minY, y)),
-  };
-};
-
 const findNoteboardCard = (nodeId: string, cardId: string): NoteboardCard | undefined => {
-  const cards = getNoteboardCards(nodeId);
+  const cards = getCards(nodeId);
   return cards.find((card) => card.id === cardId);
 };
 
@@ -331,17 +249,159 @@ const clearCardSelection = (): void => {
   uiState.cardSelection = { nodeId: null, cardIds: [] };
 };
 
-const getWorldPoint = (
-  canvas: HTMLElement,
-  view: { zoom: number; offsetX: number; offsetY: number },
-  clientX: number,
-  clientY: number,
-): { x: number; y: number } => {
-  const rect = canvas.getBoundingClientRect();
-  return {
-    x: (clientX - rect.left - view.offsetX) / view.zoom + NOTEBOARD_WORLD_MIN_X,
-    y: (clientY - rect.top - view.offsetY) / view.zoom + NOTEBOARD_WORLD_MIN_Y,
+const deepCloneState = (input: PersistedTreeState): PersistedTreeState =>
+  JSON.parse(JSON.stringify(input)) as PersistedTreeState;
+
+const captureHistorySnapshot = (): HistorySnapshot => ({
+  state: deepCloneState(state),
+  cardSelection: {
+    nodeId: uiState.cardSelection.nodeId,
+    cardIds: [...uiState.cardSelection.cardIds],
+  },
+});
+
+const applyHistorySnapshot = (snapshot: HistorySnapshot): void => {
+  state.nodes = snapshot.state.nodes;
+  state.selectedNodeId = snapshot.state.selectedNodeId;
+  state.nextNodeNumber = snapshot.state.nextNodeNumber;
+  state.nodeDataById = snapshot.state.nodeDataById;
+
+  uiState.cardSelection = {
+    nodeId: snapshot.cardSelection.nodeId,
+    cardIds: [...snapshot.cardSelection.cardIds],
   };
+
+  uiState.selectionBox = null;
+  uiState.contextMenu = null;
+  uiState.draggingCard = null;
+  uiState.panningCanvas = null;
+  historyState.textEditSessions.clear();
+};
+
+const pushHistory = (): void => {
+  historyStack.push(captureHistorySnapshot());
+};
+
+const undoHistory = (): void => {
+  const previous = historyStack.undo(captureHistorySnapshot());
+  if (!previous) {
+    return;
+  }
+
+  applyHistorySnapshot(previous);
+  render();
+  scheduleStateSave();
+};
+
+const redoHistory = (): void => {
+  const next = historyStack.redo(captureHistorySnapshot());
+  if (!next) {
+    return;
+  }
+
+  applyHistorySnapshot(next);
+  render();
+  scheduleStateSave();
+};
+
+const copySelectedCardsToClipboard = (): void => {
+  const selectedNode = findNodeById(state.nodes, state.selectedNodeId);
+  if (!selectedNode || selectedNode.editorType !== 'noteboard') {
+    return;
+  }
+
+  const selectedIds = getSelectedCardIdsForNode(selectedNode.id);
+  if (selectedIds.length === 0) {
+    return;
+  }
+
+  const cards = getCards(selectedNode.id).filter((card) =>
+    selectedIds.includes(card.id),
+  );
+  if (cards.length === 0) {
+    return;
+  }
+
+  const anchorX = Math.min(...cards.map((card) => card.x));
+  const anchorY = Math.min(...cards.map((card) => card.y));
+  appClipboard = {
+    kind: 'noteboard-cards',
+    cards: cards.map((card) => ({
+      text: card.text,
+      dx: card.x - anchorX,
+      dy: card.y - anchorY,
+    })),
+  };
+};
+
+const pasteClipboardToSelectedNode = (): void => {
+  if (!appClipboard || appClipboard.kind !== 'noteboard-cards') {
+    return;
+  }
+
+  const selectedNode = findNodeById(state.nodes, state.selectedNodeId);
+  if (!selectedNode || selectedNode.editorType !== 'noteboard') {
+    return;
+  }
+
+  const canvas = app.querySelector<HTMLElement>(
+    `.noteboard-canvas[data-node-id="${selectedNode.id}"]`,
+  );
+  const view = getView(selectedNode.id);
+  let anchorX = 0;
+  let anchorY = 0;
+
+  if (canvas) {
+    anchorX = (canvas.clientWidth / 2 - view.offsetX) / view.zoom + NOTEBOARD_WORLD_MIN_X;
+    anchorY =
+      (canvas.clientHeight / 2 - view.offsetY) / view.zoom + NOTEBOARD_WORLD_MIN_Y;
+  }
+
+  pushHistory();
+  const cards = getCards(selectedNode.id);
+  const newIds: string[] = [];
+  appClipboard.cards.forEach((item) => {
+    const pos = clampCardToWorld(anchorX + item.dx, anchorY + item.dy);
+    const card = createNoteboardCard(pos.x, pos.y);
+    card.text = item.text;
+    cards.unshift(card);
+    newIds.push(card.id);
+  });
+
+  setSelectedCardIds(selectedNode.id, newIds);
+  render();
+  scheduleStateSave();
+};
+
+const deleteSelectedCardsFromSelectedNode = (): void => {
+  const selectedNode = findNodeById(state.nodes, state.selectedNodeId);
+  if (!selectedNode || selectedNode.editorType !== 'noteboard') {
+    return;
+  }
+
+  const selectedIds = getSelectedCardIdsForNode(selectedNode.id);
+  if (selectedIds.length === 0) {
+    return;
+  }
+
+  const cards = getCards(selectedNode.id);
+  const filtered = cards.filter((card) => !selectedIds.includes(card.id));
+  if (filtered.length === cards.length) {
+    return;
+  }
+
+  pushHistory();
+  state.nodeDataById[selectedNode.id] = {
+    ...getWorkspaceData(selectedNode.id),
+    noteboard: {
+      ...getWorkspaceData(selectedNode.id).noteboard,
+      cards: filtered,
+    },
+  };
+
+  clearCardSelection();
+  render();
+  scheduleStateSave();
 };
 
 const beginRename = (nodeId: string): void => {
@@ -369,6 +429,9 @@ const commitRename = (): void => {
   const nextName = uiState.editingNameDraft.trim();
 
   if (node && nextName) {
+    if (node.name !== nextName) {
+      pushHistory();
+    }
     node.name = nextName;
     scheduleStateSave();
   }
@@ -512,14 +575,14 @@ const render = (): void => {
       `.noteboard-world[data-node-id="${selectedNode.id}"]`,
     );
     if (canvas && world) {
-      const view = getNoteboardView(selectedNode.id);
+      const view = getView(selectedNode.id);
       const beforeX = view.offsetX;
       const beforeY = view.offsetY;
       clampViewOffsets(canvas, view);
       if (view.offsetX !== beforeX || view.offsetY !== beforeY) {
-        applyNoteboardWorldStyles(selectedNode.id);
+        applyWorldStylesForNode(selectedNode.id);
       } else {
-        applyNoteboardWorldStyles(selectedNode.id);
+        applyWorldStylesForNode(selectedNode.id);
       }
     }
   }
@@ -589,6 +652,7 @@ app.addEventListener('click', (event) => {
       return;
     }
 
+    pushHistory();
     const nextNode = createNode(`Untitled Node ${state.nextNodeNumber}`, type);
     state.nextNodeNumber += 1;
     state.nodeDataById[nextNode.id] = {};
@@ -623,8 +687,9 @@ app.addEventListener('click', (event) => {
       return;
     }
 
-    const cards = getNoteboardCards(node.id);
-    const view = getNoteboardView(node.id);
+    pushHistory();
+    const cards = getCards(node.id);
+    const view = getView(node.id);
     const canvas = app.querySelector<HTMLElement>(
       `.noteboard-canvas[data-node-id="${node.id}"]`,
     );
@@ -671,7 +736,8 @@ app.addEventListener('click', (event) => {
       return;
     }
 
-    const cards = getNoteboardCards(nodeId);
+    pushHistory();
+    const cards = getCards(nodeId);
     const selectedIds = getSelectedCardIdsForNode(nodeId);
     const selectedCards = cards.filter((card) => selectedIds.includes(card.id));
     if (selectedCards.length === 0) {
@@ -707,7 +773,8 @@ app.addEventListener('click', (event) => {
       return;
     }
 
-    const cards = getNoteboardCards(menu.nodeId);
+    pushHistory();
+    const cards = getCards(menu.nodeId);
     const pos = clampCardToWorld(menu.worldX - CARD_WIDTH / 2, menu.worldY - 24);
     cards.unshift(createNoteboardCard(pos.x, pos.y));
     uiState.contextMenu = null;
@@ -723,7 +790,8 @@ app.addEventListener('click', (event) => {
       return;
     }
 
-    const cards = getNoteboardCards(nodeId);
+    pushHistory();
+    const cards = getCards(nodeId);
     const index = cards.findIndex((card) => card.id === cardId);
     if (index < 0) {
       return;
@@ -775,6 +843,7 @@ app.addEventListener('click', (event) => {
       return;
     }
 
+    pushHistory();
     const nodeBeforeDelete = findNodeById(state.nodes, id);
     const subtreeIds = nodeBeforeDelete ? collectSubtreeIds(nodeBeforeDelete) : [];
     const wasRemoved = removeNodeById(state.nodes, id);
@@ -810,6 +879,16 @@ app.addEventListener('pointerdown', (event) => {
     return;
   }
 
+  if (uiState.contextMenu && !target.closest('.canvas-context-menu')) {
+    uiState.contextMenu = null;
+    render();
+
+    if (target.closest('.noteboard-canvas')) {
+      event.preventDefault();
+      return;
+    }
+  }
+
   if (event.button === 0) {
     const canvas = target.closest<HTMLElement>('.noteboard-canvas');
     const clickedCard = target.closest('.noteboard-card');
@@ -819,7 +898,7 @@ app.addEventListener('pointerdown', (event) => {
       if (nodeId) {
         const node = findNodeById(state.nodes, nodeId);
         if (node?.editorType === 'noteboard') {
-          const view = getNoteboardView(nodeId);
+          const view = getView(nodeId);
           const world = getWorldPoint(canvas, view, event.clientX, event.clientY);
           uiState.selectionBox = {
             nodeId,
@@ -844,7 +923,7 @@ app.addEventListener('pointerdown', (event) => {
     if (canvas) {
       const nodeId = canvas.dataset.nodeId;
       if (nodeId) {
-        const view = getNoteboardView(nodeId);
+        const view = getView(nodeId);
         uiState.panningCanvas = {
           pointerId: event.pointerId,
           nodeId,
@@ -885,7 +964,7 @@ app.addEventListener('pointerdown', (event) => {
       return;
     }
 
-    const view = getNoteboardView(nodeId);
+    const view = getView(nodeId);
     const pointer = getWorldPoint(canvas, view, event.clientX, event.clientY);
 
     const currentSelection = getSelectedCardIdsForNode(nodeId);
@@ -912,6 +991,7 @@ app.addEventListener('pointerdown', (event) => {
       startPositions,
     };
 
+    pushHistory();
     actionTarget.setPointerCapture(event.pointerId);
     document.body.classList.add('is-dragging-card');
     render();
@@ -942,7 +1022,7 @@ window.addEventListener('pointermove', (event) => {
       return;
     }
 
-    const view = getNoteboardView(box.nodeId);
+    const view = getView(box.nodeId);
     const world = getWorldPoint(canvas, view, event.clientX, event.clientY);
     box.currentX = world.x;
     box.currentY = world.y;
@@ -952,7 +1032,7 @@ window.addEventListener('pointermove', (event) => {
     const minY = Math.min(box.startY, box.currentY);
     const maxY = Math.max(box.startY, box.currentY);
 
-    const cards = getNoteboardCards(box.nodeId);
+    const cards = getCards(box.nodeId);
     const hits = cards
       .filter((card) => {
         const cardMinX = card.x;
@@ -989,7 +1069,7 @@ window.addEventListener('pointermove', (event) => {
       return;
     }
 
-    const view = getNoteboardView(pan.nodeId);
+    const view = getView(pan.nodeId);
     view.offsetX = pan.startOffsetX + (event.clientX - pan.startClientX);
     view.offsetY = pan.startOffsetY + (event.clientY - pan.startClientY);
     clampViewOffsets(canvas, view);
@@ -998,7 +1078,7 @@ window.addEventListener('pointermove', (event) => {
       `.noteboard-world[data-node-id="${pan.nodeId}"]`,
     );
     if (world) {
-      applyNoteboardWorldStyles(pan.nodeId);
+      applyWorldStylesForNode(pan.nodeId);
     }
     event.preventDefault();
     return;
@@ -1016,7 +1096,7 @@ window.addEventListener('pointermove', (event) => {
       return;
     }
 
-    const view = getNoteboardView(drag.nodeId);
+    const view = getView(drag.nodeId);
     const pointer = getWorldPoint(canvas, view, event.clientX, event.clientY);
     let deltaX = pointer.x - drag.pointerStartX;
     let deltaY = pointer.y - drag.pointerStartY;
@@ -1178,10 +1258,16 @@ app.addEventListener('input', (event) => {
       return;
     }
 
-    const cards = getNoteboardCards(nodeId);
+    const cards = getCards(nodeId);
     const card = cards.find((item) => item.id === cardId);
     if (!card) {
       return;
+    }
+
+    const sessionKey = `${nodeId}:${cardId}`;
+    if (!historyState.textEditSessions.has(sessionKey)) {
+      pushHistory();
+      historyState.textEditSessions.add(sessionKey);
     }
 
     card.text = target.value;
@@ -1200,6 +1286,29 @@ app.addEventListener('input', (event) => {
   uiState.editingNameDraft = target.value;
   event.stopPropagation();
 });
+
+app.addEventListener(
+  'focusout',
+  (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLTextAreaElement)) {
+      return;
+    }
+
+    if (target.dataset.action !== 'noteboard-edit-card') {
+      return;
+    }
+
+    const nodeId = target.dataset.nodeId;
+    const cardId = target.dataset.cardId;
+    if (!nodeId || !cardId) {
+      return;
+    }
+
+    historyState.textEditSessions.delete(`${nodeId}:${cardId}`);
+  },
+  true,
+);
 
 document.addEventListener(
   'pointerdown',
@@ -1249,7 +1358,7 @@ app.addEventListener(
       return;
     }
 
-    const view = getNoteboardView(nodeId);
+    const view = getView(nodeId);
     const minZoom = getMinZoomForCanvas(canvas);
     const zoomDelta = event.deltaY < 0 ? 1.12 : 0.88;
     const nextZoom = Math.min(MAX_ZOOM, Math.max(minZoom, view.zoom * zoomDelta));
@@ -1273,7 +1382,7 @@ app.addEventListener(
       `.noteboard-world[data-node-id="${nodeId}"]`,
     );
     if (world) {
-      applyNoteboardWorldStyles(nodeId);
+      applyWorldStylesForNode(nodeId);
     }
 
     scheduleStateSave();
@@ -1315,7 +1424,7 @@ app.addEventListener('contextmenu', (event) => {
     return;
   }
 
-  const view = getNoteboardView(nodeId);
+  const view = getView(nodeId);
   const rect = canvas.getBoundingClientRect();
   const worldX =
     (event.clientX - rect.left - view.offsetX) / view.zoom + NOTEBOARD_WORLD_MIN_X;
@@ -1368,123 +1477,65 @@ app.addEventListener('keydown', (event) => {
   }
 });
 
-const isNode = (value: unknown): value is CategoryNode => {
-  if (typeof value !== 'object' || value === null) {
-    return false;
+window.addEventListener('keydown', (event) => {
+  const target = event.target;
+  const isTextEntryTarget =
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    (target instanceof HTMLElement && target.isContentEditable);
+
+  if (event.key === 'Delete' && !isTextEntryTarget) {
+    deleteSelectedCardsFromSelectedNode();
+    event.preventDefault();
+    return;
   }
 
-  const obj = value as {
-    id?: unknown;
-    name?: unknown;
-    editorType?: unknown;
-    children?: unknown;
-  };
-
-  return (
-    typeof obj.id === 'string' &&
-    typeof obj.name === 'string' &&
-    isValidEditorType(obj.editorType) &&
-    Array.isArray(obj.children) &&
-    obj.children.every((child) => isNode(child))
-  );
-};
-
-const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
-  if (typeof value !== 'object' || value === null) {
-    return false;
+  const mod = event.ctrlKey || event.metaKey;
+  if (!mod) {
+    return;
   }
 
-  const obj = value as {
-    noteboard?: unknown;
-  };
+  const key = event.key.toLowerCase();
 
-  if (typeof obj.noteboard === 'undefined') {
-    return true;
-  }
-
-  if (typeof obj.noteboard !== 'object' || obj.noteboard === null) {
-    return false;
-  }
-
-  const noteboard = obj.noteboard as { cards?: unknown };
-  if (!Array.isArray(noteboard.cards)) {
-    return false;
-  }
-
-  const view = (obj.noteboard as { view?: unknown }).view;
-  if (typeof view !== 'undefined') {
-    if (typeof view !== 'object' || view === null) {
-      return false;
+  if (key === 'z') {
+    if (event.shiftKey) {
+      if (!isTextEntryTarget) {
+        redoHistory();
+        event.preventDefault();
+      }
+      return;
     }
 
-    const viewObj = view as {
-      zoom?: unknown;
-      offsetX?: unknown;
-      offsetY?: unknown;
-    };
-
-    if (
-      typeof viewObj.zoom !== 'number' ||
-      typeof viewObj.offsetX !== 'number' ||
-      typeof viewObj.offsetY !== 'number'
-    ) {
-      return false;
+    if (!isTextEntryTarget) {
+      undoHistory();
+      event.preventDefault();
     }
+    return;
   }
 
-  return noteboard.cards.every((card) => {
-    if (typeof card !== 'object' || card === null) {
-      return false;
+  if (key === 'y') {
+    if (!isTextEntryTarget) {
+      redoHistory();
+      event.preventDefault();
     }
-
-    const item = card as {
-      id?: unknown;
-      text?: unknown;
-      createdAt?: unknown;
-      x?: unknown;
-      y?: unknown;
-    };
-
-    return (
-      typeof item.id === 'string' &&
-      typeof item.text === 'string' &&
-      typeof item.createdAt === 'number' &&
-      (typeof item.x === 'undefined' || typeof item.x === 'number') &&
-      (typeof item.y === 'undefined' || typeof item.y === 'number')
-    );
-  });
-};
-
-const isPersistedTreeState = (value: unknown): value is PersistedTreeState => {
-  if (typeof value !== 'object' || value === null) {
-    return false;
+    return;
   }
 
-  const obj = value as {
-    nodes?: unknown;
-    selectedNodeId?: unknown;
-    nextNodeNumber?: unknown;
-    nodeDataById?: unknown;
-  };
+  if (isTextEntryTarget) {
+    return;
+  }
 
-  const nodeDataValid =
-    typeof obj.nodeDataById === 'undefined' ||
-    (typeof obj.nodeDataById === 'object' &&
-      obj.nodeDataById !== null &&
-      Object.values(obj.nodeDataById as Record<string, unknown>).every((entry) =>
-        isNodeWorkspaceData(entry),
-      ));
+  if (key === 'c') {
+    copySelectedCardsToClipboard();
+    event.preventDefault();
+    return;
+  }
 
-  return (
-    Array.isArray(obj.nodes) &&
-    obj.nodes.every((node) => isNode(node)) &&
-    (typeof obj.selectedNodeId === 'string' || obj.selectedNodeId === null) &&
-    typeof obj.nextNodeNumber === 'number' &&
-    Number.isInteger(obj.nextNodeNumber) &&
-    obj.nextNodeNumber >= 1 &&
-    nodeDataValid
-  );
-};
+  if (key === 'v') {
+    pasteClipboardToSelectedNode();
+    event.preventDefault();
+  }
+});
 
 const isUserSettings = (value: unknown): value is UserSettings => {
   if (typeof value !== 'object' || value === null) {
@@ -1532,3 +1583,4 @@ const bootstrap = async (): Promise<void> => {
 };
 
 void bootstrap();
+

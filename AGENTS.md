@@ -66,6 +66,8 @@
 - 2026-02-10: Added adaptive multi-level noteboard grid (minor/major lines) that scales by zoom to keep grid visibility when zooming out.
 - 2026-02-10: Switched noteboard quick-create flow to a custom right-click context menu and refined card visuals/spacing for a more organic look.
 - 2026-02-10: Added noteboard card selection model (single, ctrl multi, marquee rectangle), group drag movement for multi-selected cards, and duplicate-selected action.
+- 2026-02-10: Added app-level command history snapshots with undo/redo shortcuts and internal noteboard copy/paste for selected cards.
+- 2026-02-10: Added keyboard delete action for selected noteboard cards (`Delete`) with undo support.
 
 ## Open Questions
 - Single-window only for MVP, or multi-window support early?
