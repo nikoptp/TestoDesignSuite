@@ -1,0 +1,381 @@
+:root {
+  color: #1e1f24;
+  background: #f3efe4;
+  font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width, 320px) 8px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: linear-gradient(180deg, #f8f1dc 0%, #efe3c0 100%);
+  border-right: 1px solid #d8c8a0;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.brand {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.tree-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  color: #574829;
+}
+
+button {
+  border: 1px solid #b8a57d;
+  background: #fff9ea;
+  color: #493a1f;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #fff2cf;
+}
+
+.tree-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tree-scroll {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.tree-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.tree-scroll::-webkit-scrollbar-thumb {
+  background: #c4ac79;
+  border-radius: 999px;
+}
+
+.sidebar-resizer {
+  cursor: col-resize;
+  background: linear-gradient(180deg, #e2cf9e 0%, #d1b477 100%);
+  border-right: 1px solid #b4965e;
+}
+
+.sidebar-resizer:hover {
+  background: linear-gradient(180deg, #e8d8b0 0%, #d9bf86 100%);
+}
+
+.tree-list.nested {
+  margin-top: 6px;
+  margin-left: 14px;
+  padding-left: 12px;
+  border-left: 1px dashed #ccb47e;
+}
+
+.tree-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+
+.node-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.tree-item {
+  width: 100%;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tree-item.editing {
+  background: #fff9ea;
+  border: 1px solid #b8a57d;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.node-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-category-icon {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #f2e6c7;
+  border: 1px solid #cfb88a;
+  color: #6a5329;
+}
+
+.icon-action {
+  width: 28px;
+  min-width: 28px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-action.secondary {
+  background: #f8efd8;
+}
+
+.icon-action.confirm {
+  background: #eaf8e8;
+  border-color: #8cae86;
+  color: #2d5b28;
+}
+
+.icon-action.danger,
+button.danger {
+  background: #ffe9e4;
+  border-color: #d08774;
+  color: #7d2a22;
+}
+
+.tree-item.active {
+  border-color: #886224;
+  background: #f4deac;
+  font-weight: 700;
+}
+
+.main-panel {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: radial-gradient(circle at top right, #fff7de 0%, #fffdf7 55%);
+}
+
+body.is-resizing-sidebar,
+body.is-resizing-sidebar * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.main-panel h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.main-panel p {
+  margin: 0;
+  color: #4f4f4f;
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.editor-header h2 {
+  margin: 0;
+}
+
+.editor-subtitle {
+  margin: 0;
+  color: #4f4f4f;
+}
+
+.editor-empty {
+  margin: 0;
+  color: #5a5a5a;
+}
+
+.noteboard-canvas {
+  position: relative;
+  min-height: 420px;
+  border: 1px dashed #ccb47e;
+  border-radius: 12px;
+  background:
+    linear-gradient(90deg, rgba(210, 181, 121, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(210, 181, 121, 0.08) 1px, transparent 1px),
+    #fffdf6;
+  background-size: 24px 24px;
+  overflow: auto;
+}
+
+.noteboard-card {
+  position: absolute;
+  width: 240px;
+  border: 1px solid #ccb47e;
+  border-radius: 10px;
+  background: #fffdf6;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 6px 16px rgba(72, 55, 22, 0.12);
+}
+
+.card-drag-handle {
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid #cfb88a;
+  background: #f5e9cc;
+  color: #6f572d;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+}
+
+.card-drag-handle:active {
+  cursor: grabbing;
+}
+
+.card-textarea {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  border: 1px solid #c9b17a;
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+  background: #fff9ea;
+}
+
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.content-placeholder {
+  border: 1px dashed #ccb47e;
+  border-radius: 12px;
+  padding: 18px;
+  background: #fffcf2;
+  min-height: 180px;
+}
+
+.rename-input {
+  width: 100%;
+  border: 1px solid #a98b52;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+
+.type-option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.type-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.type-option-icon {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: #f2e6c7;
+  border: 1px solid #cfb88a;
+  color: #6a5329;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.22);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.confirm-dialog {
+  width: min(460px, 100%);
+  background: #fffdf6;
+  border: 1px solid #ccb47e;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.confirm-dialog h3,
+.confirm-dialog p {
+  margin: 0;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+body.is-dragging-card,
+body.is-dragging-card * {
+  user-select: none !important;
+}
