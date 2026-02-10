@@ -8,6 +8,14 @@ import type {
   UserSettings,
 } from './shared/types';
 import {
+  NOTEBOARD_WORLD_HEIGHT,
+  NOTEBOARD_WORLD_MAX_X,
+  NOTEBOARD_WORLD_MAX_Y,
+  NOTEBOARD_WORLD_MIN_X,
+  NOTEBOARD_WORLD_MIN_Y,
+  NOTEBOARD_WORLD_WIDTH,
+} from './shared/noteboard-constants';
+import {
   countDescendants,
   createNode,
   findFirstNodeId,
@@ -35,9 +43,45 @@ type UiState = {
     | {
         pointerId: number;
         nodeId: string;
-        cardId: string;
-        offsetX: number;
-        offsetY: number;
+        movingCardIds: string[];
+        pointerStartX: number;
+        pointerStartY: number;
+        startPositions: Record<string, { x: number; y: number }>;
+      }
+    | null;
+  panningCanvas:
+    | {
+        pointerId: number;
+        nodeId: string;
+        startClientX: number;
+        startClientY: number;
+        startOffsetX: number;
+        startOffsetY: number;
+      }
+    | null;
+  contextMenu:
+    | {
+        nodeId: string;
+        screenX: number;
+        screenY: number;
+        worldX: number;
+        worldY: number;
+      }
+    | null;
+  cardSelection: {
+    nodeId: string | null;
+    cardIds: string[];
+  };
+  selectionBox:
+    | {
+        nodeId: string;
+        pointerId: number;
+        startX: number;
+        startY: number;
+        currentX: number;
+        currentY: number;
+        additive: boolean;
+        baseSelectedCardIds: string[];
       }
     | null;
 };
@@ -92,6 +136,13 @@ const uiState: UiState = {
   pendingCreateParentRef: null,
   resizingPointerId: null,
   draggingCard: null,
+  panningCanvas: null,
+  contextMenu: null,
+  cardSelection: {
+    nodeId: null,
+    cardIds: [],
+  },
+  selectionBox: null,
 };
 
 const clampSidebarWidth = (value: number): number =>
@@ -100,6 +151,10 @@ const clampSidebarWidth = (value: number): number =>
 const CARD_WIDTH = 240;
 const CARD_MIN_HEIGHT = 170;
 const CANVAS_PADDING = 12;
+const BASE_MIN_ZOOM = 0.08;
+const MAX_ZOOM = 2.5;
+const BASE_GRID_STEP = 24;
+const TARGET_GRID_SCREEN_SPACING = 26;
 
 const createNoteboardCard = (x: number, y: number): NoteboardCard => ({
   id: `card-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -125,14 +180,100 @@ const getNoteboardCards = (nodeId: string): NoteboardCard[] => {
 
   nodeData.noteboard.cards.forEach((card, index) => {
     if (typeof card.x !== 'number' || !Number.isFinite(card.x)) {
-      card.x = CANVAS_PADDING + (index % 3) * 260;
+      card.x = (index % 3) * 260 - 260;
     }
     if (typeof card.y !== 'number' || !Number.isFinite(card.y)) {
-      card.y = CANVAS_PADDING + Math.floor(index / 3) * 220;
+      card.y = Math.floor(index / 3) * 220 - 220;
     }
   });
 
   return nodeData.noteboard.cards;
+};
+
+const getNoteboardView = (
+  nodeId: string,
+): { zoom: number; offsetX: number; offsetY: number } => {
+  const nodeData = getNodeWorkspaceData(nodeId);
+  if (!nodeData.noteboard) {
+    nodeData.noteboard = { cards: [] };
+  }
+
+  if (!nodeData.noteboard.view) {
+    nodeData.noteboard.view = {
+      zoom: 1,
+      offsetX: NOTEBOARD_WORLD_MIN_X + 180,
+      offsetY: NOTEBOARD_WORLD_MIN_Y + 120,
+    };
+  }
+
+  // Migrate legacy default offsets from the older positive-only camera setup.
+  if (
+    Math.abs(nodeData.noteboard.view.offsetX - 180) < 1 &&
+    Math.abs(nodeData.noteboard.view.offsetY - 120) < 1
+  ) {
+    nodeData.noteboard.view.offsetX += NOTEBOARD_WORLD_MIN_X;
+    nodeData.noteboard.view.offsetY += NOTEBOARD_WORLD_MIN_Y;
+  }
+
+  return nodeData.noteboard.view;
+};
+
+const clampViewOffsets = (
+  canvas: HTMLElement,
+  view: { zoom: number; offsetX: number; offsetY: number },
+): void => {
+  const scaledWorldWidth = NOTEBOARD_WORLD_WIDTH * view.zoom;
+  const scaledWorldHeight = NOTEBOARD_WORLD_HEIGHT * view.zoom;
+
+  if (scaledWorldWidth <= canvas.clientWidth) {
+    view.offsetX = (canvas.clientWidth - scaledWorldWidth) / 2;
+  } else {
+    const minOffsetX = canvas.clientWidth - scaledWorldWidth;
+    const maxOffsetX = 0;
+    view.offsetX = Math.min(maxOffsetX, Math.max(minOffsetX, view.offsetX));
+  }
+
+  if (scaledWorldHeight <= canvas.clientHeight) {
+    view.offsetY = (canvas.clientHeight - scaledWorldHeight) / 2;
+  } else {
+    const minOffsetY = canvas.clientHeight - scaledWorldHeight;
+    const maxOffsetY = 0;
+    view.offsetY = Math.min(maxOffsetY, Math.max(minOffsetY, view.offsetY));
+  }
+};
+
+const getMinZoomForCanvas = (canvas: HTMLElement): number => {
+  const fitZoomX = canvas.clientWidth / NOTEBOARD_WORLD_WIDTH;
+  const fitZoomY = canvas.clientHeight / NOTEBOARD_WORLD_HEIGHT;
+  const fitZoom = Math.min(fitZoomX, fitZoomY) * 0.98;
+  return Math.min(BASE_MIN_ZOOM, fitZoom);
+};
+
+const getGridStepForZoom = (zoom: number): number => {
+  const rawLevel = TARGET_GRID_SCREEN_SPACING / (BASE_GRID_STEP * zoom);
+  const level = Math.max(0, Math.ceil(Math.log2(Math.max(1, rawLevel))));
+  return BASE_GRID_STEP * 2 ** level;
+};
+
+const applyNoteboardWorldStyles = (nodeId: string): void => {
+  const world = app.querySelector<HTMLElement>(
+    `.noteboard-world[data-node-id="${nodeId}"]`,
+  );
+  if (!world) {
+    return;
+  }
+
+  const view = getNoteboardView(nodeId);
+  const gridStep = getGridStepForZoom(view.zoom);
+  const majorGridStep = gridStep * 4;
+  const lineWidth = 1 / view.zoom;
+  const majorLineWidth = 1.5 / view.zoom;
+
+  world.style.transform = `translate(${view.offsetX}px, ${view.offsetY}px) scale(${view.zoom})`;
+  world.style.setProperty('--grid-step', `${gridStep}px`);
+  world.style.setProperty('--grid-major-step', `${majorGridStep}px`);
+  world.style.setProperty('--grid-line-width', `${lineWidth}px`);
+  world.style.setProperty('--grid-major-line-width', `${majorLineWidth}px`);
 };
 
 const collectSubtreeIds = (root: CategoryNode): string[] => {
@@ -143,26 +284,64 @@ const collectSubtreeIds = (root: CategoryNode): string[] => {
   return ids;
 };
 
-const clampCardToCanvas = (
+const clampCardToWorld = (
   x: number,
   y: number,
-  canvas: HTMLElement,
 ): { x: number; y: number } => {
-  const maxX = Math.max(CANVAS_PADDING, canvas.clientWidth - CARD_WIDTH - CANVAS_PADDING);
-  const maxY = Math.max(
-    CANVAS_PADDING,
-    canvas.clientHeight - CARD_MIN_HEIGHT - CANVAS_PADDING,
-  );
+  const minX = NOTEBOARD_WORLD_MIN_X + CANVAS_PADDING;
+  const minY = NOTEBOARD_WORLD_MIN_Y + CANVAS_PADDING;
+  const maxX = NOTEBOARD_WORLD_MAX_X - CARD_WIDTH - CANVAS_PADDING;
+  const maxY = NOTEBOARD_WORLD_MAX_Y - CARD_MIN_HEIGHT - CANVAS_PADDING;
 
   return {
-    x: Math.min(maxX, Math.max(CANVAS_PADDING, x)),
-    y: Math.min(maxY, Math.max(CANVAS_PADDING, y)),
+    x: Math.min(maxX, Math.max(minX, x)),
+    y: Math.min(maxY, Math.max(minY, y)),
   };
 };
 
 const findNoteboardCard = (nodeId: string, cardId: string): NoteboardCard | undefined => {
   const cards = getNoteboardCards(nodeId);
   return cards.find((card) => card.id === cardId);
+};
+
+const getSelectedCardIdsForNode = (nodeId: string): string[] =>
+  uiState.cardSelection.nodeId === nodeId ? uiState.cardSelection.cardIds : [];
+
+const setSelectedCardIds = (nodeId: string, cardIds: string[]): void => {
+  uiState.cardSelection = {
+    nodeId,
+    cardIds: Array.from(new Set(cardIds)),
+  };
+};
+
+const toggleSelectedCard = (nodeId: string, cardId: string): void => {
+  const current = getSelectedCardIdsForNode(nodeId);
+  if (current.includes(cardId)) {
+    setSelectedCardIds(
+      nodeId,
+      current.filter((id) => id !== cardId),
+    );
+    return;
+  }
+
+  setSelectedCardIds(nodeId, [...current, cardId]);
+};
+
+const clearCardSelection = (): void => {
+  uiState.cardSelection = { nodeId: null, cardIds: [] };
+};
+
+const getWorldPoint = (
+  canvas: HTMLElement,
+  view: { zoom: number; offsetX: number; offsetY: number },
+  clientX: number,
+  clientY: number,
+): { x: number; y: number } => {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (clientX - rect.left - view.offsetX) / view.zoom + NOTEBOARD_WORLD_MIN_X,
+    y: (clientY - rect.top - view.offsetY) / view.zoom + NOTEBOARD_WORLD_MIN_Y,
+  };
 };
 
 const beginRename = (nodeId: string): void => {
@@ -275,21 +454,86 @@ const render = (): void => {
         ? `Create child node under ${findNodeById(state.nodes, uiState.pendingCreateParentRef)?.name ?? 'selected parent'}`
         : '';
 
+  const contextMenuMarkup = uiState.contextMenu
+    ? `
+      <div
+        class="canvas-context-menu"
+        style="left:${uiState.contextMenu.screenX}px; top:${uiState.contextMenu.screenY}px;"
+      >
+        <button
+          class="context-menu-item"
+          data-action="context-create-card"
+          data-node-id="${uiState.contextMenu.nodeId}"
+        >
+          <i class="fa-solid fa-note-sticky"></i>
+          <span>Create Card Here</span>
+        </button>
+      </div>
+    `
+    : '';
+
+  const selectionBoxForRender =
+    uiState.selectionBox && uiState.selectionBox.nodeId
+      ? {
+          nodeId: uiState.selectionBox.nodeId,
+          left:
+            Math.min(uiState.selectionBox.startX, uiState.selectionBox.currentX) -
+            NOTEBOARD_WORLD_MIN_X,
+          top:
+            Math.min(uiState.selectionBox.startY, uiState.selectionBox.currentY) -
+            NOTEBOARD_WORLD_MIN_Y,
+          width: Math.abs(uiState.selectionBox.currentX - uiState.selectionBox.startX),
+          height: Math.abs(uiState.selectionBox.currentY - uiState.selectionBox.startY),
+        }
+      : null;
+
   app.innerHTML = [
     renderAppLayout({
       sidebarWidth: settings.sidebarWidth,
       treeMarkup: tree,
-      editorContentMarkup: renderEditorPanel(selectedNode, state.nodeDataById),
+      editorContentMarkup: renderEditorPanel(
+        selectedNode,
+        state.nodeDataById,
+        selectedNode ? getSelectedCardIdsForNode(selectedNode.id) : [],
+        selectionBoxForRender,
+      ),
     }),
     renderDeleteDialog(pendingDeleteNode, deleteDescendantCount),
     renderCreateNodeDialog(Boolean(uiState.pendingCreateParentRef), createTargetLabel),
+    contextMenuMarkup,
   ].join('');
+
+  // Ensure loaded or externally changed camera states are clamped to visible viewport bounds.
+  if (selectedNode?.editorType === 'noteboard') {
+    const canvas = app.querySelector<HTMLElement>(
+      `.noteboard-canvas[data-node-id="${selectedNode.id}"]`,
+    );
+    const world = app.querySelector<HTMLElement>(
+      `.noteboard-world[data-node-id="${selectedNode.id}"]`,
+    );
+    if (canvas && world) {
+      const view = getNoteboardView(selectedNode.id);
+      const beforeX = view.offsetX;
+      const beforeY = view.offsetY;
+      clampViewOffsets(canvas, view);
+      if (view.offsetX !== beforeX || view.offsetY !== beforeY) {
+        applyNoteboardWorldStyles(selectedNode.id);
+      } else {
+        applyNoteboardWorldStyles(selectedNode.id);
+      }
+    }
+  }
 };
 
 app.addEventListener('click', (event) => {
   const target = event.target;
   if (!(target instanceof Element)) {
     return;
+  }
+
+  if (uiState.contextMenu && !target.closest('.canvas-context-menu')) {
+    uiState.contextMenu = null;
+    render();
   }
 
   const actionTarget = target.closest<HTMLElement>('[data-action]');
@@ -321,6 +565,7 @@ app.addEventListener('click', (event) => {
     }
 
     state.selectedNodeId = node.id;
+    clearCardSelection();
     render();
     scheduleStateSave();
     return;
@@ -379,48 +624,93 @@ app.addEventListener('click', (event) => {
     }
 
     const cards = getNoteboardCards(node.id);
+    const view = getNoteboardView(node.id);
     const canvas = app.querySelector<HTMLElement>(
       `.noteboard-canvas[data-node-id="${node.id}"]`,
     );
     const fallback = { x: CANVAS_PADDING + 40, y: CANVAS_PADDING + 40 };
     const positioned = canvas
-      ? clampCardToCanvas(
-          canvas.clientWidth / 2 - CARD_WIDTH / 2,
-          canvas.clientHeight / 2 - CARD_MIN_HEIGHT / 2,
-          canvas,
+      ? clampCardToWorld(
+          (canvas.clientWidth / 2 - view.offsetX) / view.zoom +
+            NOTEBOARD_WORLD_MIN_X -
+            CARD_WIDTH / 2,
+          (canvas.clientHeight / 2 - view.offsetY) / view.zoom +
+            NOTEBOARD_WORLD_MIN_Y -
+            CARD_MIN_HEIGHT / 2,
         )
       : fallback;
 
     cards.unshift(createNoteboardCard(positioned.x, positioned.y));
+    setSelectedCardIds(node.id, [cards[0].id]);
     render();
     scheduleStateSave();
     return;
   }
 
-  if (action === 'noteboard-canvas-create') {
+  if (action === 'noteboard-select-card') {
+    const nodeId = actionTarget.dataset.nodeId;
+    const cardId = actionTarget.dataset.cardId;
+    if (!nodeId || !cardId) {
+      return;
+    }
+
+    if (event.ctrlKey || event.metaKey) {
+      toggleSelectedCard(nodeId, cardId);
+    } else {
+      setSelectedCardIds(nodeId, [cardId]);
+    }
+
+    uiState.contextMenu = null;
+    render();
+    return;
+  }
+
+  if (action === 'noteboard-duplicate-selected') {
     const nodeId = actionTarget.dataset.nodeId;
     if (!nodeId) {
       return;
     }
 
-    const clickedInsideCard = target.closest('.noteboard-card');
-    if (clickedInsideCard) {
+    const cards = getNoteboardCards(nodeId);
+    const selectedIds = getSelectedCardIdsForNode(nodeId);
+    const selectedCards = cards.filter((card) => selectedIds.includes(card.id));
+    if (selectedCards.length === 0) {
       return;
     }
 
-    const node = findNodeById(state.nodes, nodeId);
+    const duplicates = selectedCards.map((card) =>
+      createNoteboardCard(card.x + 28, card.y + 28),
+    );
+    duplicates.forEach((dup, index) => {
+      dup.text = selectedCards[index].text;
+    });
+    cards.unshift(...duplicates);
+    setSelectedCardIds(
+      nodeId,
+      duplicates.map((card) => card.id),
+    );
+    render();
+    scheduleStateSave();
+    return;
+  }
+
+  if (action === 'context-create-card') {
+    const menu = uiState.contextMenu;
+    if (!menu) {
+      return;
+    }
+
+    const node = findNodeById(state.nodes, menu.nodeId);
     if (!node || node.editorType !== 'noteboard') {
+      uiState.contextMenu = null;
+      render();
       return;
     }
 
-    const canvas = actionTarget as HTMLElement;
-    const rect = canvas.getBoundingClientRect();
-    const rawX = event.clientX - rect.left - CARD_WIDTH / 2;
-    const rawY = event.clientY - rect.top - 24;
-    const pos = clampCardToCanvas(rawX, rawY, canvas);
-
-    const cards = getNoteboardCards(node.id);
+    const cards = getNoteboardCards(menu.nodeId);
+    const pos = clampCardToWorld(menu.worldX - CARD_WIDTH / 2, menu.worldY - 24);
     cards.unshift(createNoteboardCard(pos.x, pos.y));
+    uiState.contextMenu = null;
     render();
     scheduleStateSave();
     return;
@@ -440,6 +730,10 @@ app.addEventListener('click', (event) => {
     }
 
     cards.splice(index, 1);
+    setSelectedCardIds(
+      nodeId,
+      getSelectedCardIdsForNode(nodeId).filter((id) => id !== cardId),
+    );
     render();
     scheduleStateSave();
     return;
@@ -496,6 +790,9 @@ app.addEventListener('click', (event) => {
     subtreeIds.forEach((nodeId) => {
       delete state.nodeDataById[nodeId];
     });
+    if (uiState.cardSelection.nodeId && subtreeIds.includes(uiState.cardSelection.nodeId)) {
+      clearCardSelection();
+    }
 
     if (state.selectedNodeId === id || !findNodeById(state.nodes, state.selectedNodeId)) {
       state.selectedNodeId = findFirstNodeId(state.nodes);
@@ -511,6 +808,57 @@ app.addEventListener('pointerdown', (event) => {
   const target = event.target;
   if (!(target instanceof Element)) {
     return;
+  }
+
+  if (event.button === 0) {
+    const canvas = target.closest<HTMLElement>('.noteboard-canvas');
+    const clickedCard = target.closest('.noteboard-card');
+    const clickedUi = target.closest('.noteboard-toolbar, .canvas-context-menu');
+    if (canvas && !clickedCard && !clickedUi) {
+      const nodeId = canvas.dataset.nodeId;
+      if (nodeId) {
+        const node = findNodeById(state.nodes, nodeId);
+        if (node?.editorType === 'noteboard') {
+          const view = getNoteboardView(nodeId);
+          const world = getWorldPoint(canvas, view, event.clientX, event.clientY);
+          uiState.selectionBox = {
+            nodeId,
+            pointerId: event.pointerId,
+            startX: world.x,
+            startY: world.y,
+            currentX: world.x,
+            currentY: world.y,
+            additive: event.ctrlKey || event.metaKey,
+            baseSelectedCardIds: getSelectedCardIdsForNode(nodeId),
+          };
+          canvas.setPointerCapture(event.pointerId);
+          event.preventDefault();
+          return;
+        }
+      }
+    }
+  }
+
+  if (event.button === 1) {
+    const canvas = target.closest<HTMLElement>('.noteboard-canvas');
+    if (canvas) {
+      const nodeId = canvas.dataset.nodeId;
+      if (nodeId) {
+        const view = getNoteboardView(nodeId);
+        uiState.panningCanvas = {
+          pointerId: event.pointerId,
+          nodeId,
+          startClientX: event.clientX,
+          startClientY: event.clientY,
+          startOffsetX: view.offsetX,
+          startOffsetY: view.offsetY,
+        };
+        canvas.setPointerCapture(event.pointerId);
+        document.body.classList.add('is-panning-canvas');
+        event.preventDefault();
+        return;
+      }
+    }
   }
 
   const actionTarget = target.closest<HTMLElement>('[data-action]');
@@ -537,20 +885,36 @@ app.addEventListener('pointerdown', (event) => {
       return;
     }
 
-    const canvasRect = canvas.getBoundingClientRect();
-    const pointerX = event.clientX - canvasRect.left;
-    const pointerY = event.clientY - canvasRect.top;
+    const view = getNoteboardView(nodeId);
+    const pointer = getWorldPoint(canvas, view, event.clientX, event.clientY);
+
+    const currentSelection = getSelectedCardIdsForNode(nodeId);
+    const movingCardIds =
+      currentSelection.includes(cardId) && currentSelection.length > 0
+        ? currentSelection
+        : [cardId];
+    setSelectedCardIds(nodeId, movingCardIds);
+
+    const startPositions: Record<string, { x: number; y: number }> = {};
+    movingCardIds.forEach((id) => {
+      const selectedCard = findNoteboardCard(nodeId, id);
+      if (selectedCard) {
+        startPositions[id] = { x: selectedCard.x, y: selectedCard.y };
+      }
+    });
 
     uiState.draggingCard = {
       pointerId: event.pointerId,
       nodeId,
-      cardId,
-      offsetX: pointerX - card.x,
-      offsetY: pointerY - card.y,
+      movingCardIds: Object.keys(startPositions),
+      pointerStartX: pointer.x,
+      pointerStartY: pointer.y,
+      startPositions,
     };
 
     actionTarget.setPointerCapture(event.pointerId);
     document.body.classList.add('is-dragging-card');
+    render();
     event.preventDefault();
     return;
   }
@@ -567,6 +931,80 @@ app.addEventListener('pointerdown', (event) => {
 
 window.addEventListener('pointermove', (event) => {
   if (
+    uiState.selectionBox &&
+    event.pointerId === uiState.selectionBox.pointerId
+  ) {
+    const box = uiState.selectionBox;
+    const canvas = app.querySelector<HTMLElement>(
+      `.noteboard-canvas[data-node-id="${box.nodeId}"]`,
+    );
+    if (!canvas) {
+      return;
+    }
+
+    const view = getNoteboardView(box.nodeId);
+    const world = getWorldPoint(canvas, view, event.clientX, event.clientY);
+    box.currentX = world.x;
+    box.currentY = world.y;
+
+    const minX = Math.min(box.startX, box.currentX);
+    const maxX = Math.max(box.startX, box.currentX);
+    const minY = Math.min(box.startY, box.currentY);
+    const maxY = Math.max(box.startY, box.currentY);
+
+    const cards = getNoteboardCards(box.nodeId);
+    const hits = cards
+      .filter((card) => {
+        const cardMinX = card.x;
+        const cardMaxX = card.x + CARD_WIDTH;
+        const cardMinY = card.y;
+        const cardMaxY = card.y + CARD_MIN_HEIGHT;
+        return !(
+          cardMaxX < minX ||
+          cardMinX > maxX ||
+          cardMaxY < minY ||
+          cardMinY > maxY
+        );
+      })
+      .map((card) => card.id);
+
+    const merged = box.additive
+      ? Array.from(new Set([...box.baseSelectedCardIds, ...hits]))
+      : hits;
+    setSelectedCardIds(box.nodeId, merged);
+    render();
+    event.preventDefault();
+    return;
+  }
+
+  if (
+    uiState.panningCanvas &&
+    event.pointerId === uiState.panningCanvas.pointerId
+  ) {
+    const pan = uiState.panningCanvas;
+    const canvas = app.querySelector<HTMLElement>(
+      `.noteboard-canvas[data-node-id="${pan.nodeId}"]`,
+    );
+    if (!canvas) {
+      return;
+    }
+
+    const view = getNoteboardView(pan.nodeId);
+    view.offsetX = pan.startOffsetX + (event.clientX - pan.startClientX);
+    view.offsetY = pan.startOffsetY + (event.clientY - pan.startClientY);
+    clampViewOffsets(canvas, view);
+
+    const world = app.querySelector<HTMLElement>(
+      `.noteboard-world[data-node-id="${pan.nodeId}"]`,
+    );
+    if (world) {
+      applyNoteboardWorldStyles(pan.nodeId);
+    }
+    event.preventDefault();
+    return;
+  }
+
+  if (
     uiState.draggingCard &&
     event.pointerId === uiState.draggingCard.pointerId
   ) {
@@ -574,25 +1012,48 @@ window.addEventListener('pointermove', (event) => {
     const canvas = app.querySelector<HTMLElement>(
       `.noteboard-canvas[data-node-id="${drag.nodeId}"]`,
     );
-    const card = findNoteboardCard(drag.nodeId, drag.cardId);
-    if (!canvas || !card) {
+    if (!canvas || drag.movingCardIds.length === 0) {
       return;
     }
 
-    const rect = canvas.getBoundingClientRect();
-    const rawX = event.clientX - rect.left - drag.offsetX;
-    const rawY = event.clientY - rect.top - drag.offsetY;
-    const pos = clampCardToCanvas(rawX, rawY, canvas);
-    card.x = pos.x;
-    card.y = pos.y;
+    const view = getNoteboardView(drag.nodeId);
+    const pointer = getWorldPoint(canvas, view, event.clientX, event.clientY);
+    let deltaX = pointer.x - drag.pointerStartX;
+    let deltaY = pointer.y - drag.pointerStartY;
 
-    const cardEl = app.querySelector<HTMLElement>(
-      `.noteboard-card[data-card-shell-id="${drag.cardId}"]`,
-    );
-    if (cardEl) {
-      cardEl.style.left = `${card.x}px`;
-      cardEl.style.top = `${card.y}px`;
-    }
+    const starts = Object.values(drag.startPositions);
+    const minStartX = Math.min(...starts.map((p) => p.x));
+    const maxStartX = Math.max(...starts.map((p) => p.x));
+    const minStartY = Math.min(...starts.map((p) => p.y));
+    const maxStartY = Math.max(...starts.map((p) => p.y));
+    const minAllowedDeltaX = NOTEBOARD_WORLD_MIN_X + CANVAS_PADDING - minStartX;
+    const maxAllowedDeltaX =
+      NOTEBOARD_WORLD_MAX_X - CARD_WIDTH - CANVAS_PADDING - maxStartX;
+    const minAllowedDeltaY = NOTEBOARD_WORLD_MIN_Y + CANVAS_PADDING - minStartY;
+    const maxAllowedDeltaY =
+      NOTEBOARD_WORLD_MAX_Y - CARD_MIN_HEIGHT - CANVAS_PADDING - maxStartY;
+
+    deltaX = Math.min(maxAllowedDeltaX, Math.max(minAllowedDeltaX, deltaX));
+    deltaY = Math.min(maxAllowedDeltaY, Math.max(minAllowedDeltaY, deltaY));
+
+    drag.movingCardIds.forEach((id) => {
+      const start = drag.startPositions[id];
+      const card = findNoteboardCard(drag.nodeId, id);
+      if (!start || !card) {
+        return;
+      }
+
+      card.x = start.x + deltaX;
+      card.y = start.y + deltaY;
+
+      const cardEl = app.querySelector<HTMLElement>(
+        `.noteboard-card[data-card-shell-id="${id}"]`,
+      );
+      if (cardEl) {
+        cardEl.style.left = `${card.x - NOTEBOARD_WORLD_MIN_X}px`;
+        cardEl.style.top = `${card.y - NOTEBOARD_WORLD_MIN_Y}px`;
+      }
+    });
 
     return;
   }
@@ -613,7 +1074,41 @@ window.addEventListener('pointermove', (event) => {
   scheduleSettingsSave();
 });
 
+app.addEventListener('auxclick', (event) => {
+  if (event.button !== 1) {
+    return;
+  }
+
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  if (target.closest('.noteboard-canvas')) {
+    event.preventDefault();
+  }
+});
+
 window.addEventListener('pointerup', (event) => {
+  if (
+    uiState.selectionBox &&
+    event.pointerId === uiState.selectionBox.pointerId
+  ) {
+    uiState.selectionBox = null;
+    render();
+    return;
+  }
+
+  if (
+    uiState.panningCanvas &&
+    event.pointerId === uiState.panningCanvas.pointerId
+  ) {
+    uiState.panningCanvas = null;
+    document.body.classList.remove('is-panning-canvas');
+    scheduleStateSave();
+    return;
+  }
+
   if (
     uiState.draggingCard &&
     event.pointerId === uiState.draggingCard.pointerId
@@ -633,6 +1128,25 @@ window.addEventListener('pointerup', (event) => {
 });
 
 window.addEventListener('pointercancel', (event) => {
+  if (
+    uiState.selectionBox &&
+    event.pointerId === uiState.selectionBox.pointerId
+  ) {
+    uiState.selectionBox = null;
+    render();
+    return;
+  }
+
+  if (
+    uiState.panningCanvas &&
+    event.pointerId === uiState.panningCanvas.pointerId
+  ) {
+    uiState.panningCanvas = null;
+    document.body.classList.remove('is-panning-canvas');
+    scheduleStateSave();
+    return;
+  }
+
   if (
     uiState.draggingCard &&
     event.pointerId === uiState.draggingCard.pointerId
@@ -713,6 +1227,123 @@ document.addEventListener(
   true,
 );
 
+app.addEventListener(
+  'wheel',
+  (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const canvas = target.closest<HTMLElement>('.noteboard-canvas');
+    if (!canvas) {
+      return;
+    }
+
+    const nodeId = canvas.dataset.nodeId;
+    if (!nodeId) {
+      return;
+    }
+
+    if (target.closest('.card-textarea')) {
+      return;
+    }
+
+    const view = getNoteboardView(nodeId);
+    const minZoom = getMinZoomForCanvas(canvas);
+    const zoomDelta = event.deltaY < 0 ? 1.12 : 0.88;
+    const nextZoom = Math.min(MAX_ZOOM, Math.max(minZoom, view.zoom * zoomDelta));
+
+    if (nextZoom === view.zoom) {
+      return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const pointerX = event.clientX - rect.left;
+    const pointerY = event.clientY - rect.top;
+    const worldX = (pointerX - view.offsetX) / view.zoom + NOTEBOARD_WORLD_MIN_X;
+    const worldY = (pointerY - view.offsetY) / view.zoom + NOTEBOARD_WORLD_MIN_Y;
+
+    view.zoom = nextZoom;
+    view.offsetX = pointerX - (worldX - NOTEBOARD_WORLD_MIN_X) * nextZoom;
+    view.offsetY = pointerY - (worldY - NOTEBOARD_WORLD_MIN_Y) * nextZoom;
+    clampViewOffsets(canvas, view);
+
+    const world = app.querySelector<HTMLElement>(
+      `.noteboard-world[data-node-id="${nodeId}"]`,
+    );
+    if (world) {
+      applyNoteboardWorldStyles(nodeId);
+    }
+
+    scheduleStateSave();
+    event.preventDefault();
+  },
+  { passive: false },
+);
+
+app.addEventListener('contextmenu', (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  if (target.closest('.card-textarea')) {
+    return;
+  }
+
+  const canvas = target.closest<HTMLElement>('.noteboard-canvas');
+  if (!canvas) {
+    if (uiState.contextMenu) {
+      uiState.contextMenu = null;
+      render();
+    }
+    return;
+  }
+
+  if (target.closest('.noteboard-card')) {
+    return;
+  }
+
+  const nodeId = canvas.dataset.nodeId;
+  if (!nodeId) {
+    return;
+  }
+
+  const node = findNodeById(state.nodes, nodeId);
+  if (!node || node.editorType !== 'noteboard') {
+    return;
+  }
+
+  const view = getNoteboardView(nodeId);
+  const rect = canvas.getBoundingClientRect();
+  const worldX =
+    (event.clientX - rect.left - view.offsetX) / view.zoom + NOTEBOARD_WORLD_MIN_X;
+  const worldY =
+    (event.clientY - rect.top - view.offsetY) / view.zoom + NOTEBOARD_WORLD_MIN_Y;
+  const menuWidth = 196;
+  const menuHeight = 44;
+  const screenX = Math.min(
+    window.innerWidth - menuWidth - 8,
+    Math.max(8, event.clientX),
+  );
+  const screenY = Math.min(
+    window.innerHeight - menuHeight - 8,
+    Math.max(8, event.clientY),
+  );
+
+  uiState.contextMenu = {
+    nodeId,
+    screenX,
+    screenY,
+    worldX,
+    worldY,
+  };
+
+  render();
+  event.preventDefault();
+});
+
 app.addEventListener('keydown', (event) => {
   const target = event.target;
   if (!(target instanceof HTMLInputElement)) {
@@ -778,6 +1409,27 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
   const noteboard = obj.noteboard as { cards?: unknown };
   if (!Array.isArray(noteboard.cards)) {
     return false;
+  }
+
+  const view = (obj.noteboard as { view?: unknown }).view;
+  if (typeof view !== 'undefined') {
+    if (typeof view !== 'object' || view === null) {
+      return false;
+    }
+
+    const viewObj = view as {
+      zoom?: unknown;
+      offsetX?: unknown;
+      offsetY?: unknown;
+    };
+
+    if (
+      typeof viewObj.zoom !== 'number' ||
+      typeof viewObj.offsetX !== 'number' ||
+      typeof viewObj.offsetY !== 'number'
+    ) {
+      return false;
+    }
   }
 
   return noteboard.cards.every((card) => {

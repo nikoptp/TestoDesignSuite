@@ -10,22 +10,34 @@
 
 body {
   margin: 0;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+}
+
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
+#app {
+  height: 100%;
+  overflow: hidden;
 }
 
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width, 320px) 8px 1fr;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .sidebar {
   background: linear-gradient(180deg, #f8f1dc 0%, #efe3c0 100%);
   border-right: 1px solid #d8c8a0;
-  padding: 16px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   min-height: 0;
   overflow: hidden;
 }
@@ -40,7 +52,7 @@ body {
 .tree-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   flex: 1;
   min-height: 0;
 }
@@ -64,7 +76,7 @@ button {
   background: #fff9ea;
   color: #493a1f;
   border-radius: 8px;
-  padding: 6px 10px;
+  padding: 5px 9px;
   font-size: 12px;
   cursor: pointer;
 }
@@ -199,11 +211,13 @@ button.danger {
 }
 
 .main-panel {
-  padding: 28px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
   background: radial-gradient(circle at top right, #fff7de 0%, #fffdf7 55%);
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 body.is-resizing-sidebar,
@@ -229,6 +243,15 @@ body.is-resizing-sidebar * {
   gap: 12px;
 }
 
+.editor-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+  padding: 28px;
+}
+
 .editor-header h2 {
   margin: 0;
 }
@@ -245,33 +268,84 @@ body.is-resizing-sidebar * {
 
 .noteboard-canvas {
   position: relative;
-  min-height: 420px;
-  border: 1px dashed #ccb47e;
-  border-radius: 12px;
+  min-height: 0;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  background: #fffdf6;
+  overflow: hidden;
+  cursor: crosshair;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+.noteboard-world {
+  position: relative;
+  transform-origin: 0 0;
+  --grid-step: 24px;
+  --grid-major-step: 96px;
+  --grid-line-width: 1px;
+  --grid-major-line-width: 1.5px;
   background:
-    linear-gradient(90deg, rgba(210, 181, 121, 0.08) 1px, transparent 1px),
-    linear-gradient(rgba(210, 181, 121, 0.08) 1px, transparent 1px),
-    #fffdf6;
-  background-size: 24px 24px;
-  overflow: auto;
+    linear-gradient(
+      90deg,
+      rgba(177, 133, 58, 0.22) var(--grid-major-line-width),
+      transparent var(--grid-major-line-width)
+    ),
+    linear-gradient(
+      rgba(177, 133, 58, 0.22) var(--grid-major-line-width),
+      transparent var(--grid-major-line-width)
+    ),
+    linear-gradient(
+      90deg,
+      rgba(210, 181, 121, 0.14) var(--grid-line-width),
+      transparent var(--grid-line-width)
+    ),
+    linear-gradient(
+      rgba(210, 181, 121, 0.14) var(--grid-line-width),
+      transparent var(--grid-line-width)
+    );
+  background-size:
+    var(--grid-major-step) var(--grid-major-step),
+    var(--grid-major-step) var(--grid-major-step),
+    var(--grid-step) var(--grid-step),
+    var(--grid-step) var(--grid-step);
+}
+
+.noteboard-world::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(176, 129, 46, 0.55);
+  pointer-events: none;
 }
 
 .noteboard-card {
   position: absolute;
   width: 240px;
-  border: 1px solid #ccb47e;
-  border-radius: 10px;
-  background: #fffdf6;
-  padding: 10px;
+  border: 1px solid #c9b07a;
+  border-radius: 14px 11px 15px 10px;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.72), transparent 38%),
+    linear-gradient(165deg, #fffdf5 0%, #f7edd4 100%);
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  box-shadow: 0 6px 16px rgba(72, 55, 22, 0.12);
+  gap: 6px;
+  box-shadow: 0 8px 18px rgba(72, 55, 22, 0.16);
+  cursor: default;
+}
+
+.noteboard-card.selected {
+  border-color: #9f6e22;
+  box-shadow:
+    0 0 0 2px rgba(205, 157, 66, 0.5),
+    0 10px 20px rgba(72, 55, 22, 0.2);
 }
 
 .card-drag-handle {
-  height: 18px;
-  border-radius: 6px;
+  height: 16px;
+  border-radius: 999px;
   border: 1px solid #cfb88a;
   background: #f5e9cc;
   color: #6f572d;
@@ -285,9 +359,18 @@ body.is-resizing-sidebar * {
   cursor: grabbing;
 }
 
+.noteboard-toolbar {
+  position: sticky;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  width: fit-content;
+  margin: 8px;
+}
+
 .card-textarea {
   width: 100%;
-  min-height: 120px;
+  min-height: 110px;
   resize: vertical;
   border: 1px solid #c9b17a;
   border-radius: 8px;
@@ -299,6 +382,13 @@ body.is-resizing-sidebar * {
 .card-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.selection-rect {
+  position: absolute;
+  border: 1px solid rgba(163, 116, 32, 0.8);
+  background: rgba(197, 150, 63, 0.14);
+  pointer-events: none;
 }
 
 .content-placeholder {
@@ -375,7 +465,41 @@ body.is-resizing-sidebar * {
   gap: 8px;
 }
 
+.canvas-context-menu {
+  position: fixed;
+  z-index: 50;
+  background: #fffdf6;
+  border: 1px solid #ccb47e;
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(43, 32, 11, 0.2);
+  padding: 6px;
+  min-width: 180px;
+}
+
+.context-menu-item {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.context-menu-item:hover {
+  background: #f7ecd2;
+  border-color: #d3bd89;
+}
+
 body.is-dragging-card,
 body.is-dragging-card * {
   user-select: none !important;
+}
+
+body.is-panning-canvas,
+body.is-panning-canvas * {
+  user-select: none !important;
+  cursor: grabbing !important;
 }

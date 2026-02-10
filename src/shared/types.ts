@@ -35,5 +35,10 @@ export type NoteboardCard = {
 export type NodeWorkspaceData = {
   noteboard?: {
     cards: NoteboardCard[];
+    view?: {
+      zoom: number;
+      offsetX: number;
+      offsetY: number;
+    };
   };
 };

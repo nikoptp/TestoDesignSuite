@@ -59,6 +59,13 @@
 - 2026-02-10: Updated rename UX: double-click node to rename, removed rename confirm buttons, commit rename on outside click.
 - 2026-02-10: Implemented first Noteboard editor slice with per-node card CRUD (add/edit/delete) and JSON persistence via `nodeDataById`.
 - 2026-02-10: Upgraded Noteboard to positioned canvas cards with drag movement and click-on-canvas card creation.
+- 2026-02-10: Added Noteboard viewport interactions: wheel zoom, middle-mouse pan, and full-area grid canvas rendering.
+- 2026-02-10: Refined Noteboard to full-bleed canvas view (title/type text removed) and grid moved to world coordinates so it stays aligned with pan/zoom.
+- 2026-02-10: Migrated Noteboard to symmetric world bounds (negative coordinates supported) and clipped viewport rendering to prevent grid spill outside visible screen area.
+- 2026-02-10: Removed aggressive noteboard camera reset behavior; camera now relies on clamping with visible world boundary markers.
+- 2026-02-10: Added adaptive multi-level noteboard grid (minor/major lines) that scales by zoom to keep grid visibility when zooming out.
+- 2026-02-10: Switched noteboard quick-create flow to a custom right-click context menu and refined card visuals/spacing for a more organic look.
+- 2026-02-10: Added noteboard card selection model (single, ctrl multi, marquee rectangle), group drag movement for multi-selected cards, and duplicate-selected action.
 
 ## Open Questions
 - Single-window only for MVP, or multi-window support early?

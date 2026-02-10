@@ -1,5 +1,11 @@
 import { editorTypeMeta } from '../../shared/editor-types';
 import type { CategoryNode, NodeWorkspaceData } from '../../shared/types';
+import {
+  NOTEBOARD_WORLD_HEIGHT,
+  NOTEBOARD_WORLD_MIN_X,
+  NOTEBOARD_WORLD_MIN_Y,
+  NOTEBOARD_WORLD_WIDTH,
+} from '../../shared/noteboard-constants';
 
 const escapeHtml = (value: string): string =>
   value
@@ -12,12 +18,24 @@ const escapeHtml = (value: string): string =>
 const renderNoteboard = (
   node: CategoryNode,
   nodeData: NodeWorkspaceData | undefined,
+  selectedCardIds: string[],
+  selectionBox:
+    | {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+      }
+    | null,
 ): string => {
   const cards = nodeData?.noteboard?.cards ?? [];
+  const zoom = nodeData?.noteboard?.view?.zoom ?? 1;
+  const offsetX = nodeData?.noteboard?.view?.offsetX ?? 0;
+  const offsetY = nodeData?.noteboard?.view?.offsetY ?? 0;
   const cardsMarkup = cards
     .map(
       (card) => `
-        <article class="noteboard-card" data-card-shell-id="${card.id}" style="left:${card.x}px; top:${card.y}px;">
+        <article class="noteboard-card ${selectedCardIds.includes(card.id) ? 'selected' : ''}" data-action="noteboard-select-card" data-node-id="${node.id}" data-card-id="${card.id}" data-card-shell-id="${card.id}" style="left:${card.x - NOTEBOARD_WORLD_MIN_X}px; top:${card.y - NOTEBOARD_WORLD_MIN_Y}px;">
           <div
             class="card-drag-handle"
             data-action="noteboard-start-drag"
@@ -39,15 +57,27 @@ const renderNoteboard = (
     .join('');
 
   return `
-    <section class="editor-header">
-      <h2>${node.name}</h2>
-      <div class="editor-header-actions">
-        <button data-action="noteboard-add-card" data-node-id="${node.id}">+ Center Card</button>
+    <section class="noteboard-canvas" data-node-id="${node.id}">
+      <div class="noteboard-toolbar">
+        <button data-action="noteboard-add-card" data-node-id="${node.id}">+ Card</button>
+        ${
+          selectedCardIds.length > 0
+            ? `<button data-action="noteboard-duplicate-selected" data-node-id="${node.id}">Duplicate (${selectedCardIds.length})</button>`
+            : ''
+        }
       </div>
-    </section>
-    <p class="editor-subtitle">Editor type: ${editorTypeMeta(node.editorType).label}</p>
-    <section class="noteboard-canvas" data-action="noteboard-canvas-create" data-node-id="${node.id}">
-      ${cardsMarkup || '<p class="editor-empty">No cards yet. Add your first card.</p>'}
+      <div
+        class="noteboard-world"
+        data-node-id="${node.id}"
+        style="width:${NOTEBOARD_WORLD_WIDTH}px; height:${NOTEBOARD_WORLD_HEIGHT}px; transform: translate(${offsetX}px, ${offsetY}px) scale(${zoom});"
+      >
+        ${cardsMarkup || '<p class="editor-empty">Click on canvas to create your first card.</p>'}
+        ${
+          selectionBox
+            ? `<div class="selection-rect" style="left:${selectionBox.left}px; top:${selectionBox.top}px; width:${selectionBox.width}px; height:${selectionBox.height}px;"></div>`
+            : ''
+        }
+      </div>
     </section>
   `;
 };
@@ -55,6 +85,16 @@ const renderNoteboard = (
 export const renderEditorPanel = (
   selectedNode: CategoryNode | undefined,
   nodeDataById: Record<string, NodeWorkspaceData>,
+  selectedCardIds: string[],
+  selectionBox:
+    | {
+        nodeId: string;
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+      }
+    | null,
 ): string => {
   if (!selectedNode) {
     return `
@@ -65,7 +105,21 @@ export const renderEditorPanel = (
   }
 
   if (selectedNode.editorType === 'noteboard') {
-    return renderNoteboard(selectedNode, nodeDataById[selectedNode.id]);
+    const visibleSelection =
+      selectionBox && selectionBox.nodeId === selectedNode.id
+        ? {
+            left: selectionBox.left,
+            top: selectionBox.top,
+            width: selectionBox.width,
+            height: selectionBox.height,
+          }
+        : null;
+    return renderNoteboard(
+      selectedNode,
+      nodeDataById[selectedNode.id],
+      selectedCardIds,
+      visibleSelection,
+    );
   }
 
   return `
