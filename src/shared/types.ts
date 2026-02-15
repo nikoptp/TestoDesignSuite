@@ -29,6 +29,7 @@ export type UserSettings = {
   drawingOpacity?: number;
   drawingColor?: string;
   drawingPresetColors?: string[];
+  cardTemplates?: CardTemplate[];
 };
 
 export type AppTheme = 'parchment' | 'midnight' | 'evergreen';
@@ -37,8 +38,11 @@ export type NoteboardCard = {
   id: string;
   text: string;
   createdAt: number;
+  color: string;
   x: number;
   y: number;
+  width: number;
+  height: number;
 };
 
 export type NoteboardBrushType = 'pen' | 'ink' | 'marker' | 'charcoal';
@@ -70,4 +74,10 @@ export type NodeWorkspaceData = {
       offsetY: number;
     };
   };
+};
+
+export type CardTemplate = {
+  id: string;
+  name: string;
+  markdown: string;
 };

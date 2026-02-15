@@ -1,4 +1,6 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { NoteboardBrushType, NoteboardCard, NoteboardStroke } from '../shared/types';
 import {
   NOTEBOARD_WORLD_HEIGHT,
@@ -7,8 +9,7 @@ import {
   NOTEBOARD_WORLD_WIDTH,
 } from '../shared/noteboard-constants';
 import {
-  CARD_MIN_HEIGHT,
-  CARD_WIDTH,
+  getWorldPoint,
   getGridStepForZoom,
   type NoteboardView,
 } from '../renderer/noteboard-utils';
@@ -52,7 +53,11 @@ type NoteboardCanvasProps = {
   onCanvasPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
   onCanvasWheel: (event: WheelEvent) => void;
   onCanvasContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
-  onAddCard: () => void;
+  cardTemplates: Array<{ id: string; label: string; isCustom?: boolean }>;
+  onAddCardFromTemplateAt: (templateId: string, clientX: number, clientY: number) => void;
+  onSaveCardTemplate: (name: string, markdown: string) => void;
+  onDeleteCardTemplate: (templateId: string) => void;
+  onRenameCardTemplate: (templateId: string, name: string) => void;
   onToggleDrawingMode: () => void;
   onCloseDrawingSidebar: () => void;
   onDrawingToolChange: (tool: 'pen' | 'brush' | 'eraser') => void;
@@ -61,15 +66,19 @@ type NoteboardCanvasProps = {
   onDrawingOpacityChange: (opacity: number) => void;
   onDrawingColorChange: (color: string) => void;
   onDrawingPresetColorChange: (index: number, color: string) => void;
+  cardColorPresets: string[];
   onClearDrawing: () => void;
   onDuplicateSelected: () => void;
   onSelectCard: (cardId: string, additive: boolean) => void;
   onStartDragCard: (cardId: string, event: React.PointerEvent<HTMLElement>) => void;
+  onStartResizeCard: (cardId: string, event: React.PointerEvent<HTMLElement>) => void;
   onDeleteCard: (cardId: string) => void;
+  onCardColorChange: (cardId: string, color: string) => void;
   onCardTextChange: (cardId: string, value: string) => void;
   onCardTextEditStart: (cardId: string) => void;
   onCardTextEditEnd: (cardId: string) => void;
   onCreateCardAtContextMenu: () => void;
+  onCreateCardAtPointAndEdit: (clientX: number, clientY: number) => string | null;
 };
 
 export const NoteboardCanvas = ({
@@ -91,7 +100,11 @@ export const NoteboardCanvas = ({
   onCanvasPointerDown,
   onCanvasWheel,
   onCanvasContextMenu,
-  onAddCard,
+  cardTemplates,
+  onAddCardFromTemplateAt,
+  onSaveCardTemplate,
+  onDeleteCardTemplate,
+  onRenameCardTemplate,
   onToggleDrawingMode,
   onCloseDrawingSidebar,
   onDrawingToolChange,
@@ -100,15 +113,19 @@ export const NoteboardCanvas = ({
   onDrawingOpacityChange,
   onDrawingColorChange,
   onDrawingPresetColorChange,
+  cardColorPresets,
   onClearDrawing,
   onDuplicateSelected,
   onSelectCard,
   onStartDragCard,
+  onStartResizeCard,
   onDeleteCard,
+  onCardColorChange,
   onCardTextChange,
   onCardTextEditStart,
   onCardTextEditEnd,
   onCreateCardAtContextMenu,
+  onCreateCardAtPointAndEdit,
 }: NoteboardCanvasProps): React.ReactElement => {
   const gridStep = getGridStepForZoom(view.zoom);
   const majorGridStep = gridStep * 4;
@@ -123,9 +140,35 @@ export const NoteboardCanvas = ({
     y: 0,
     visible: false,
   });
+  const [cursorWorld, setCursorWorld] = React.useState<{
+    x: number;
+    y: number;
+    visible: boolean;
+  }>({
+    x: 0,
+    y: 0,
+    visible: false,
+  });
   const [quickColorMenu, setQuickColorMenu] = React.useState<QuickColorMenuState>(null);
   const [hoveredQuickColor, setHoveredQuickColor] = React.useState<string | null>(null);
   const [isShiftHeld, setIsShiftHeld] = React.useState(false);
+  const [previewByCardId, setPreviewByCardId] = React.useState<Record<string, boolean>>({});
+  const [editingTemplateId, setEditingTemplateId] = React.useState<string | null>(null);
+  const [editingTemplateName, setEditingTemplateName] = React.useState('');
+  const [templateDrag, setTemplateDrag] = React.useState<{
+    templateId: string;
+    label: string;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
+  const [cardContextMenu, setCardContextMenu] = React.useState<{
+    cardId: string;
+    screenX: number;
+    screenY: number;
+  } | null>(null);
+  const [pendingEditorCardId, setPendingEditorCardId] = React.useState<string | null>(null);
+  const cardTextareaRefs = React.useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const prevSelectedCardIdsRef = React.useRef<string[]>(selectedCardIds);
 
   React.useEffect(() => {
     const canvas = canvasRef.current;
@@ -172,6 +215,66 @@ export const NoteboardCanvas = ({
   }, [isDrawingMode]);
 
   React.useEffect(() => {
+    const existingIds = new Set(cards.map((card) => card.id));
+    Object.keys(cardTextareaRefs.current).forEach((cardId) => {
+      if (!existingIds.has(cardId)) {
+        delete cardTextareaRefs.current[cardId];
+      }
+    });
+    setPreviewByCardId((prev) => {
+      const nextEntries = Object.entries(prev).filter(([cardId]) => existingIds.has(cardId));
+      if (nextEntries.length === Object.keys(prev).length) {
+        return prev;
+      }
+      return Object.fromEntries(nextEntries);
+    });
+  }, [cards]);
+
+  React.useEffect(() => {
+    const previous = prevSelectedCardIdsRef.current;
+    const current = new Set(selectedCardIds);
+    const deselected = previous.filter((cardId) => !current.has(cardId));
+
+    if (deselected.length > 0) {
+      setPreviewByCardId((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        deselected.forEach((cardId) => {
+          if (next[cardId] !== true) {
+            next[cardId] = true;
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    }
+
+    prevSelectedCardIdsRef.current = selectedCardIds;
+  }, [selectedCardIds]);
+
+  React.useEffect(() => {
+    if (!pendingEditorCardId) {
+      return;
+    }
+
+    const textarea = cardTextareaRefs.current[pendingEditorCardId];
+    if (!textarea) {
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      textarea.focus();
+      const length = textarea.value.length;
+      textarea.setSelectionRange(length, length);
+      setPendingEditorCardId(null);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [cards, pendingEditorCardId]);
+
+  React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Shift') {
         setIsShiftHeld(true);
@@ -198,9 +301,85 @@ export const NoteboardCanvas = ({
     };
   }, []);
 
+  React.useEffect(() => {
+    if (!cardContextMenu) {
+      return;
+    }
+
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('.card-context-menu')) {
+        return;
+      }
+      setCardContextMenu(null);
+    };
+
+    window.addEventListener('pointerdown', onPointerDown, true);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true);
+    };
+  }, [cardContextMenu]);
+
+  React.useEffect(() => {
+    if (!templateDrag) {
+      return;
+    }
+
+    const onPointerMove = (event: PointerEvent): void => {
+      setTemplateDrag((prev) =>
+        prev
+          ? {
+              ...prev,
+              clientX: event.clientX,
+              clientY: event.clientY,
+            }
+          : prev,
+      );
+      event.preventDefault();
+    };
+
+    const onPointerUp = (event: PointerEvent): void => {
+      const dropTarget = document.elementFromPoint(event.clientX, event.clientY);
+      if (
+        dropTarget instanceof Element &&
+        dropTarget.closest('.noteboard-canvas') &&
+        !dropTarget.closest(
+          '.noteboard-toolbar, .noteboard-draw-sidebar, .noteboard-template-sidebar, .canvas-context-menu, .noteboard-card, .card-textarea',
+        )
+      ) {
+        onAddCardFromTemplateAt(templateDrag.templateId, event.clientX, event.clientY);
+      }
+      setTemplateDrag(null);
+      document.body.classList.remove('is-dragging-template');
+      event.preventDefault();
+    };
+
+    document.body.classList.add('is-dragging-template');
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
+    window.addEventListener('pointerup', onPointerUp, { passive: false });
+    window.addEventListener('pointercancel', onPointerUp, { passive: false });
+
+    return () => {
+      document.body.classList.remove('is-dragging-template');
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [onAddCardFromTemplateAt, templateDrag]);
+
   const strokeLayerCacheRef = React.useRef<WeakMap<NoteboardStroke, React.ReactElement | null>>(
     new WeakMap(),
   );
+  const openCardEditor = React.useCallback((cardId: string): void => {
+    setPreviewByCardId((prev) => ({
+      ...prev,
+      [cardId]: false,
+    }));
+    setPendingEditorCardId(cardId);
+  }, []);
+  const contextMenuCard = cardContextMenu
+    ? cards.find((card) => card.id === cardContextMenu.cardId) ?? null
+    : null;
 
   const strokeLayers = React.useMemo(
     () =>
@@ -275,7 +454,6 @@ export const NoteboardCanvas = ({
       }),
     [strokes, view.zoom],
   );
-
   return (
     <>
       <section
@@ -288,7 +466,7 @@ export const NoteboardCanvas = ({
             event.button === 2 &&
             !(event.target instanceof Element &&
               event.target.closest(
-                '.noteboard-toolbar, .noteboard-draw-sidebar, .canvas-context-menu, .noteboard-card, .card-textarea',
+                '.noteboard-toolbar, .noteboard-draw-sidebar, .noteboard-template-sidebar, .canvas-context-menu, .noteboard-card, .card-textarea',
               ))
           ) {
             setQuickColorMenu({
@@ -298,18 +476,53 @@ export const NoteboardCanvas = ({
             setHoveredQuickColor(null);
           }
 
+          if (cardContextMenu && event.button === 0) {
+            const target = event.target;
+            if (!(target instanceof Element && target.closest('.card-context-menu'))) {
+              setCardContextMenu(null);
+            }
+          }
+
           onCanvasPointerDown(event);
         }}
         onPointerMove={(event) => {
+          const target = event.target;
+          const canvas = canvasRef.current;
+          if (!canvas) {
+            return;
+          }
+
+          if (
+            target instanceof Element &&
+            target.closest(
+              '.noteboard-toolbar, .noteboard-draw-sidebar, .noteboard-template-sidebar, .canvas-context-menu, .card-context-menu, .color-quick-menu',
+            )
+          ) {
+            setCursorWorld((prev) =>
+              prev.visible
+                ? {
+                    ...prev,
+                    visible: false,
+                  }
+                : prev,
+            );
+          } else {
+            const world = getWorldPoint(canvas, view, event.clientX, event.clientY);
+            setCursorWorld({
+              x: world.x,
+              y: world.y,
+              visible: true,
+            });
+          }
+
           if (!isDrawingMode) {
             return;
           }
 
-          const target = event.target;
           if (
             target instanceof Element &&
             target.closest(
-              '.noteboard-toolbar, .noteboard-draw-sidebar, .canvas-context-menu, .color-quick-menu, .noteboard-card, .card-textarea',
+              '.noteboard-toolbar, .noteboard-draw-sidebar, .noteboard-template-sidebar, .canvas-context-menu, .card-context-menu, .color-quick-menu, .noteboard-card, .card-textarea',
             )
           ) {
             setCursorPreview((prev) =>
@@ -323,11 +536,6 @@ export const NoteboardCanvas = ({
             return;
           }
 
-          const canvas = canvasRef.current;
-          if (!canvas) {
-            return;
-          }
-
           const rect = canvas.getBoundingClientRect();
           setCursorPreview({
             x: event.clientX - rect.left,
@@ -335,7 +543,7 @@ export const NoteboardCanvas = ({
             visible: true,
           });
         }}
-        onPointerLeave={() =>
+        onPointerLeave={() => {
           setCursorPreview((prev) =>
             prev.visible
               ? {
@@ -343,9 +551,37 @@ export const NoteboardCanvas = ({
                   visible: false,
                 }
               : prev,
-          )
-        }
+          );
+          setCursorWorld((prev) =>
+            prev.visible
+              ? {
+                  ...prev,
+                  visible: false,
+                }
+              : prev,
+          );
+        }}
         onContextMenu={onCanvasContextMenu}
+        onDoubleClick={(event) => {
+          if (isDrawingMode) {
+            return;
+          }
+          const target = event.target;
+          if (
+            target instanceof Element &&
+            target.closest(
+              '.noteboard-card, .noteboard-toolbar, .noteboard-draw-sidebar, .noteboard-template-sidebar, .canvas-context-menu, .card-context-menu, .color-quick-menu',
+            )
+          ) {
+            return;
+          }
+          const createdId = onCreateCardAtPointAndEdit(event.clientX, event.clientY);
+          if (!createdId) {
+            return;
+          }
+          openCardEditor(createdId);
+          event.preventDefault();
+        }}
       >
         {isDrawingMode && cursorPreview.visible ? (
           <>
@@ -373,7 +609,6 @@ export const NoteboardCanvas = ({
           </>
         ) : null}
         <div className="noteboard-toolbar">
-          <button onClick={onAddCard}>+ Card</button>
           <button className={isDrawingMode ? 'active' : ''} onClick={onToggleDrawingMode}>
             {isDrawingMode ? 'Drawing On' : 'Draw'}
           </button>
@@ -548,54 +783,125 @@ export const NoteboardCanvas = ({
           {cards.length === 0 ? (
             <p className="editor-empty">Click on canvas to create your first card.</p>
           ) : null}
-          {cards.map((card) => (
-            <article
-              key={card.id}
-              className={`noteboard-card ${selectedCardIds.includes(card.id) ? 'selected' : ''}`}
-              style={{
-                left: `${card.x - NOTEBOARD_WORLD_MIN_X}px`,
-                top: `${card.y - NOTEBOARD_WORLD_MIN_Y}px`,
-                width: `${CARD_WIDTH}px`,
-                minHeight: `${CARD_MIN_HEIGHT}px`,
-              }}
-              onClick={(event) => {
-                onSelectCard(card.id, event.ctrlKey || event.metaKey);
-              }}
-            >
-              <div
-                className="card-drag-handle"
-                title="Drag card"
-                aria-label="Drag card"
-                onPointerDown={(event) => onStartDragCard(card.id, event)}
-              >
-                <i className="fa-solid fa-grip"></i>
-              </div>
-              <textarea
-                className="card-textarea"
-                placeholder="Write card content..."
-                value={card.text}
+          {cards.map((card) => {
+            const isPreview = previewByCardId[card.id] ?? true;
+            return (
+              <article
+                key={card.id}
+                className={`noteboard-card ${selectedCardIds.includes(card.id) ? 'selected' : ''}`}
+                style={{
+                  left: `${card.x - NOTEBOARD_WORLD_MIN_X}px`,
+                  top: `${card.y - NOTEBOARD_WORLD_MIN_Y}px`,
+                  width: `${card.width}px`,
+                  height: `${card.height}px`,
+                  '--card-fill': card.color,
+                } as React.CSSProperties}
                 onClick={(event) => {
-                  event.stopPropagation();
+                  onSelectCard(card.id, event.ctrlKey || event.metaKey);
                 }}
-                onFocus={() => onCardTextEditStart(card.id)}
-                onBlur={() => onCardTextEditEnd(card.id)}
-                onChange={(event) => onCardTextChange(card.id, event.target.value)}
-              />
-              <div className="card-actions">
-                <button
-                  className="icon-action danger"
-                  title="Delete card"
-                  aria-label="Delete card"
+                onPointerDown={(event) => {
+                  const target = event.target;
+                  if (
+                    !(target instanceof Element) ||
+                    target.closest(
+                      '.card-textarea, .card-markdown-preview, .card-actions, .card-resize-handle',
+                    )
+                  ) {
+                    return;
+                  }
+                  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+                  const border = 10;
+                  const localX = event.clientX - rect.left;
+                  const localY = event.clientY - rect.top;
+                  const isBorderZone =
+                    localX <= border ||
+                    localY <= border ||
+                    rect.width - localX <= border ||
+                    rect.height - localY <= border;
+                  if (!isBorderZone) {
+                    return;
+                  }
+                  onStartDragCard(card.id, event);
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setCardContextMenu({
+                    cardId: card.id,
+                    screenX: event.clientX,
+                    screenY: event.clientY,
+                  });
+                }}
+                onDoubleClick={(event) => {
+                  const target = event.target;
+                  if (
+                    target instanceof Element &&
+                    target.closest('.card-actions, .card-resize-handle')
+                  ) {
+                    return;
+                  }
+                  event.stopPropagation();
+                  openCardEditor(card.id);
+                }}
+              >
+                <textarea
+                  className="card-textarea"
+                  placeholder="Write card content..."
+                  ref={(element) => {
+                    cardTextareaRefs.current[card.id] = element;
+                  }}
+                  value={card.text}
                   onClick={(event) => {
                     event.stopPropagation();
-                    onDeleteCard(card.id);
                   }}
+                  onFocus={() => onCardTextEditStart(card.id)}
+                  onBlur={() => onCardTextEditEnd(card.id)}
+                  onChange={(event) => onCardTextChange(card.id, event.target.value)}
+                  style={{ display: isPreview ? 'none' : undefined }}
+                />
+                {isPreview ? (
+                  <div
+                    className="card-markdown-preview"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                    }}
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {card.text.trim() ? card.text : '*No content yet.*'}
+                    </ReactMarkdown>
+                  </div>
+                ) : null}
+                <div className="card-actions">
+                  <button
+                    className="icon-action"
+                    title={isPreview ? 'Edit markdown' : 'Preview markdown'}
+                    aria-label={isPreview ? 'Edit markdown' : 'Preview markdown'}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (isPreview) {
+                        openCardEditor(card.id);
+                        return;
+                      }
+                      setPreviewByCardId((prev) => ({
+                        ...prev,
+                        [card.id]: true,
+                      }));
+                    }}
+                  >
+                    <i className={isPreview ? 'fa-solid fa-pen' : 'fa-solid fa-eye'}></i>
+                  </button>
+                </div>
+                <button
+                  className="card-resize-handle"
+                  aria-label="Resize card"
+                  title="Resize card"
+                  onPointerDown={(event) => onStartResizeCard(card.id, event)}
                 >
-                  <i className="fa-solid fa-trash"></i>
+                  <i className="fa-solid fa-up-right-and-down-left-from-center"></i>
                 </button>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
           {selectionRect ? (
             <div
               className="selection-rect"
@@ -609,6 +915,87 @@ export const NoteboardCanvas = ({
           ) : null}
         </div>
       </section>
+      {!isDrawingMode ? (
+        <aside className="noteboard-template-sidebar">
+          <div className="draw-sidebar-header">
+            <h3>Templates</h3>
+          </div>
+          <p className="template-sidebar-hint">Drag a template to the board</p>
+          <div className="template-list">
+            {cardTemplates.map((template) => (
+              <div key={`sidebar-${template.id}`} className="template-item-row">
+                {editingTemplateId === template.id ? (
+                  <input
+                    className="settings-input template-rename-input"
+                    value={editingTemplateName}
+                    autoFocus
+                    maxLength={48}
+                    onChange={(event) => setEditingTemplateName(event.target.value)}
+                    onBlur={() => {
+                      const nextName = editingTemplateName.trim();
+                      if (nextName) {
+                        onRenameCardTemplate(template.id, nextName);
+                      }
+                      setEditingTemplateId(null);
+                      setEditingTemplateName('');
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        const nextName = editingTemplateName.trim();
+                        if (nextName) {
+                          onRenameCardTemplate(template.id, nextName);
+                        }
+                        setEditingTemplateId(null);
+                        setEditingTemplateName('');
+                      } else if (event.key === 'Escape') {
+                        setEditingTemplateId(null);
+                        setEditingTemplateName('');
+                      }
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="template-item"
+                    onPointerDown={(event) => {
+                      if (template.isCustom && event.detail > 1) {
+                        return;
+                      }
+                      setTemplateDrag({
+                        templateId: template.id,
+                        label: template.label,
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                      });
+                      event.preventDefault();
+                    }}
+                    onDoubleClick={() => {
+                      if (!template.isCustom) {
+                        return;
+                      }
+                      setEditingTemplateId(template.id);
+                      setEditingTemplateName(template.label);
+                    }}
+                  >
+                    {template.label}
+                  </button>
+                )}
+                {template.isCustom ? (
+                  <button
+                    type="button"
+                    className="template-delete-btn"
+                    onClick={() => onDeleteCardTemplate(template.id)}
+                    title="Delete template"
+                    aria-label="Delete template"
+                  >
+                    <i className="fa-solid fa-trash"></i>
+                  </button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </aside>
+      ) : null}
 
       {contextMenu ? (
         <div
@@ -618,6 +1005,62 @@ export const NoteboardCanvas = ({
           <button className="context-menu-item" onClick={onCreateCardAtContextMenu}>
             <i className="fa-solid fa-note-sticky"></i>
             <span>Create Card Here</span>
+          </button>
+        </div>
+      ) : null}
+      {cardContextMenu ? (
+        <div
+          className="card-context-menu"
+          style={{ left: `${cardContextMenu.screenX}px`, top: `${cardContextMenu.screenY}px` }}
+        >
+          <button
+            className="context-menu-item"
+            onClick={() => {
+              const card = cards.find((item) => item.id === cardContextMenu.cardId);
+              if (!card) {
+                setCardContextMenu(null);
+                return;
+              }
+              const firstLine = card.text
+                .split('\n')
+                .find((line) => line.trim().length > 0)
+                ?.replace(/^[-*#>\s[\]0-9.]+/, '')
+                .trim();
+              const inferredName = (firstLine && firstLine.slice(0, 48)) || 'Custom Template';
+              onSaveCardTemplate(inferredName, card.text);
+              setCardContextMenu(null);
+            }}
+          >
+            <i className="fa-solid fa-bookmark"></i>
+            <span>Save As Template</span>
+          </button>
+          <div className="card-context-colors">
+            {cardColorPresets.map((presetColor, index) => (
+              <button
+                key={`${cardContextMenu.cardId}-color-${index}`}
+                type="button"
+                className={`card-color-swatch ${
+                  contextMenuCard?.color === presetColor ? 'active' : ''
+                }`}
+                style={{ backgroundColor: presetColor }}
+                onClick={() => {
+                  onCardColorChange(cardContextMenu.cardId, presetColor);
+                  setCardContextMenu(null);
+                }}
+                aria-label={`Set card color ${presetColor}`}
+                title={presetColor}
+              ></button>
+            ))}
+          </div>
+          <button
+            className="context-menu-item"
+            onClick={() => {
+              onDeleteCard(cardContextMenu.cardId);
+              setCardContextMenu(null);
+            }}
+          >
+            <i className="fa-solid fa-trash"></i>
+            <span>Delete Card</span>
           </button>
         </div>
       ) : null}
@@ -640,6 +1083,20 @@ export const NoteboardCanvas = ({
               title={presetColor}
             ></button>
           ))}
+        </div>
+      ) : null}
+      {templateDrag ? (
+        <div
+          className="template-drag-ghost"
+          style={{ left: `${templateDrag.clientX}px`, top: `${templateDrag.clientY}px` }}
+          aria-hidden="true"
+        >
+          {templateDrag.label}
+        </div>
+      ) : null}
+      {cursorWorld.visible ? (
+        <div className="cursor-coordinate-hud" aria-hidden="true">
+          {Math.round(cursorWorld.x)}, {Math.round(cursorWorld.y)}
         </div>
       ) : null}
     </>

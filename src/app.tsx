@@ -1,6 +1,7 @@
 import React from 'react';
 import type {
   AppTheme,
+  CardTemplate,
   CategoryNode,
   EditorType,
   NoteboardBrushType,
@@ -24,11 +25,13 @@ import {
 } from './shared/tree-utils';
 import {
   CARD_MIN_HEIGHT,
+  CARD_MIN_WIDTH,
   CARD_WIDTH,
   CANVAS_PADDING,
   clampCardToWorld,
   clampViewOffsets,
   createNoteboardCard,
+  DEFAULT_NOTEBOARD_CARD_COLOR,
   getMinZoomForCanvas,
   getWorldPoint,
   type NoteboardView,
@@ -94,6 +97,18 @@ type DragState = {
   startPositions: Record<string, { x: number; y: number }>;
 };
 
+type ResizeState = {
+  pointerId: number;
+  nodeId: string;
+  cardId: string;
+  startPointerX: number;
+  startPointerY: number;
+  startWidth: number;
+  startHeight: number;
+  startX: number;
+  startY: number;
+};
+
 type PanState = {
   pointerId: number;
   nodeId: string;
@@ -121,17 +136,32 @@ type AppClipboard =
       kind: 'noteboard-cards';
       cards: Array<{
         text: string;
+        color: string;
         dx: number;
         dy: number;
+        width: number;
+        height: number;
       }>;
     }
   | null;
+
+type CardTemplateId =
+  | 'blank'
+  | 'list'
+  | 'checklist'
+  | 'table'
+  | 'quest-log'
+  | 'mechanic-spec';
+const CUSTOM_TEMPLATE_MAX_COUNT = 40;
 
 const MIN_SIDEBAR_WIDTH = 240;
 const MAX_SIDEBAR_WIDTH = 620;
 const MAX_ZOOM = 2.5;
 const MAX_HISTORY_ENTRIES = 120;
 const MAX_DRAW_SIZE = 64;
+const CARD_MAX_WIDTH = 560;
+const CARD_MAX_HEIGHT = 520;
+const CARD_AUTO_MAX_WIDTH = 420;
 const DRAWING_PRESET_COLOR_COUNT = 6;
 const DEFAULT_DRAWING_PRESET_COLORS = [
   '#1e1f24',
@@ -140,6 +170,53 @@ const DEFAULT_DRAWING_PRESET_COLORS = [
   '#51cf66',
   '#ffd43b',
   '#f783ac',
+];
+const CARD_COLOR_PRESETS = [
+  '#ffd8a8',
+  '#ffc9de',
+  '#c5f6d0',
+  '#cfe8ff',
+  '#e5dbff',
+];
+const THEME_CARD_COLORS: Record<AppTheme, string> = {
+  parchment: '#fff1a8',
+  midnight: '#2b3f57',
+  evergreen: '#d6ebd2',
+};
+const CARD_TEMPLATES: Array<{ id: CardTemplateId; label: string; markdown: string }> = [
+  {
+    id: 'blank',
+    label: 'Blank',
+    markdown: '',
+  },
+  {
+    id: 'list',
+    label: 'Bullet List',
+    markdown: '- Item 1\n- Item 2\n- Item 3',
+  },
+  {
+    id: 'checklist',
+    label: 'Checklist',
+    markdown: '- [ ] Task 1\n- [ ] Task 2\n- [ ] Task 3',
+  },
+  {
+    id: 'table',
+    label: 'Table',
+    markdown:
+      '| Name | Value | Notes |\n|---|---|---|\n| HP | 100 | Base health |\n| Speed | 6.5 | Units/s |',
+  },
+  {
+    id: 'quest-log',
+    label: 'Quest Log',
+    markdown:
+      '## Quest\n- **Objective:**\n- **NPC:**\n- **Location:**\n\n## Steps\n- [ ] Step 1\n- [ ] Step 2\n\n## Rewards\n- XP:\n- Items:',
+  },
+  {
+    id: 'mechanic-spec',
+    label: 'Mechanic Spec',
+    markdown:
+      '## Mechanic\n- **Name:**\n- **Core Loop Stage:**\n\n## Rules\n- Rule 1\n- Rule 2\n\n## Tuning\n| Param | Default | Range |\n|---|---|---|\n| Cooldown | 1.5 | 0.5-3.0 |\n\n## Edge Cases\n- ',
+  },
 ];
 
 const defaultState: PersistedTreeState = {
@@ -178,6 +255,7 @@ const defaultSettings: UserSettings = {
   drawingOpacity: 0.85,
   drawingColor: '#1e1f24',
   drawingPresetColors: [...DEFAULT_DRAWING_PRESET_COLORS],
+  cardTemplates: [],
 };
 
 const themeOptions: Array<{ value: AppTheme; label: string }> = [
@@ -188,6 +266,9 @@ const themeOptions: Array<{ value: AppTheme; label: string }> = [
 
 const isAppTheme = (value: unknown): value is AppTheme =>
   value === 'parchment' || value === 'midnight' || value === 'evergreen';
+
+const getThemeCardColor = (theme: AppTheme): string =>
+  THEME_CARD_COLORS[theme] ?? THEME_CARD_COLORS.parchment;
 
 const clampSidebarWidth = (value: number): number =>
   Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value));
@@ -209,6 +290,88 @@ const sanitizeDrawingPresetColors = (input: unknown): string[] => {
   return normalized;
 };
 
+const sanitizeCardTemplates = (input: unknown): CardTemplate[] => {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const sanitized = input
+    .map((item) => {
+      if (typeof item !== 'object' || item === null) {
+        return null;
+      }
+      const obj = item as { id?: unknown; name?: unknown; markdown?: unknown };
+      if (
+        typeof obj.id !== 'string' ||
+        typeof obj.name !== 'string' ||
+        typeof obj.markdown !== 'string'
+      ) {
+        return null;
+      }
+      const id = obj.id.trim();
+      const name = obj.name.trim();
+      if (!id || !name) {
+        return null;
+      }
+      return {
+        id,
+        name: name.slice(0, 48),
+        markdown: obj.markdown.slice(0, 12000),
+      } as CardTemplate;
+    })
+    .filter((template): template is CardTemplate => Boolean(template))
+    .slice(0, CUSTOM_TEMPLATE_MAX_COUNT);
+
+  const uniqueById = new Map<string, CardTemplate>();
+  sanitized.forEach((template) => {
+    if (!uniqueById.has(template.id)) {
+      uniqueById.set(template.id, template);
+    }
+  });
+
+  return [...uniqueById.values()];
+};
+
+const createCustomTemplateId = (): string =>
+  `custom-template-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+const estimateCardDimensionsFromText = (
+  text: string,
+): { width: number; height: number } => {
+  const source = text.trim();
+  if (!source) {
+    return {
+      width: CARD_WIDTH,
+      height: CARD_MIN_HEIGHT,
+    };
+  }
+
+  const lines = source.split('\n');
+  const longestLine = lines.reduce((max, line) => Math.max(max, line.trim().length), 0);
+  const lineCount = lines.length;
+  const hasTable = source.includes('|') && source.includes('---');
+  const headingCount = lines.filter((line) => /^#{1,6}\s/.test(line.trim())).length;
+  const listCount = lines.filter((line) => /^[-*]\s|\d+\.\s|-\s\[\s?\]\s/.test(line.trim())).length;
+
+  let width = 170 + longestLine * 5.2 + (hasTable ? 70 : 0);
+  width = Math.max(CARD_MIN_WIDTH, Math.min(CARD_AUTO_MAX_WIDTH, width));
+
+  const approxCharsPerLine = Math.max(18, Math.floor((width - 28) / 7));
+  const wrappedLines = Math.ceil(source.length / approxCharsPerLine);
+  const effectiveLines = Math.max(lineCount, wrappedLines);
+  let height =
+    54 +
+    effectiveLines * 17 +
+    headingCount * 6 +
+    Math.min(14, listCount * 2);
+  height = Math.max(CARD_MIN_HEIGHT, Math.min(CARD_MAX_HEIGHT, height));
+
+  return {
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+};
+
 const isUserSettings = (value: unknown): value is UserSettings => {
   if (typeof value !== 'object' || value === null) {
     return false;
@@ -223,6 +386,7 @@ const isUserSettings = (value: unknown): value is UserSettings => {
     drawingOpacity?: unknown;
     drawingColor?: unknown;
     drawingPresetColors?: unknown;
+    cardTemplates?: unknown;
   };
   return (
     typeof obj.sidebarWidth === 'number' &&
@@ -255,7 +419,23 @@ const isUserSettings = (value: unknown): value is UserSettings => {
         obj.drawingPresetColors.length <= DRAWING_PRESET_COLOR_COUNT &&
         obj.drawingPresetColors.every(
           (color) => typeof color === 'string' && isHexColor(color),
-        )))
+        ))) &&
+    (obj.cardTemplates === undefined ||
+      (Array.isArray(obj.cardTemplates) &&
+        obj.cardTemplates.length <= CUSTOM_TEMPLATE_MAX_COUNT &&
+        obj.cardTemplates.every((template) => {
+          if (typeof template !== 'object' || template === null) {
+            return false;
+          }
+          const t = template as { id?: unknown; name?: unknown; markdown?: unknown };
+          return (
+            typeof t.id === 'string' &&
+            t.id.trim().length > 0 &&
+            typeof t.name === 'string' &&
+            t.name.trim().length > 0 &&
+            typeof t.markdown === 'string'
+          );
+        })))
   );
 };
 
@@ -298,7 +478,41 @@ const ensureNoteboardData = (
       next.y = Math.floor(index / 3) * 220 - 220;
       cardsChanged = true;
     }
-    if (next.x !== card.x || next.y !== card.y) {
+    const widthValue =
+      typeof (next as Partial<NoteboardCard>).width === 'number' &&
+      Number.isFinite((next as Partial<NoteboardCard>).width)
+        ? ((next as Partial<NoteboardCard>).width as number)
+        : CARD_WIDTH;
+    const heightValue =
+      typeof (next as Partial<NoteboardCard>).height === 'number' &&
+      Number.isFinite((next as Partial<NoteboardCard>).height)
+        ? ((next as Partial<NoteboardCard>).height as number)
+        : CARD_MIN_HEIGHT;
+    next.width = Math.max(CARD_MIN_WIDTH, Math.min(CARD_MAX_WIDTH, widthValue));
+    next.height = Math.max(CARD_MIN_HEIGHT, Math.min(CARD_MAX_HEIGHT, heightValue));
+    next.color =
+      typeof (next as Partial<NoteboardCard>).color === 'string' &&
+      isHexColor((next as Partial<NoteboardCard>).color as string)
+        ? ((next as Partial<NoteboardCard>).color as string)
+        : DEFAULT_NOTEBOARD_CARD_COLOR;
+
+    const estimated = estimateCardDimensionsFromText(next.text);
+    next.width = Math.max(next.width, estimated.width);
+    next.height = Math.max(next.height, estimated.height);
+
+    const clamped = clampCardToWorld(next.x, next.y, next.width, next.height);
+    if (clamped.x !== next.x || clamped.y !== next.y) {
+      next.x = clamped.x;
+      next.y = clamped.y;
+      cardsChanged = true;
+    }
+
+    if (
+      next.x !== card.x ||
+      next.y !== card.y ||
+      next.width !== (card as Partial<NoteboardCard>).width ||
+      next.height !== (card as Partial<NoteboardCard>).height
+    ) {
       cardsChanged = true;
     }
     return next;
@@ -457,6 +671,7 @@ export const App = (): React.ReactElement => {
   const shellRef = React.useRef<HTMLDivElement | null>(null);
   const canvasRef = React.useRef<HTMLDivElement | null>(null);
   const dragRef = React.useRef<DragState | null>(null);
+  const resizeRef = React.useRef<ResizeState | null>(null);
   const panRef = React.useRef<PanState | null>(null);
   const drawRef = React.useRef<DrawState | null>(null);
   const drawPointQueueRef = React.useRef<QueuedDrawPoint[]>([]);
@@ -696,6 +911,7 @@ export const App = (): React.ReactElement => {
       selectionBox: null,
     }));
     dragRef.current = null;
+    resizeRef.current = null;
     panRef.current = null;
     drawRef.current = null;
     drawPointQueueRef.current = [];
@@ -705,6 +921,7 @@ export const App = (): React.ReactElement => {
     }
     textEditSessionsRef.current.clear();
     document.body.classList.remove('is-dragging-card');
+    document.body.classList.remove('is-resizing-card');
     document.body.classList.remove('is-panning-canvas');
     document.body.classList.remove('is-drawing-canvas');
   }, []);
@@ -758,6 +975,7 @@ export const App = (): React.ReactElement => {
             drawingOpacity: loadedSettings.drawingOpacity ?? defaultSettings.drawingOpacity,
             drawingColor: loadedSettings.drawingColor ?? defaultSettings.drawingColor,
             drawingPresetColors: sanitizeDrawingPresetColors(loadedSettings.drawingPresetColors),
+            cardTemplates: sanitizeCardTemplates(loadedSettings.cardTemplates),
           });
         }
       } catch {
@@ -882,9 +1100,9 @@ export const App = (): React.ReactElement => {
         const hits = getCardsForNode(next, selectionBox.nodeId)
           .filter((card) => {
             const cardMinX = card.x;
-            const cardMaxX = card.x + CARD_WIDTH;
+            const cardMaxX = card.x + card.width;
             const cardMinY = card.y;
-            const cardMaxY = card.y + CARD_MIN_HEIGHT;
+            const cardMaxY = card.y + card.height;
             return !(
               cardMaxX < minX ||
               cardMinX > maxX ||
@@ -978,6 +1196,63 @@ export const App = (): React.ReactElement => {
         return;
       }
 
+      const resize = resizeRef.current;
+      if (resize && event.pointerId === resize.pointerId) {
+        const canvas = canvasRef.current;
+        if (!canvas) {
+          return;
+        }
+
+        setState((prev) => {
+          const next = ensureNoteboardData(prev, resize.nodeId);
+          const view = getViewForNode(next, resize.nodeId);
+          const world = getWorldPoint(canvas, view, event.clientX, event.clientY);
+          const deltaX = world.x - resize.startPointerX;
+          const deltaY = world.y - resize.startPointerY;
+          const resizedCard = getCardsForNode(next, resize.nodeId).find(
+            (card) => card.id === resize.cardId,
+          );
+          const contentMin = estimateCardDimensionsFromText(resizedCard?.text ?? '');
+          const maxWidthByWorld = NOTEBOARD_WORLD_MAX_X - CANVAS_PADDING - resize.startX;
+          const maxHeightByWorld = NOTEBOARD_WORLD_MAX_Y - CANVAS_PADDING - resize.startY;
+          const nextWidth = Math.max(
+            Math.max(CARD_MIN_WIDTH, contentMin.width),
+            Math.min(CARD_MAX_WIDTH, maxWidthByWorld, resize.startWidth + deltaX),
+          );
+          const nextHeight = Math.max(
+            Math.max(CARD_MIN_HEIGHT, contentMin.height),
+            Math.min(CARD_MAX_HEIGHT, maxHeightByWorld, resize.startHeight + deltaY),
+          );
+
+          const cards = getCardsForNode(next, resize.nodeId).map((card) =>
+            card.id === resize.cardId
+              ? {
+                  ...card,
+                  width: nextWidth,
+                  height: nextHeight,
+                }
+              : card,
+          );
+
+          return {
+            ...next,
+            nodeDataById: {
+              ...next.nodeDataById,
+              [resize.nodeId]: {
+                ...(next.nodeDataById[resize.nodeId] ?? {}),
+                noteboard: {
+                  ...(next.nodeDataById[resize.nodeId]?.noteboard ?? { cards: [] }),
+                  cards,
+                  view: { ...view },
+                },
+              },
+            },
+          };
+        });
+        event.preventDefault();
+        return;
+      }
+
       const drag = dragRef.current;
       if (!drag || event.pointerId !== drag.pointerId) {
         return;
@@ -997,15 +1272,25 @@ export const App = (): React.ReactElement => {
 
         const starts = Object.values(drag.startPositions);
         const minStartX = Math.min(...starts.map((p) => p.x));
-        const maxStartX = Math.max(...starts.map((p) => p.x));
+        const maxStartX = Math.max(
+          ...Object.entries(drag.startPositions).map(([cardId, p]) => {
+            const card = getCardsForNode(next, drag.nodeId).find((item) => item.id === cardId);
+            const width = card?.width ?? CARD_WIDTH;
+            return p.x + width;
+          }),
+        );
         const minStartY = Math.min(...starts.map((p) => p.y));
-        const maxStartY = Math.max(...starts.map((p) => p.y));
+        const maxStartY = Math.max(
+          ...Object.entries(drag.startPositions).map(([cardId, p]) => {
+            const card = getCardsForNode(next, drag.nodeId).find((item) => item.id === cardId);
+            const height = card?.height ?? CARD_MIN_HEIGHT;
+            return p.y + height;
+          }),
+        );
         const minAllowedDeltaX = NOTEBOARD_WORLD_MIN_X + CANVAS_PADDING - minStartX;
-        const maxAllowedDeltaX =
-          NOTEBOARD_WORLD_MAX_X - CARD_WIDTH - CANVAS_PADDING - maxStartX;
+        const maxAllowedDeltaX = NOTEBOARD_WORLD_MAX_X - CANVAS_PADDING - maxStartX;
         const minAllowedDeltaY = NOTEBOARD_WORLD_MIN_Y + CANVAS_PADDING - minStartY;
-        const maxAllowedDeltaY =
-          NOTEBOARD_WORLD_MAX_Y - CARD_MIN_HEIGHT - CANVAS_PADDING - maxStartY;
+        const maxAllowedDeltaY = NOTEBOARD_WORLD_MAX_Y - CANVAS_PADDING - maxStartY;
 
         deltaX = Math.min(maxAllowedDeltaX, Math.max(minAllowedDeltaX, deltaX));
         deltaY = Math.min(maxAllowedDeltaY, Math.max(minAllowedDeltaY, deltaY));
@@ -1054,6 +1339,11 @@ export const App = (): React.ReactElement => {
         document.body.classList.remove('is-dragging-card');
       }
 
+      if (resizeRef.current && event.pointerId === resizeRef.current.pointerId) {
+        resizeRef.current = null;
+        document.body.classList.remove('is-resizing-card');
+      }
+
       if (panRef.current && event.pointerId === panRef.current.pointerId) {
         panRef.current = null;
         document.body.classList.remove('is-panning-canvas');
@@ -1080,11 +1370,13 @@ export const App = (): React.ReactElement => {
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerUp);
       drawRef.current = null;
+      resizeRef.current = null;
       drawPointQueueRef.current = [];
       if (drawRafRef.current !== null) {
         window.cancelAnimationFrame(drawRafRef.current);
         drawRafRef.current = null;
       }
+      document.body.classList.remove('is-resizing-card');
       document.body.classList.remove('is-drawing-canvas');
     };
   }, [flushQueuedDrawPoints]);
@@ -1196,8 +1488,11 @@ export const App = (): React.ReactElement => {
             kind: 'noteboard-cards',
             cards: cards.map((card) => ({
               text: card.text,
+              color: card.color,
               dx: card.x - anchorX,
               dy: card.y - anchorY,
+              width: card.width,
+              height: card.height,
             })),
           };
         }
@@ -1223,9 +1518,12 @@ export const App = (): React.ReactElement => {
 
           const newIds: string[] = [];
           clipboardRef.current.cards.forEach((item) => {
-            const pos = clampCardToWorld(anchorX + item.dx, anchorY + item.dy);
+            const pos = clampCardToWorld(anchorX + item.dx, anchorY + item.dy, item.width, item.height);
             const created = createNoteboardCard(pos.x, pos.y);
             created.text = item.text;
+            created.color = item.color;
+            created.width = item.width;
+            created.height = item.height;
             cards.unshift(created);
             newIds.push(created.id);
           });
@@ -1343,6 +1641,29 @@ export const App = (): React.ReactElement => {
           height: Math.abs(uiState.selectionBox.currentY - uiState.selectionBox.startY),
         }
       : null;
+
+  const availableCardTemplates = React.useMemo(
+    () => [
+      ...CARD_TEMPLATES.map((template) => ({
+        id: template.id,
+        label: template.label,
+        markdown: template.markdown,
+        isCustom: false,
+      })),
+      ...sanitizeCardTemplates(settings.cardTemplates).map((template) => ({
+        id: template.id,
+        label: template.name,
+        markdown: template.markdown,
+        isCustom: true,
+      })),
+    ],
+    [settings.cardTemplates],
+  );
+  const themeCardColor = getThemeCardColor(settings.theme);
+  const cardColorPresets = React.useMemo(
+    () => [themeCardColor, ...CARD_COLOR_PRESETS.filter((color) => color !== themeCardColor)],
+    [themeCardColor],
+  );
 
   const stopDrawingSession = React.useCallback((): void => {
     drawRef.current = null;
@@ -1639,6 +1960,7 @@ export const App = (): React.ReactElement => {
             drawingOpacity={settings.drawingOpacity ?? defaultSettings.drawingOpacity ?? 0.85}
             drawingColor={settings.drawingColor ?? defaultSettings.drawingColor ?? '#1e1f24'}
             drawingPresetColors={sanitizeDrawingPresetColors(settings.drawingPresetColors)}
+            cardColorPresets={cardColorPresets}
             selectedCardIds={selectedCardIds}
             selectionRect={selectionRect}
             contextMenu={
@@ -1682,7 +2004,7 @@ export const App = (): React.ReactElement => {
                 event.button === 0 &&
                 target.closest('.noteboard-canvas') &&
                 !target.closest(
-                  '.noteboard-card, .noteboard-toolbar, .noteboard-draw-sidebar, .canvas-context-menu, .color-quick-menu',
+                  '.noteboard-card, .noteboard-toolbar, .noteboard-draw-sidebar, .noteboard-template-sidebar, .canvas-context-menu, .color-quick-menu',
                 )
               ) {
                 const canvas = canvasRef.current;
@@ -1796,7 +2118,7 @@ export const App = (): React.ReactElement => {
                 event.button === 0 &&
                 target.closest('.noteboard-canvas') &&
                 !target.closest(
-                  '.noteboard-card, .noteboard-toolbar, .noteboard-draw-sidebar, .canvas-context-menu, .color-quick-menu',
+                  '.noteboard-card, .noteboard-toolbar, .noteboard-draw-sidebar, .noteboard-template-sidebar, .canvas-context-menu, .color-quick-menu',
                 )
               ) {
                 if (uiState.isDrawingMode) {
@@ -1915,7 +2237,7 @@ export const App = (): React.ReactElement => {
               if (!(target instanceof Element)) {
                 return;
               }
-              if (target.closest('.card-textarea, .noteboard-card')) {
+              if (target.closest('.card-textarea, .noteboard-card, .noteboard-template-sidebar')) {
                 return;
               }
 
@@ -1954,26 +2276,36 @@ export const App = (): React.ReactElement => {
               }));
               event.preventDefault();
             }}
-            onAddCard={() => {
+            cardTemplates={availableCardTemplates.map((template) => ({
+              id: template.id,
+              label: template.label,
+              isCustom: template.isCustom,
+            }))}
+            onAddCardFromTemplateAt={(templateId, clientX, clientY) => {
+              const template = availableCardTemplates.find((item) => item.id === templateId);
+              const canvas = canvasRef.current;
+              if (!canvas) {
+                return;
+              }
+              const view = selectedView;
+              const world = getWorldPoint(canvas, view, clientX, clientY);
               pushHistory();
               setState((prev) => {
                 const next = ensureNoteboardData(prev, selectedNode.id);
                 const cards = [...getCardsForNode(next, selectedNode.id)];
-                const view = getViewForNode(next, selectedNode.id);
-                const canvas = canvasRef.current;
-                const fallback = { x: CANVAS_PADDING + 40, y: CANVAS_PADDING + 40 };
-                const positioned = canvas
-                  ? clampCardToWorld(
-                      (canvas.clientWidth / 2 - view.offsetX) / view.zoom +
-                        NOTEBOARD_WORLD_MIN_X -
-                        CARD_WIDTH / 2,
-                      (canvas.clientHeight / 2 - view.offsetY) / view.zoom +
-                        NOTEBOARD_WORLD_MIN_Y -
-                        CARD_MIN_HEIGHT / 2,
-                    )
-                  : fallback;
-
-                const card = createNoteboardCard(positioned.x, positioned.y);
+                const pos = clampCardToWorld(
+                  world.x - CARD_WIDTH / 2,
+                  world.y - CARD_MIN_HEIGHT / 2,
+                );
+                const card = createNoteboardCard(pos.x, pos.y);
+                card.color = themeCardColor;
+                card.text = template?.markdown ?? '';
+                const templateSize = estimateCardDimensionsFromText(card.text);
+                card.width = templateSize.width;
+                card.height = templateSize.height;
+                const clamped = clampCardToWorld(card.x, card.y, card.width, card.height);
+                card.x = clamped.x;
+                card.y = clamped.y;
                 cards.unshift(card);
 
                 setUiState((prevUi) => ({
@@ -1993,13 +2325,61 @@ export const App = (): React.ReactElement => {
                       noteboard: {
                         ...(next.nodeDataById[selectedNode.id]?.noteboard ?? { cards: [] }),
                         cards,
-                        view: { ...view },
+                        view: { ...getViewForNode(next, selectedNode.id) },
                       },
                     },
                   },
                 };
               });
             }}
+            onRenameCardTemplate={(templateId, name) =>
+              setSettings((prev) => {
+                const nextTemplates = sanitizeCardTemplates(prev.cardTemplates).map((template) =>
+                  template.id === templateId
+                    ? {
+                        ...template,
+                        name: name.trim().slice(0, 48) || template.name,
+                      }
+                    : template,
+                );
+                return {
+                  ...prev,
+                  cardTemplates: nextTemplates,
+                };
+              })
+            }
+            onSaveCardTemplate={(name, markdown) =>
+              setSettings((prev) => {
+                const cleanName = name.trim();
+                if (!cleanName) {
+                  return prev;
+                }
+                const nextTemplates = sanitizeCardTemplates(prev.cardTemplates);
+                nextTemplates.unshift({
+                  id: createCustomTemplateId(),
+                  name: cleanName.slice(0, 48),
+                  markdown: markdown.slice(0, 12000),
+                });
+                return {
+                  ...prev,
+                  cardTemplates: nextTemplates.slice(0, CUSTOM_TEMPLATE_MAX_COUNT),
+                };
+              })
+            }
+            onDeleteCardTemplate={(templateId) =>
+              setSettings((prev) => {
+                const nextTemplates = sanitizeCardTemplates(prev.cardTemplates).filter(
+                  (template) => template.id !== templateId,
+                );
+                if (nextTemplates.length === sanitizeCardTemplates(prev.cardTemplates).length) {
+                  return prev;
+                }
+                return {
+                  ...prev,
+                  cardTemplates: nextTemplates,
+                };
+              })
+            }
             onToggleDrawingMode={toggleDrawingMode}
             onCloseDrawingSidebar={closeDrawingMode}
             onDrawingToolChange={(tool) =>
@@ -2092,6 +2472,9 @@ export const App = (): React.ReactElement => {
                 );
                 duplicates.forEach((dup, index) => {
                   dup.text = selectedCardsForDup[index].text;
+                  dup.color = selectedCardsForDup[index].color;
+                  dup.width = selectedCardsForDup[index].width;
+                  dup.height = selectedCardsForDup[index].height;
                 });
                 cards.unshift(...duplicates);
 
@@ -2190,6 +2573,35 @@ export const App = (): React.ReactElement => {
               event.preventDefault();
               event.stopPropagation();
             }}
+            onStartResizeCard={(cardId, event) => {
+              if (uiStateRef.current.isDrawingMode) {
+                return;
+              }
+              const cards = getCardsForNode(stateRef.current, selectedNode.id);
+              const card = cards.find((item) => item.id === cardId);
+              const canvas = canvasRef.current;
+              if (!card || !canvas) {
+                return;
+              }
+
+              const pointer = getWorldPoint(canvas, selectedView, event.clientX, event.clientY);
+              const minSize = estimateCardDimensionsFromText(card.text);
+              pushHistory();
+              resizeRef.current = {
+                pointerId: event.pointerId,
+                nodeId: selectedNode.id,
+                cardId: card.id,
+                startPointerX: pointer.x,
+                startPointerY: pointer.y,
+                startWidth: Math.max(card.width, minSize.width),
+                startHeight: Math.max(card.height, minSize.height),
+                startX: card.x,
+                startY: card.y,
+              };
+              document.body.classList.add('is-resizing-card');
+              event.preventDefault();
+              event.stopPropagation();
+            }}
             onDeleteCard={(cardId) => {
               pushHistory();
               setState((prev) => {
@@ -2234,8 +2646,53 @@ export const App = (): React.ReactElement => {
 
               setState((prev) => {
                 const next = ensureNoteboardData(prev, selectedNode.id);
+                const cards = getCardsForNode(next, selectedNode.id).map((card) => {
+                  if (card.id !== cardId) {
+                    return card;
+                  }
+                  const nextSize = estimateCardDimensionsFromText(value);
+                  const grownWidth = Math.max(card.width, nextSize.width);
+                  const grownHeight = Math.max(card.height, nextSize.height);
+                  const clampedPos = clampCardToWorld(
+                    card.x,
+                    card.y,
+                    grownWidth,
+                    grownHeight,
+                  );
+                  return {
+                    ...card,
+                    text: value,
+                    width: grownWidth,
+                    height: grownHeight,
+                    x: clampedPos.x,
+                    y: clampedPos.y,
+                  };
+                });
+                return {
+                  ...next,
+                  nodeDataById: {
+                    ...next.nodeDataById,
+                    [selectedNode.id]: {
+                      ...(next.nodeDataById[selectedNode.id] ?? {}),
+                      noteboard: {
+                        ...(next.nodeDataById[selectedNode.id]?.noteboard ?? { cards: [] }),
+                        cards,
+                        view: { ...getViewForNode(next, selectedNode.id) },
+                      },
+                    },
+                  },
+                };
+              });
+            }}
+            onCardColorChange={(cardId, color) => {
+              if (!isHexColor(color)) {
+                return;
+              }
+              pushHistory();
+              setState((prev) => {
+                const next = ensureNoteboardData(prev, selectedNode.id);
                 const cards = getCardsForNode(next, selectedNode.id).map((card) =>
-                  card.id === cardId ? { ...card, text: value } : card,
+                  card.id === cardId ? { ...card, color } : card,
                 );
                 return {
                   ...next,
@@ -2270,7 +2727,9 @@ export const App = (): React.ReactElement => {
                 const next = ensureNoteboardData(prev, selectedNode.id);
                 const cards = [...getCardsForNode(next, selectedNode.id)];
                 const pos = clampCardToWorld(menu.worldX - CARD_WIDTH / 2, menu.worldY - 24);
-                cards.unshift(createNoteboardCard(pos.x, pos.y));
+                const created = createNoteboardCard(pos.x, pos.y);
+                created.color = themeCardColor;
+                cards.unshift(created);
                 return {
                   ...next,
                   nodeDataById: {
@@ -2291,6 +2750,52 @@ export const App = (): React.ReactElement => {
                 ...prev,
                 contextMenu: null,
               }));
+            }}
+            onCreateCardAtPointAndEdit={(clientX, clientY) => {
+              const canvas = canvasRef.current;
+              if (!canvas) {
+                return null;
+              }
+
+              const world = getWorldPoint(canvas, selectedView, clientX, clientY);
+              const pos = clampCardToWorld(
+                world.x - CARD_WIDTH / 2,
+                world.y - CARD_MIN_HEIGHT / 2,
+              );
+              const created = createNoteboardCard(pos.x, pos.y);
+              created.color = themeCardColor;
+
+              pushHistory();
+              setState((prev) => {
+                const next = ensureNoteboardData(prev, selectedNode.id);
+                const cards = [created, ...getCardsForNode(next, selectedNode.id)];
+                return {
+                  ...next,
+                  nodeDataById: {
+                    ...next.nodeDataById,
+                    [selectedNode.id]: {
+                      ...(next.nodeDataById[selectedNode.id] ?? {}),
+                      noteboard: {
+                        ...(next.nodeDataById[selectedNode.id]?.noteboard ?? { cards: [] }),
+                        cards,
+                        view: { ...getViewForNode(next, selectedNode.id) },
+                      },
+                    },
+                  },
+                };
+              });
+
+              setUiState((prev) => ({
+                ...prev,
+                contextMenu: null,
+                selectionBox: null,
+                cardSelection: {
+                  nodeId: selectedNode.id,
+                  cardIds: [created.id],
+                },
+              }));
+
+              return created.id;
             }}
           />
         ) : (

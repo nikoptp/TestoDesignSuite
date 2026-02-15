@@ -14,9 +14,11 @@ export type NoteboardView = {
   offsetY: number;
 };
 
-export const CARD_WIDTH = 240;
-export const CARD_MIN_HEIGHT = 170;
+export const CARD_WIDTH = 220;
+export const CARD_MIN_HEIGHT = 80;
+export const CARD_MIN_WIDTH = 140;
 export const CANVAS_PADDING = 12;
+export const DEFAULT_NOTEBOARD_CARD_COLOR = '#fff1a8';
 
 const BASE_MIN_ZOOM = 0.08;
 const BASE_GRID_STEP = 24;
@@ -26,8 +28,11 @@ export const createNoteboardCard = (x: number, y: number): NoteboardCard => ({
   id: `card-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   text: '',
   createdAt: Date.now(),
+  color: DEFAULT_NOTEBOARD_CARD_COLOR,
   x,
   y,
+  width: CARD_WIDTH,
+  height: CARD_MIN_HEIGHT,
 });
 
 export const getNodeWorkspaceData = (
@@ -57,6 +62,17 @@ export const getNoteboardCards = (
     if (typeof card.y !== 'number' || !Number.isFinite(card.y)) {
       card.y = Math.floor(index / 3) * 220 - 220;
     }
+    if (typeof card.width !== 'number' || !Number.isFinite(card.width)) {
+      card.width = CARD_WIDTH;
+    }
+    if (typeof card.height !== 'number' || !Number.isFinite(card.height)) {
+      card.height = CARD_MIN_HEIGHT;
+    }
+    if (typeof card.color !== 'string' || !card.color.trim()) {
+      card.color = DEFAULT_NOTEBOARD_CARD_COLOR;
+    }
+    card.width = Math.max(CARD_MIN_WIDTH, card.width);
+    card.height = Math.max(CARD_MIN_HEIGHT, card.height);
   });
 
   return nodeData.noteboard.cards;
@@ -141,11 +157,16 @@ export const applyNoteboardWorldStyles = (
   world.style.setProperty('--grid-major-line-width', `${majorLineWidth}px`);
 };
 
-export const clampCardToWorld = (x: number, y: number): { x: number; y: number } => {
+export const clampCardToWorld = (
+  x: number,
+  y: number,
+  width: number = CARD_WIDTH,
+  height: number = CARD_MIN_HEIGHT,
+): { x: number; y: number } => {
   const minX = NOTEBOARD_WORLD_MIN_X + CANVAS_PADDING;
   const minY = NOTEBOARD_WORLD_MIN_Y + CANVAS_PADDING;
-  const maxX = NOTEBOARD_WORLD_MAX_X - CARD_WIDTH - CANVAS_PADDING;
-  const maxY = NOTEBOARD_WORLD_MAX_Y - CARD_MIN_HEIGHT - CANVAS_PADDING;
+  const maxX = NOTEBOARD_WORLD_MAX_X - width - CANVAS_PADDING;
+  const maxY = NOTEBOARD_WORLD_MAX_Y - height - CANVAS_PADDING;
 
   return {
     x: Math.min(maxX, Math.max(minX, x)),
