@@ -1,5 +1,6 @@
 import type { CategoryNode } from '../../shared/types';
 import { editorTypeMeta } from '../../shared/editor-types';
+import { escapeHtml } from '../html-utils';
 
 export type NodeTreeViewState = {
   selectedNodeId: string | null;
@@ -23,12 +24,12 @@ export const renderNodeTree = (
         ? `
           <div class="tree-item editing">
             <span class="node-category-icon" title="${meta.label}" aria-label="${meta.label}"><i class="${meta.iconClass}"></i></span>
-            <input class="rename-input" data-action="rename-input" data-id="${node.id}" value="${viewState.editingNameDraft}" />
+            <input class="rename-input" data-action="rename-input" data-id="${node.id}" value="${escapeHtml(viewState.editingNameDraft)}" />
           </div>`
         : `
           <button class="tree-item ${node.id === viewState.selectedNodeId ? 'active' : ''}" data-action="select-node" data-id="${node.id}" title="${meta.label}">
             <span class="node-category-icon" aria-label="${meta.label}"><i class="${meta.iconClass}"></i></span>
-            <span class="node-name">${node.name}</span>
+            <span class="node-name">${escapeHtml(node.name)}</span>
           </button>`;
 
       return `

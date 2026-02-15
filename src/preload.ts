@@ -10,4 +10,13 @@ contextBridge.exposeInMainWorld('testoApi', {
     ipcRenderer.invoke('settings:load') as Promise<UserSettings | null>,
   saveUserSettings: (settings: UserSettings): Promise<void> =>
     ipcRenderer.invoke('settings:save', settings) as Promise<void>,
+  onOpenSettings: (listener: () => void): (() => void) => {
+    const wrapped = (): void => {
+      listener();
+    };
+    ipcRenderer.on('menu:open-settings', wrapped);
+    return () => {
+      ipcRenderer.removeListener('menu:open-settings', wrapped);
+    };
+  },
 });

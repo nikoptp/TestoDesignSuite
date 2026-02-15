@@ -1,5 +1,6 @@
 import type { CategoryNode } from '../../shared/types';
 import { editorTypeOptions } from '../../shared/editor-types';
+import { escapeHtml } from '../html-utils';
 
 export const renderDeleteDialog = (
   pendingDeleteNode: CategoryNode | undefined,
@@ -14,7 +15,7 @@ export const renderDeleteDialog = (
       <div class="confirm-dialog">
         <h3>Delete Node?</h3>
         <p>
-          This will permanently delete <strong>${pendingDeleteNode.name}</strong>
+          This will permanently delete <strong>${escapeHtml(pendingDeleteNode.name)}</strong>
           ${
             deleteDescendantCount > 0
               ? ` and ${deleteDescendantCount} nested node${deleteDescendantCount === 1 ? '' : 's'}`
@@ -52,7 +53,7 @@ export const renderCreateNodeDialog = (
     <div class="dialog-backdrop">
       <div class="confirm-dialog">
         <h3>Select Node Category</h3>
-        <p>${createTargetLabel}</p>
+        <p>${escapeHtml(createTargetLabel)}</p>
         <div class="type-option-grid">${createTypeOptions}</div>
         <div class="dialog-actions">
           <button data-action="cancel-create-node">Cancel</button>

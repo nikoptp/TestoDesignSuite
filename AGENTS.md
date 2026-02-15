@@ -9,9 +9,12 @@
 - Main process entry: `src/index.ts`
 - Preload script: `src/preload.ts`
 - Renderer entry: `src/renderer.ts`
+- React app root: `src/app.tsx`
+- React mount entry: `src/mount.tsx`
+- React components: `src/components/*`
 - Renderer markup/styles: `src/index.html`, `src/index.css`
 - Shared reusable modules: `src/shared/types.ts`, `src/shared/editor-types.ts`, `src/shared/tree-utils.ts`
-- Renderer UI components: `src/renderer/components/node-tree.ts`, `src/renderer/components/dialogs.ts`, `src/renderer/components/layout.ts`
+- Legacy renderer modules: removed
 - Build/config: `forge.config.ts`, `webpack.*.ts`, `tsconfig.json`, `.eslintrc.json`
 - User settings file (runtime): `%APPDATA%/../Local/<app>/data/user-settings.json` (Electron `userData`)
 
@@ -26,6 +29,8 @@
 - Keep main/preload/renderer boundaries strict.
 - Use TypeScript for all new source files.
 - Prefer small, composable modules over monolithic files.
+- Separate views and components into separate files when possible.
+- Move reused functions into library files so they are easy to access across the application.
 - Run lint before finalizing code changes.
 - Avoid destructive git commands unless explicitly requested.
 
@@ -68,6 +73,11 @@
 - 2026-02-10: Added noteboard card selection model (single, ctrl multi, marquee rectangle), group drag movement for multi-selected cards, and duplicate-selected action.
 - 2026-02-10: Added app-level command history snapshots with undo/redo shortcuts and internal noteboard copy/paste for selected cards.
 - 2026-02-10: Added keyboard delete action for selected noteboard cards (`Delete`) with undo support.
+- 2026-02-11: Added React renderer bootstrap with opt-in mode (`?ui=react` or `localStorage.testo.ui=react`) while keeping legacy renderer as default.
+- 2026-02-11: Migrated navigation slice to React (tree view, rename, create/delete dialogs, sidebar resize, persistence load/save).
+- 2026-02-11: Migrated core noteboard interactions to React (card CRUD, drag, pan, zoom, context create, selection, copy/paste, keyboard delete).
+- 2026-02-11: Added React noteboard marquee selection rectangle and app-level undo/redo history shortcuts (`Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z`, `Ctrl/Cmd+Y`).
+- 2026-02-11: Promoted React renderer files to `src` root (`src/app.tsx`, `src/mount.tsx`, `src/components/*`) and removed legacy renderer module.
 
 ## Open Questions
 - Single-window only for MVP, or multi-window support early?

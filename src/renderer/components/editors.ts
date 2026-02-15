@@ -6,14 +6,7 @@ import {
   NOTEBOARD_WORLD_MIN_Y,
   NOTEBOARD_WORLD_WIDTH,
 } from '../../shared/noteboard-constants';
-
-const escapeHtml = (value: string): string =>
-  value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
+import { escapeHtml } from '../html-utils';
 
 const renderNoteboard = (
   node: CategoryNode,
@@ -123,7 +116,7 @@ export const renderEditorPanel = (
   }
 
   return `
-    <h2>${selectedNode.name}</h2>
+    <h2>${escapeHtml(selectedNode.name)}</h2>
     <p class="editor-subtitle">Editor type: ${editorTypeMeta(selectedNode.editorType).label}</p>
     <div class="content-placeholder">
       This editor type is scaffolded but not implemented yet.

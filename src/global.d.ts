@@ -7,6 +7,7 @@ declare global {
       saveTreeState: (state: PersistedTreeState) => Promise<void>;
       loadUserSettings: () => Promise<UserSettings | null>;
       saveUserSettings: (settings: UserSettings) => Promise<void>;
+      onOpenSettings: (listener: () => void) => () => void;
     };
   }
 }

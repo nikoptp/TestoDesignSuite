@@ -159,9 +159,14 @@ export const getWorldPoint = (
   clientX: number,
   clientY: number,
 ): { x: number; y: number } => {
+  const world =
+    (canvas.querySelector(':scope > .noteboard-world') as HTMLElement | null) ||
+    (canvas.querySelector('.noteboard-world') as HTMLElement | null);
   const rect = canvas.getBoundingClientRect();
+  const layoutOffsetX = world?.offsetLeft ?? 0;
+  const layoutOffsetY = world?.offsetTop ?? 0;
   return {
-    x: (clientX - rect.left - view.offsetX) / view.zoom + NOTEBOARD_WORLD_MIN_X,
-    y: (clientY - rect.top - view.offsetY) / view.zoom + NOTEBOARD_WORLD_MIN_Y,
+    x: (clientX - rect.left - layoutOffsetX - view.offsetX) / view.zoom + NOTEBOARD_WORLD_MIN_X,
+    y: (clientY - rect.top - layoutOffsetY - view.offsetY) / view.zoom + NOTEBOARD_WORLD_MIN_Y,
   };
 };
