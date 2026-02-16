@@ -24,6 +24,8 @@ import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import type {
   PersistedTreeState,
+  ProjectStatusPayload,
+  ProjectSnapshot,
   ProjectImageAsset,
   SavedImageAsset,
   UserSettings,
@@ -62,6 +64,16 @@ type ProjectBundleV1 = {
 };
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif'];
+const PROJECT_SNAPSHOT_TIMEOUT_MS = 1600;
+
+type PendingSnapshotRequest = {
+  senderId: number;
+  resolve: (snapshot: ProjectSnapshot | null) => void;
+  timeout: ReturnType<typeof setTimeout>;
+};
+
+let nextSnapshotRequestId = 1;
+const pendingSnapshotRequests = new Map<number, PendingSnapshotRequest>();
 
 const extensionFromMimeType = (mimeType: string): string => {
   const normalized = mimeType.toLowerCase();
@@ -460,9 +472,12 @@ const readProjectBundle = async (filePath: string): Promise<ProjectBundleV1> => 
 };
 
 const writeProjectBundle = async (filePath: string): Promise<void> => {
+  const focusedWindow = BrowserWindow.getFocusedWindow();
+  const snapshot = focusedWindow ? await requestRendererProjectSnapshot(focusedWindow) : null;
+
   const [treeState, userSettings, assets] = await Promise.all([
-    loadTreeState(),
-    loadUserSettings(),
+    snapshot ? Promise.resolve(snapshot.treeState) : loadTreeState(),
+    snapshot ? Promise.resolve(snapshot.userSettings) : loadUserSettings(),
     listImageAssets(),
   ]);
 
@@ -485,6 +500,31 @@ const writeProjectBundle = async (filePath: string): Promise<void> => {
   };
 
   await safeWriteFile(filePath, JSON.stringify(bundle));
+};
+
+const requestRendererProjectSnapshot = async (
+  window: BrowserWindow,
+): Promise<ProjectSnapshot | null> => {
+  const requestId = nextSnapshotRequestId++;
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      const pending = pendingSnapshotRequests.get(requestId);
+      if (!pending) {
+        return;
+      }
+      pendingSnapshotRequests.delete(requestId);
+      pending.resolve(null);
+    }, PROJECT_SNAPSHOT_TIMEOUT_MS);
+
+    pendingSnapshotRequests.set(requestId, {
+      senderId: window.webContents.id,
+      resolve,
+      timeout,
+    });
+
+    window.webContents.send('project:request-snapshot', requestId);
+  });
 };
 
 const applyProjectBundle = async (bundle: ProjectBundleV1): Promise<void> => {
@@ -519,6 +559,20 @@ const applyProjectBundle = async (bundle: ProjectBundleV1): Promise<void> => {
 
 let activeProjectFilePath: string | null = null;
 
+const emitProjectStatus = (
+  window: BrowserWindow | null,
+  payload: Omit<ProjectStatusPayload, 'at'>,
+): void => {
+  if (!window || window.isDestroyed()) {
+    return;
+  }
+  const statusPayload: ProjectStatusPayload = {
+    ...payload,
+    at: Date.now(),
+  };
+  window.webContents.send('menu:project-status', statusPayload);
+};
+
 const saveProjectFileAs = async (): Promise<void> => {
   const focusedWindow = BrowserWindow.getFocusedWindow();
   if (!focusedWindow) {
@@ -534,8 +588,23 @@ const saveProjectFileAs = async (): Promise<void> => {
     return;
   }
 
-  await writeProjectBundle(result.filePath);
-  activeProjectFilePath = result.filePath;
+  try {
+    await writeProjectBundle(result.filePath);
+    activeProjectFilePath = result.filePath;
+    emitProjectStatus(focusedWindow, {
+      status: 'success',
+      action: 'save-as',
+      filePath: result.filePath,
+      message: `Saved project as ${path.basename(result.filePath)}.`,
+    });
+  } catch (error: unknown) {
+    emitProjectStatus(focusedWindow, {
+      status: 'error',
+      action: 'save-as',
+      filePath: result.filePath,
+      message: `Save As failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    });
+  }
 };
 
 const saveProjectFile = async (): Promise<void> => {
@@ -543,7 +612,23 @@ const saveProjectFile = async (): Promise<void> => {
     await saveProjectFileAs();
     return;
   }
-  await writeProjectBundle(activeProjectFilePath);
+  const focusedWindow = BrowserWindow.getFocusedWindow();
+  try {
+    await writeProjectBundle(activeProjectFilePath);
+    emitProjectStatus(focusedWindow, {
+      status: 'success',
+      action: 'save',
+      filePath: activeProjectFilePath,
+      message: `Saved ${path.basename(activeProjectFilePath)}.`,
+    });
+  } catch (error: unknown) {
+    emitProjectStatus(focusedWindow, {
+      status: 'error',
+      action: 'save',
+      filePath: activeProjectFilePath,
+      message: `Save failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    });
+  }
 };
 
 const openProjectFile = async (): Promise<void> => {
@@ -561,11 +646,25 @@ const openProjectFile = async (): Promise<void> => {
     return;
   }
 
-  const filePath = result.filePaths[0];
-  const bundle = await readProjectBundle(filePath);
-  await applyProjectBundle(bundle);
-  activeProjectFilePath = filePath;
-  focusedWindow.reload();
+  try {
+    const filePath = result.filePaths[0];
+    const bundle = await readProjectBundle(filePath);
+    await applyProjectBundle(bundle);
+    activeProjectFilePath = filePath;
+    emitProjectStatus(focusedWindow, {
+      status: 'success',
+      action: 'open',
+      filePath,
+      message: `Opened ${path.basename(filePath)}.`,
+    });
+    focusedWindow.reload();
+  } catch (error: unknown) {
+    emitProjectStatus(focusedWindow, {
+      status: 'error',
+      action: 'open',
+      message: `Open failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    });
+  }
 };
 
 const createNewProject = async (): Promise<void> => {
@@ -588,9 +687,24 @@ const createNewProject = async (): Promise<void> => {
     return;
   }
 
-  await clearCurrentProjectData();
-  activeProjectFilePath = null;
-  focusedWindow.reload();
+  try {
+    await clearCurrentProjectData();
+    activeProjectFilePath = null;
+    emitProjectStatus(focusedWindow, {
+      status: 'success',
+      action: 'new',
+      filePath: null,
+      message: 'Created a new project workspace.',
+    });
+    focusedWindow.reload();
+  } catch (error: unknown) {
+    emitProjectStatus(focusedWindow, {
+      status: 'error',
+      action: 'new',
+      filePath: null,
+      message: `New project failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    });
+  }
 };
 
 ipcMain.handle('tree:load', async () => loadTreeState());
@@ -615,6 +729,48 @@ ipcMain.handle('assets:list-images', async () => listImageAssets());
 ipcMain.handle('assets:delete-image', async (_event, relativePath: string) => {
   await deleteImageAsset(relativePath);
 });
+ipcMain.on(
+  'project:snapshot-response',
+  (
+    event,
+    payload:
+      | {
+          requestId?: unknown;
+          snapshot?: unknown;
+        }
+      | undefined,
+  ) => {
+    if (!payload || typeof payload.requestId !== 'number') {
+      return;
+    }
+
+    const pending = pendingSnapshotRequests.get(payload.requestId);
+    if (!pending || pending.senderId !== event.sender.id) {
+      return;
+    }
+
+    clearTimeout(pending.timeout);
+    pendingSnapshotRequests.delete(payload.requestId);
+
+    const snapshotCandidate = payload.snapshot as Partial<ProjectSnapshot> | null | undefined;
+    if (
+      snapshotCandidate &&
+      typeof snapshotCandidate === 'object' &&
+      typeof snapshotCandidate.treeState === 'object' &&
+      snapshotCandidate.treeState !== null &&
+      typeof snapshotCandidate.userSettings === 'object' &&
+      snapshotCandidate.userSettings !== null
+    ) {
+      pending.resolve({
+        treeState: snapshotCandidate.treeState as PersistedTreeState,
+        userSettings: snapshotCandidate.userSettings as UserSettings,
+      });
+      return;
+    }
+
+    pending.resolve(null);
+  },
+);
 
 const openSettingsFromMenu = (): void => {
   const focusedWindow = BrowserWindow.getFocusedWindow();

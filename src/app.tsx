@@ -8,6 +8,8 @@ import type {
   NoteboardCard,
   NoteboardStroke,
   PersistedTreeState,
+  ProjectStatusPayload,
+  ProjectSnapshot,
   ProjectImageAsset,
   UserSettings,
 } from './shared/types';
@@ -81,6 +83,12 @@ type UiState = {
         baseSelectedCardIds: string[];
       }
     | null;
+};
+
+type ProjectStatusUi = {
+  status: ProjectStatusPayload['status'];
+  message: string;
+  at: number;
 };
 
 type HistorySnapshot = {
@@ -757,6 +765,7 @@ export const App = (): React.ReactElement => {
   const [state, setState] = React.useState<PersistedTreeState>(defaultState);
   const [settings, setSettings] = React.useState<UserSettings>(defaultSettings);
   const [imageAssets, setImageAssets] = React.useState<ProjectImageAsset[]>([]);
+  const [projectStatus, setProjectStatus] = React.useState<ProjectStatusUi | null>(null);
   const [uiState, setUiState] = React.useState<UiState>({
     editingNodeId: null,
     editingNameDraft: '',
@@ -786,12 +795,14 @@ export const App = (): React.ReactElement => {
   const clipboardRef = React.useRef<AppClipboard>(null);
   const textEditSessionsRef = React.useRef<Set<string>>(new Set<string>());
   const documentEditSessionsRef = React.useRef<Set<string>>(new Set<string>());
+  const documentQuickUndoNodeIdRef = React.useRef<string | null>(null);
   const historyStackRef = React.useRef(createHistoryStack<HistorySnapshot>(MAX_HISTORY_ENTRIES));
   const stateRef = React.useRef<PersistedTreeState>(state);
   const settingsRef = React.useRef<UserSettings>(settings);
   const uiStateRef = React.useRef<UiState>(uiState);
   const stateSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const settingsSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const projectStatusTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
     stateRef.current = state;
@@ -804,6 +815,21 @@ export const App = (): React.ReactElement => {
   React.useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
+
+  React.useEffect(() => {
+    const unsubscribe = window.testoApi?.onRequestProjectSnapshot((): ProjectSnapshot => {
+      return {
+        treeState: stateRef.current,
+        userSettings: settingsRef.current,
+      };
+    });
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []);
 
   React.useEffect(() => {
     document.documentElement.setAttribute('data-theme', settings.theme);
@@ -820,6 +846,39 @@ export const App = (): React.ReactElement => {
     });
 
     return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const unsubscribe = window.testoApi?.onProjectStatus((payload) => {
+      setProjectStatus({
+        status: payload.status,
+        message: payload.message,
+        at: payload.at,
+      });
+
+      if (projectStatusTimerRef.current) {
+        clearTimeout(projectStatusTimerRef.current);
+      }
+
+      const dismissDelay = payload.status === 'error' ? 9000 : 4500;
+      projectStatusTimerRef.current = setTimeout(() => {
+        setProjectStatus((current) => {
+          if (!current || current.at !== payload.at) {
+            return current;
+          }
+          return null;
+        });
+      }, dismissDelay);
+    });
+
+    return () => {
+      if (projectStatusTimerRef.current) {
+        clearTimeout(projectStatusTimerRef.current);
+      }
       if (unsubscribe) {
         unsubscribe();
       }
@@ -1903,6 +1962,9 @@ export const App = (): React.ReactElement => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const isTextEntryTarget = isTextEntryTargetElement(event.target);
       const activeNode = findNodeById(stateRef.current.nodes, stateRef.current.selectedNodeId);
+      const isDocumentEditorNode = Boolean(activeNode && activeNode.editorType !== 'noteboard');
+      const shouldUseDocumentHistoryShortcut =
+        Boolean(activeNode) && documentQuickUndoNodeIdRef.current === activeNode.id;
 
       if (event.key === 'Tab' && !isTextEntryTarget) {
         if (activeNode?.editorType === 'noteboard') {
@@ -1925,20 +1987,29 @@ export const App = (): React.ReactElement => {
       }
 
       const mod = event.ctrlKey || event.metaKey;
-      if (mod && !isTextEntryTarget) {
+      if (mod) {
         const key = event.key.toLowerCase();
-        if (key === 'z') {
-          if (event.shiftKey) {
-            redoHistory();
-          } else {
-            undoHistory();
+        if (key === 'z' || key === 'y') {
+          if (isTextEntryTarget) {
+            if (!isDocumentEditorNode || !shouldUseDocumentHistoryShortcut) {
+              return;
+            }
           }
-          event.preventDefault();
-          return;
-        }
 
-        if (key === 'y') {
-          redoHistory();
+          if (key === 'z') {
+            if (event.shiftKey) {
+              redoHistory();
+            } else {
+              undoHistory();
+            }
+          } else {
+            redoHistory();
+          }
+
+          if (isDocumentEditorNode && activeNode) {
+            documentQuickUndoNodeIdRef.current = activeNode.id;
+          }
+
           event.preventDefault();
           return;
         }
@@ -2401,6 +2472,15 @@ export const App = (): React.ReactElement => {
     >
       <aside className="sidebar">
         <h1 className="brand">TestoDesignSuite</h1>
+        {projectStatus ? (
+          <div
+            className={`project-status project-status-${projectStatus.status}`}
+            role="status"
+            aria-live="polite"
+          >
+            {projectStatus.message}
+          </div>
+        ) : null}
 
         <section className="tree-section">
           <div className="section-header">
@@ -3370,10 +3450,17 @@ export const App = (): React.ReactElement => {
             onMarkdownEditEnd={() => {
               documentEditSessionsRef.current.delete(selectedNode.id);
             }}
-            onMarkdownChange={(value) => {
-              if (!documentEditSessionsRef.current.has(selectedNode.id)) {
+            onMarkdownChange={(value, source = 'typing') => {
+              if (source === 'quick-action') {
                 pushHistory();
-                documentEditSessionsRef.current.add(selectedNode.id);
+                documentEditSessionsRef.current.delete(selectedNode.id);
+                documentQuickUndoNodeIdRef.current = selectedNode.id;
+              } else {
+                if (!documentEditSessionsRef.current.has(selectedNode.id)) {
+                  pushHistory();
+                  documentEditSessionsRef.current.add(selectedNode.id);
+                }
+                documentQuickUndoNodeIdRef.current = null;
               }
 
               setState((prev) => {

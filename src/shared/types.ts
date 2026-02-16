@@ -103,3 +103,16 @@ export type ProjectImageAsset = {
   sizeBytes: number;
   updatedAt: number;
 };
+
+export type ProjectSnapshot = {
+  treeState: PersistedTreeState;
+  userSettings: UserSettings;
+};
+
+export type ProjectStatusPayload = {
+  status: 'success' | 'error' | 'info';
+  action: 'save' | 'save-as' | 'open' | 'new';
+  message: string;
+  filePath?: string | null;
+  at: number;
+};

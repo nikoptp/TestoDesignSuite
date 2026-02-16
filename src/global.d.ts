@@ -1,5 +1,7 @@
 import type {
   PersistedTreeState,
+  ProjectStatusPayload,
+  ProjectSnapshot,
   ProjectImageAsset,
   SavedImageAsset,
   UserSettings,
@@ -15,7 +17,11 @@ declare global {
       saveImageAsset: (input: { bytes: Uint8Array; mimeType: string }) => Promise<SavedImageAsset>;
       listImageAssets: () => Promise<ProjectImageAsset[]>;
       deleteImageAsset: (relativePath: string) => Promise<void>;
+      onRequestProjectSnapshot: (
+        listener: () => ProjectSnapshot | Promise<ProjectSnapshot>,
+      ) => () => void;
       onOpenSettings: (listener: () => void) => () => void;
+      onProjectStatus: (listener: (payload: ProjectStatusPayload) => void) => () => void;
     };
   }
 }

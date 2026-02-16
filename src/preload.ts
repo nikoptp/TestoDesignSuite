@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
   PersistedTreeState,
+  ProjectStatusPayload,
+  ProjectSnapshot,
   ProjectImageAsset,
   SavedImageAsset,
   UserSettings,
@@ -21,6 +23,29 @@ contextBridge.exposeInMainWorld('testoApi', {
     ipcRenderer.invoke('assets:list-images') as Promise<ProjectImageAsset[]>,
   deleteImageAsset: (relativePath: string): Promise<void> =>
     ipcRenderer.invoke('assets:delete-image', relativePath) as Promise<void>,
+  onRequestProjectSnapshot: (
+    listener: () => ProjectSnapshot | Promise<ProjectSnapshot>,
+  ): (() => void) => {
+    const wrapped = async (_event: Electron.IpcRendererEvent, requestId: number): Promise<void> => {
+      try {
+        const snapshot = await listener();
+        ipcRenderer.send('project:snapshot-response', {
+          requestId,
+          snapshot,
+        });
+      } catch {
+        ipcRenderer.send('project:snapshot-response', {
+          requestId,
+          snapshot: null,
+        });
+      }
+    };
+
+    ipcRenderer.on('project:request-snapshot', wrapped);
+    return () => {
+      ipcRenderer.removeListener('project:request-snapshot', wrapped);
+    };
+  },
   onOpenSettings: (listener: () => void): (() => void) => {
     const wrapped = (): void => {
       listener();
@@ -28,6 +53,15 @@ contextBridge.exposeInMainWorld('testoApi', {
     ipcRenderer.on('menu:open-settings', wrapped);
     return () => {
       ipcRenderer.removeListener('menu:open-settings', wrapped);
+    };
+  },
+  onProjectStatus: (listener: (payload: ProjectStatusPayload) => void): (() => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: ProjectStatusPayload): void => {
+      listener(payload);
+    };
+    ipcRenderer.on('menu:project-status', wrapped);
+    return () => {
+      ipcRenderer.removeListener('menu:project-status', wrapped);
     };
   },
 });
