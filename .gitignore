@@ -90,3 +90,8 @@ typings/
 
 # Electron-Forge
 out/
+
+# TestoDesignSuite local/runtime project artifacts
+project-assets/
+*.testo
+*.testo.tmp

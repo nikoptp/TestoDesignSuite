@@ -29,63 +29,78 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
 
   const obj = value as {
     noteboard?: unknown;
+    document?: unknown;
   };
 
-  if (typeof obj.noteboard === 'undefined') {
-    return true;
-  }
-
-  if (typeof obj.noteboard !== 'object' || obj.noteboard === null) {
-    return false;
-  }
-
-  const noteboard = obj.noteboard as { cards?: unknown };
-  if (!Array.isArray(noteboard.cards)) {
-    return false;
-  }
-
-  const view = (obj.noteboard as { view?: unknown }).view;
-  if (typeof view !== 'undefined') {
-    if (typeof view !== 'object' || view === null) {
+  if (typeof obj.noteboard !== 'undefined') {
+    if (typeof obj.noteboard !== 'object' || obj.noteboard === null) {
       return false;
     }
 
-    const viewObj = view as {
-      zoom?: unknown;
-      offsetX?: unknown;
-      offsetY?: unknown;
-    };
+    const noteboard = obj.noteboard as { cards?: unknown };
+    if (!Array.isArray(noteboard.cards)) {
+      return false;
+    }
 
-    if (
-      typeof viewObj.zoom !== 'number' ||
-      typeof viewObj.offsetX !== 'number' ||
-      typeof viewObj.offsetY !== 'number'
-    ) {
+    const view = (obj.noteboard as { view?: unknown }).view;
+    if (typeof view !== 'undefined') {
+      if (typeof view !== 'object' || view === null) {
+        return false;
+      }
+
+      const viewObj = view as {
+        zoom?: unknown;
+        offsetX?: unknown;
+        offsetY?: unknown;
+      };
+
+      if (
+        typeof viewObj.zoom !== 'number' ||
+        typeof viewObj.offsetX !== 'number' ||
+        typeof viewObj.offsetY !== 'number'
+      ) {
+        return false;
+      }
+    }
+
+    const cardsValid = noteboard.cards.every((card) => {
+      if (typeof card !== 'object' || card === null) {
+        return false;
+      }
+
+      const item = card as {
+        id?: unknown;
+        text?: unknown;
+        createdAt?: unknown;
+        x?: unknown;
+        y?: unknown;
+      };
+
+      return (
+        typeof item.id === 'string' &&
+        typeof item.text === 'string' &&
+        typeof item.createdAt === 'number' &&
+        (typeof item.x === 'undefined' || typeof item.x === 'number') &&
+        (typeof item.y === 'undefined' || typeof item.y === 'number')
+      );
+    });
+
+    if (!cardsValid) {
       return false;
     }
   }
 
-  return noteboard.cards.every((card) => {
-    if (typeof card !== 'object' || card === null) {
+  if (typeof obj.document !== 'undefined') {
+    if (typeof obj.document !== 'object' || obj.document === null) {
       return false;
     }
+    const doc = obj.document as { markdown?: unknown };
+    if (typeof doc.markdown !== 'string') {
+      return false;
+    }
+  }
 
-    const item = card as {
-      id?: unknown;
-      text?: unknown;
-      createdAt?: unknown;
-      x?: unknown;
-      y?: unknown;
-    };
-
-    return (
-      typeof item.id === 'string' &&
-      typeof item.text === 'string' &&
-      typeof item.createdAt === 'number' &&
-      (typeof item.x === 'undefined' || typeof item.x === 'number') &&
-      (typeof item.y === 'undefined' || typeof item.y === 'number')
-    );
-  });
+  return true;
 };
 
 export const isPersistedTreeState = (value: unknown): value is PersistedTreeState => {

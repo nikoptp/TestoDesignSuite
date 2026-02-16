@@ -1,7 +1,12 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { NoteboardBrushType, NoteboardCard, NoteboardStroke } from '../shared/types';
+import type {
+  NoteboardBrushType,
+  NoteboardCard,
+  NoteboardStroke,
+  ProjectImageAsset,
+} from '../shared/types';
 import {
   NOTEBOARD_WORLD_HEIGHT,
   NOTEBOARD_WORLD_MIN_X,
@@ -13,6 +18,8 @@ import {
   getGridStepForZoom,
   type NoteboardView,
 } from '../renderer/noteboard-utils';
+import { ImageAssetSidebar } from './image-asset-sidebar';
+import { buildLinkPreviews } from '../renderer/noteboard-link-preview';
 import { buildPerfectFreehandPath, buildSmoothPath } from '../renderer/noteboard-drawing';
 
 type ContextMenuState = {
@@ -53,10 +60,13 @@ type NoteboardCanvasProps = {
   onCanvasPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
   onCanvasWheel: (event: WheelEvent) => void;
   onCanvasContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
+  onCanvasDrop: (event: React.DragEvent<HTMLElement>) => void;
   cardTemplates: Array<{ id: string; label: string; isCustom?: boolean }>;
+  imageAssets: ProjectImageAsset[];
   onAddCardFromTemplateAt: (templateId: string, clientX: number, clientY: number) => void;
   onSaveCardTemplate: (name: string, markdown: string) => void;
   onDeleteCardTemplate: (templateId: string) => void;
+  onDeleteImageAsset: (relativePath: string) => void;
   onRenameCardTemplate: (templateId: string, name: string) => void;
   onToggleDrawingMode: () => void;
   onCloseDrawingSidebar: () => void;
@@ -78,6 +88,7 @@ type NoteboardCanvasProps = {
   onCardTextEditStart: (cardId: string) => void;
   onCardTextEditEnd: (cardId: string) => void;
   onCreateCardAtContextMenu: () => void;
+  onPasteTextAtContextMenu: () => void;
   onCreateCardAtPointAndEdit: (clientX: number, clientY: number) => string | null;
 };
 
@@ -100,10 +111,13 @@ export const NoteboardCanvas = ({
   onCanvasPointerDown,
   onCanvasWheel,
   onCanvasContextMenu,
+  onCanvasDrop,
   cardTemplates,
+  imageAssets,
   onAddCardFromTemplateAt,
   onSaveCardTemplate,
   onDeleteCardTemplate,
+  onDeleteImageAsset,
   onRenameCardTemplate,
   onToggleDrawingMode,
   onCloseDrawingSidebar,
@@ -125,8 +139,43 @@ export const NoteboardCanvas = ({
   onCardTextEditStart,
   onCardTextEditEnd,
   onCreateCardAtContextMenu,
+  onPasteTextAtContextMenu,
   onCreateCardAtPointAndEdit,
 }: NoteboardCanvasProps): React.ReactElement => {
+  const markdownUrlTransform = React.useCallback((url: string): string => {
+    const source = (url ?? '').trim();
+    if (!source) {
+      return '';
+    }
+
+    let safeUrl = source;
+    if (/^file:/i.test(source)) {
+      try {
+        const parsed = new URL(source);
+        const decodedPath = decodeURIComponent(parsed.pathname);
+        const marker = '/project-assets/';
+        const markerIndex = decodedPath.toLowerCase().indexOf(marker);
+        if (markerIndex >= 0) {
+          const relativePath = decodedPath.slice(markerIndex + 1).replace(/^[/\\]+/, '');
+          const encodedRelativePath = relativePath
+            .split('/')
+            .map((segment) => encodeURIComponent(segment))
+            .join('/');
+          safeUrl = `testo-asset://${encodedRelativePath}`;
+        }
+      } catch {
+        safeUrl = source;
+      }
+    }
+
+    if (!safeUrl) {
+      return '';
+    }
+    if (/^(https?:|file:|testo-asset:|data:image\/)/i.test(safeUrl)) {
+      return safeUrl;
+    }
+    return '';
+  }, []);
   const gridStep = getGridStepForZoom(view.zoom);
   const majorGridStep = gridStep * 4;
   const lineWidth = 1 / view.zoom;
@@ -508,10 +557,17 @@ export const NoteboardCanvas = ({
             );
           } else {
             const world = getWorldPoint(canvas, view, event.clientX, event.clientY);
-            setCursorWorld({
-              x: world.x,
-              y: world.y,
-              visible: true,
+            setCursorWorld((prev) => {
+              const samePosition =
+                Math.abs(prev.x - world.x) < 0.01 && Math.abs(prev.y - world.y) < 0.01;
+              if (prev.visible && samePosition) {
+                return prev;
+              }
+              return {
+                x: world.x,
+                y: world.y,
+                visible: true,
+              };
             });
           }
 
@@ -537,10 +593,19 @@ export const NoteboardCanvas = ({
           }
 
           const rect = canvas.getBoundingClientRect();
-          setCursorPreview({
-            x: event.clientX - rect.left,
-            y: event.clientY - rect.top,
-            visible: true,
+          setCursorPreview((prev) => {
+            const nextX = event.clientX - rect.left;
+            const nextY = event.clientY - rect.top;
+            const samePosition =
+              Math.abs(prev.x - nextX) < 0.01 && Math.abs(prev.y - nextY) < 0.01;
+            if (prev.visible && samePosition) {
+              return prev;
+            }
+            return {
+              x: nextX,
+              y: nextY,
+              visible: true,
+            };
           });
         }}
         onPointerLeave={() => {
@@ -562,6 +627,14 @@ export const NoteboardCanvas = ({
           );
         }}
         onContextMenu={onCanvasContextMenu}
+        onDragOver={(event) => {
+          if (isDrawingMode) {
+            return;
+          }
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+        }}
+        onDrop={onCanvasDrop}
         onDoubleClick={(event) => {
           if (isDrawingMode) {
             return;
@@ -785,6 +858,7 @@ export const NoteboardCanvas = ({
           ) : null}
           {cards.map((card) => {
             const isPreview = previewByCardId[card.id] ?? true;
+            const linkPreviews = isPreview ? buildLinkPreviews(card.text) : [];
             return (
               <article
                 key={card.id}
@@ -866,9 +940,75 @@ export const NoteboardCanvas = ({
                       event.stopPropagation();
                     }}
                   >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      urlTransform={markdownUrlTransform}
+                      components={{
+                        img: ({ src, alt, ...props }) => {
+                          const safeSrc = typeof src === 'string' ? src.trim() : '';
+                          if (!safeSrc) {
+                            return null;
+                          }
+                          return <img {...props} src={safeSrc} alt={alt ?? ''} />;
+                        },
+                        a: ({ href, children, ...props }) => {
+                          const safeHref = typeof href === 'string' ? href.trim() : '';
+                          if (!safeHref) {
+                            return <>{children}</>;
+                          }
+                          return (
+                            <a
+                              {...props}
+                              href={safeHref}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                              }}
+                            >
+                              {children}
+                            </a>
+                          );
+                        },
+                      }}
+                    >
                       {card.text.trim() ? card.text : '*No content yet.*'}
                     </ReactMarkdown>
+                    {linkPreviews.length > 0 ? (
+                      <div className="card-link-preview-list">
+                        {linkPreviews.map((preview, index) => (
+                          <div
+                            key={`${card.id}-${preview.url}-${index}`}
+                            className="card-link-preview"
+                          >
+                            <div className="card-link-preview-media">
+                              {preview.kind === 'youtube' ? (
+                                <iframe
+                                  title={`YouTube preview ${index + 1}`}
+                                  src={preview.embedUrl}
+                                  loading="lazy"
+                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                  allowFullScreen
+                                ></iframe>
+                              ) : (
+                                <img src={preview.imageUrl} alt="Linked media preview" loading="lazy" />
+                              )}
+                            </div>
+                            <a
+                              href={preview.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="card-link-preview-link"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                              }}
+                            >
+                              {preview.url}
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
                 <div className="card-actions">
@@ -917,82 +1057,88 @@ export const NoteboardCanvas = ({
       </section>
       {!isDrawingMode ? (
         <aside className="noteboard-template-sidebar">
-          <div className="draw-sidebar-header">
-            <h3>Templates</h3>
-          </div>
-          <p className="template-sidebar-hint">Drag a template to the board</p>
-          <div className="template-list">
-            {cardTemplates.map((template) => (
-              <div key={`sidebar-${template.id}`} className="template-item-row">
-                {editingTemplateId === template.id ? (
-                  <input
-                    className="settings-input template-rename-input"
-                    value={editingTemplateName}
-                    autoFocus
-                    maxLength={48}
-                    onChange={(event) => setEditingTemplateName(event.target.value)}
-                    onBlur={() => {
-                      const nextName = editingTemplateName.trim();
-                      if (nextName) {
-                        onRenameCardTemplate(template.id, nextName);
-                      }
-                      setEditingTemplateId(null);
-                      setEditingTemplateName('');
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
+          <section className="template-sidebar-section">
+            <div className="draw-sidebar-header">
+              <h3>Templates</h3>
+            </div>
+            <p className="template-sidebar-hint">Drag a template to the board</p>
+            <div className="template-list">
+              {cardTemplates.map((template) => (
+                <div key={`sidebar-${template.id}`} className="template-item-row">
+                  {editingTemplateId === template.id ? (
+                    <input
+                      className="settings-input template-rename-input"
+                      value={editingTemplateName}
+                      autoFocus
+                      maxLength={48}
+                      onChange={(event) => setEditingTemplateName(event.target.value)}
+                      onBlur={() => {
                         const nextName = editingTemplateName.trim();
                         if (nextName) {
                           onRenameCardTemplate(template.id, nextName);
                         }
                         setEditingTemplateId(null);
                         setEditingTemplateName('');
-                      } else if (event.key === 'Escape') {
-                        setEditingTemplateId(null);
-                        setEditingTemplateName('');
-                      }
-                    }}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    className="template-item"
-                    onPointerDown={(event) => {
-                      if (template.isCustom && event.detail > 1) {
-                        return;
-                      }
-                      setTemplateDrag({
-                        templateId: template.id,
-                        label: template.label,
-                        clientX: event.clientX,
-                        clientY: event.clientY,
-                      });
-                      event.preventDefault();
-                    }}
-                    onDoubleClick={() => {
-                      if (!template.isCustom) {
-                        return;
-                      }
-                      setEditingTemplateId(template.id);
-                      setEditingTemplateName(template.label);
-                    }}
-                  >
-                    {template.label}
-                  </button>
-                )}
-                {template.isCustom ? (
-                  <button
-                    type="button"
-                    className="template-delete-btn"
-                    onClick={() => onDeleteCardTemplate(template.id)}
-                    title="Delete template"
-                    aria-label="Delete template"
-                  >
-                    <i className="fa-solid fa-trash"></i>
-                  </button>
-                ) : null}
-              </div>
-            ))}
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          const nextName = editingTemplateName.trim();
+                          if (nextName) {
+                            onRenameCardTemplate(template.id, nextName);
+                          }
+                          setEditingTemplateId(null);
+                          setEditingTemplateName('');
+                        } else if (event.key === 'Escape') {
+                          setEditingTemplateId(null);
+                          setEditingTemplateName('');
+                        }
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="template-item"
+                      onPointerDown={(event) => {
+                        if (template.isCustom && event.detail > 1) {
+                          return;
+                        }
+                        setTemplateDrag({
+                          templateId: template.id,
+                          label: template.label,
+                          clientX: event.clientX,
+                          clientY: event.clientY,
+                        });
+                        event.preventDefault();
+                      }}
+                      onDoubleClick={() => {
+                        if (!template.isCustom) {
+                          return;
+                        }
+                        setEditingTemplateId(template.id);
+                        setEditingTemplateName(template.label);
+                      }}
+                    >
+                      {template.label}
+                    </button>
+                  )}
+                  {template.isCustom ? (
+                    <button
+                      type="button"
+                      className="template-delete-btn"
+                      onClick={() => onDeleteCardTemplate(template.id)}
+                      title="Delete template"
+                      aria-label="Delete template"
+                    >
+                      <i className="fa-solid fa-trash"></i>
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </section>
+          <ImageAssetSidebar assets={imageAssets} onDeleteAsset={onDeleteImageAsset} />
+          <div className="template-sidebar-end-spacer" aria-hidden="true">
+            &nbsp;
           </div>
         </aside>
       ) : null}
@@ -1005,6 +1151,10 @@ export const NoteboardCanvas = ({
           <button className="context-menu-item" onClick={onCreateCardAtContextMenu}>
             <i className="fa-solid fa-note-sticky"></i>
             <span>Create Card Here</span>
+          </button>
+          <button className="context-menu-item" onClick={onPasteTextAtContextMenu}>
+            <i className="fa-solid fa-paste"></i>
+            <span>Paste Here</span>
           </button>
         </div>
       ) : null}

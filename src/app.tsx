@@ -8,6 +8,7 @@ import type {
   NoteboardCard,
   NoteboardStroke,
   PersistedTreeState,
+  ProjectImageAsset,
   UserSettings,
 } from './shared/types';
 import {
@@ -36,6 +37,7 @@ import {
   getWorldPoint,
   type NoteboardView,
 } from './renderer/noteboard-utils';
+import { buildLinkPreviews } from './renderer/noteboard-link-preview';
 import { appendPointWithPressure, createBrushStroke } from './renderer/noteboard-drawing';
 import { createHistoryStack } from './renderer/history-stack';
 import { isPersistedTreeState } from './renderer/persistence-guards';
@@ -43,6 +45,7 @@ import { NodeTree } from './components/node-tree';
 import { CreateNodeDialog, DeleteNodeDialog, SettingsDialog } from './components/dialogs';
 import { EditorPanel } from './components/editor-panel';
 import { NoteboardCanvas } from './components/noteboard-canvas';
+import { DocumentEditor } from './components/document-editor';
 
 type UiState = {
   editingNodeId: string | null;
@@ -145,6 +148,14 @@ type AppClipboard =
     }
   | null;
 
+type DroppedCanvasPayload = {
+  files: File[];
+  textPlain: string;
+  textUriList: string;
+  textHtml: string;
+  testoImageAsset: string;
+};
+
 type CardTemplateId =
   | 'blank'
   | 'list'
@@ -162,6 +173,8 @@ const MAX_DRAW_SIZE = 64;
 const CARD_MAX_WIDTH = 560;
 const CARD_MAX_HEIGHT = 520;
 const CARD_AUTO_MAX_WIDTH = 420;
+const CONTEXT_MENU_WIDTH = 228;
+const CONTEXT_MENU_HEIGHT = 86;
 const DRAWING_PRESET_COLOR_COUNT = 6;
 const DEFAULT_DRAWING_PRESET_COLORS = [
   '#1e1f24',
@@ -335,6 +348,74 @@ const sanitizeCardTemplates = (input: unknown): CardTemplate[] => {
 const createCustomTemplateId = (): string =>
   `custom-template-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
+const normalizeClipboardText = (value: string): string => value.replace(/\r\n/g, '\n').trim();
+const isTextEntryTargetElement = (target: EventTarget | null): boolean =>
+  target instanceof HTMLInputElement ||
+  target instanceof HTMLTextAreaElement ||
+  (target instanceof HTMLElement && target.isContentEditable);
+
+const firstUrlFromText = (value: string): string | null => {
+  const match = value.match(/https?:\/\/[^\s<>"'`]+/i);
+  return match ? match[0] : null;
+};
+
+const firstUrlFromUriList = (value: string): string | null => {
+  const lines = value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'));
+  for (const line of lines) {
+    if (/^https?:\/\//i.test(line)) {
+      return line;
+    }
+  }
+  return null;
+};
+
+const firstImageUrlFromHtml = (value: string): string | null => {
+  if (!value.trim()) {
+    return null;
+  }
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(value, 'text/html');
+    const image = doc.querySelector('img[src]');
+    const src = image?.getAttribute('src')?.trim() ?? '';
+    if (/^(https?:\/\/|data:image\/)/i.test(src)) {
+      return src;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const parseDroppedTestoImageAsset = (
+  raw: string,
+): { assetUrl: string; width?: number; height?: number } | null => {
+  if (!raw.trim()) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as {
+      assetUrl?: unknown;
+      width?: unknown;
+      height?: unknown;
+    };
+    if (typeof parsed.assetUrl !== 'string' || !parsed.assetUrl.trim()) {
+      return null;
+    }
+    return {
+      assetUrl: parsed.assetUrl.trim(),
+      width: typeof parsed.width === 'number' && Number.isFinite(parsed.width) ? parsed.width : undefined,
+      height:
+        typeof parsed.height === 'number' && Number.isFinite(parsed.height) ? parsed.height : undefined,
+    };
+  } catch {
+    return null;
+  }
+};
+
 const estimateCardDimensionsFromText = (
   text: string,
 ): { width: number; height: number } => {
@@ -346,10 +427,16 @@ const estimateCardDimensionsFromText = (
     };
   }
 
-  const lines = source.split('\n');
+  // Ignore markdown URL payloads when sizing so long links do not force oversized cards.
+  const sizingSource = source
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '![image:$1]')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '[$1]')
+    .replace(/https?:\/\/[^\s<>"'`]+/gi, 'link');
+
+  const lines = sizingSource.split('\n');
   const longestLine = lines.reduce((max, line) => Math.max(max, line.trim().length), 0);
   const lineCount = lines.length;
-  const hasTable = source.includes('|') && source.includes('---');
+  const hasTable = sizingSource.includes('|') && sizingSource.includes('---');
   const headingCount = lines.filter((line) => /^#{1,6}\s/.test(line.trim())).length;
   const listCount = lines.filter((line) => /^[-*]\s|\d+\.\s|-\s\[\s?\]\s/.test(line.trim())).length;
 
@@ -357,7 +444,7 @@ const estimateCardDimensionsFromText = (
   width = Math.max(CARD_MIN_WIDTH, Math.min(CARD_AUTO_MAX_WIDTH, width));
 
   const approxCharsPerLine = Math.max(18, Math.floor((width - 28) / 7));
-  const wrappedLines = Math.ceil(source.length / approxCharsPerLine);
+  const wrappedLines = Math.ceil(sizingSource.length / approxCharsPerLine);
   const effectiveLines = Math.max(lineCount, wrappedLines);
   let height =
     54 +
@@ -369,6 +456,22 @@ const estimateCardDimensionsFromText = (
   return {
     width: Math.round(width),
     height: Math.round(height),
+  };
+};
+
+const fitImageDimensionsToCardBounds = (
+  width: number,
+  height: number,
+): { width: number; height: number } => {
+  const safeWidth = Number.isFinite(width) && width > 0 ? width : CARD_WIDTH;
+  const safeHeight = Number.isFinite(height) && height > 0 ? height : CARD_MIN_HEIGHT;
+  const minScale = Math.max(CARD_MIN_WIDTH / safeWidth, CARD_MIN_HEIGHT / safeHeight);
+  const maxScale = Math.min(CARD_MAX_WIDTH / safeWidth, CARD_MAX_HEIGHT / safeHeight);
+  const scale = Math.min(maxScale, Math.max(minScale, 1));
+
+  return {
+    width: Math.round(safeWidth * scale),
+    height: Math.round(safeHeight * scale),
   };
 };
 
@@ -459,6 +562,9 @@ const getViewForNode = (state: PersistedTreeState, nodeId: string): NoteboardVie
     offsetX: NOTEBOARD_WORLD_MIN_X + 180,
     offsetY: NOTEBOARD_WORLD_MIN_Y + 120,
   };
+
+const getDocumentMarkdownForNode = (state: PersistedTreeState, nodeId: string): string =>
+  state.nodeDataById[nodeId]?.document?.markdown ?? '';
 
 const ensureNoteboardData = (
   state: PersistedTreeState,
@@ -650,6 +756,7 @@ const ensureNoteboardData = (
 export const App = (): React.ReactElement => {
   const [state, setState] = React.useState<PersistedTreeState>(defaultState);
   const [settings, setSettings] = React.useState<UserSettings>(defaultSettings);
+  const [imageAssets, setImageAssets] = React.useState<ProjectImageAsset[]>([]);
   const [uiState, setUiState] = React.useState<UiState>({
     editingNodeId: null,
     editingNameDraft: '',
@@ -678,6 +785,7 @@ export const App = (): React.ReactElement => {
   const drawRafRef = React.useRef<number | null>(null);
   const clipboardRef = React.useRef<AppClipboard>(null);
   const textEditSessionsRef = React.useRef<Set<string>>(new Set<string>());
+  const documentEditSessionsRef = React.useRef<Set<string>>(new Set<string>());
   const historyStackRef = React.useRef(createHistoryStack<HistorySnapshot>(MAX_HISTORY_ENTRIES));
   const stateRef = React.useRef<PersistedTreeState>(state);
   const settingsRef = React.useRef<UserSettings>(settings);
@@ -742,6 +850,19 @@ export const App = (): React.ReactElement => {
     return `#${[r, g, b]
       .map((value) => value.toString(16).padStart(2, '0'))
       .join('')}`;
+  }, []);
+
+  const refreshImageAssets = React.useCallback(async (): Promise<void> => {
+    if (!window.testoApi?.listImageAssets) {
+      return;
+    }
+
+    try {
+      const assets = await window.testoApi.listImageAssets();
+      setImageAssets(assets);
+    } catch {
+      // Keep current list if image asset listing fails.
+    }
   }, []);
 
   const eraseStrokesAtPoint = React.useCallback(
@@ -920,6 +1041,7 @@ export const App = (): React.ReactElement => {
       drawRafRef.current = null;
     }
     textEditSessionsRef.current.clear();
+    documentEditSessionsRef.current.clear();
     document.body.classList.remove('is-dragging-card');
     document.body.classList.remove('is-resizing-card');
     document.body.classList.remove('is-panning-canvas');
@@ -951,9 +1073,10 @@ export const App = (): React.ReactElement => {
       }
 
       try {
-        const [loadedState, loadedSettings] = await Promise.all([
+        const [loadedState, loadedSettings, loadedImageAssets] = await Promise.all([
           window.testoApi.loadTreeState(),
           window.testoApi.loadUserSettings(),
+          window.testoApi.listImageAssets ? window.testoApi.listImageAssets() : Promise.resolve([]),
         ]);
 
         if (!cancelled && loadedState && isPersistedTreeState(loadedState)) {
@@ -977,6 +1100,10 @@ export const App = (): React.ReactElement => {
             drawingPresetColors: sanitizeDrawingPresetColors(loadedSettings.drawingPresetColors),
             cardTemplates: sanitizeCardTemplates(loadedSettings.cardTemplates),
           });
+        }
+
+        if (!cancelled) {
+          setImageAssets(loadedImageAssets);
         }
       } catch {
         // Keep in-memory defaults if persisted state/settings fail to load.
@@ -1381,13 +1508,400 @@ export const App = (): React.ReactElement => {
     };
   }, [flushQueuedDrawPoints]);
 
+  const getCanvasCenterWorldPoint = React.useCallback(
+    (nodeId: string): { x: number; y: number } | null => {
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        return null;
+      }
+      const view = getViewForNode(stateRef.current, nodeId);
+      return {
+        x: (canvas.clientWidth / 2 - view.offsetX) / view.zoom + NOTEBOARD_WORLD_MIN_X,
+        y: (canvas.clientHeight / 2 - view.offsetY) / view.zoom + NOTEBOARD_WORLD_MIN_Y,
+      };
+    },
+    [],
+  );
+
+  const readClipboardText = React.useCallback(async (): Promise<string | null> => {
+    if (!navigator.clipboard || typeof navigator.clipboard.readText !== 'function') {
+      return null;
+    }
+
+    try {
+      const text = await navigator.clipboard.readText();
+      const normalized = normalizeClipboardText(text);
+      return normalized || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const readClipboardImage = React.useCallback(async (): Promise<Blob | null> => {
+    if (!navigator.clipboard || typeof navigator.clipboard.read !== 'function') {
+      return null;
+    }
+
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find((type) => type.toLowerCase().startsWith('image/'));
+        if (!imageType) {
+          continue;
+        }
+        return await item.getType(imageType);
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const extractImageBlobFromClipboardData = React.useCallback(
+    (clipboardData: DataTransfer | null): Blob | null => {
+      if (!clipboardData) {
+        return null;
+      }
+
+      for (const item of Array.from(clipboardData.items)) {
+        if (item.kind !== 'file' || !item.type.toLowerCase().startsWith('image/')) {
+          continue;
+        }
+        const file = item.getAsFile();
+        if (file) {
+          return file;
+        }
+      }
+
+      return null;
+    },
+    [],
+  );
+
+  const fetchImageBlobFromUrl = React.useCallback(async (url: string): Promise<Blob | null> => {
+    const source = url.trim();
+    if (!source || !/^(https?:\/\/|data:image\/)/i.test(source)) {
+      return null;
+    }
+
+    try {
+      const response = await fetch(source, {
+        method: 'GET',
+        mode: 'cors',
+        credentials: 'omit',
+      });
+      if (!response.ok) {
+        return null;
+      }
+      const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+      if (!contentType.startsWith('image/')) {
+        return null;
+      }
+      return await response.blob();
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const extractImageBlobFromDroppedPayload = React.useCallback(
+    async (payload: DroppedCanvasPayload): Promise<Blob | null> => {
+      const droppedFile = payload.files.find((file) => file.type.toLowerCase().startsWith('image/'));
+      if (droppedFile) {
+        return droppedFile;
+      }
+
+      const imageUrlCandidate =
+        firstImageUrlFromHtml(payload.textHtml) ??
+        firstUrlFromUriList(payload.textUriList) ??
+        firstUrlFromText(payload.textPlain);
+
+      if (!imageUrlCandidate) {
+        return null;
+      }
+
+      return fetchImageBlobFromUrl(imageUrlCandidate);
+    },
+    [fetchImageBlobFromUrl],
+  );
+
+  const createTextCardAtWorldPoint = React.useCallback(
+    (
+      nodeId: string,
+      worldX: number,
+      worldY: number,
+      text: string,
+      options?: {
+        preferredSize?: { width: number; height: number };
+      },
+    ): boolean => {
+      const normalized = normalizeClipboardText(text);
+      if (!normalized) {
+        return false;
+      }
+
+      const size = estimateCardDimensionsFromText(normalized);
+      if (options?.preferredSize) {
+        size.width = Math.max(
+          CARD_MIN_WIDTH,
+          Math.min(CARD_MAX_WIDTH, Math.round(options.preferredSize.width)),
+        );
+        size.height = Math.max(
+          CARD_MIN_HEIGHT,
+          Math.min(CARD_MAX_HEIGHT, Math.round(options.preferredSize.height)),
+        );
+      }
+      if (buildLinkPreviews(normalized, 1).length > 0) {
+        size.width = Math.max(size.width, 300);
+        size.height = Math.max(size.height, 240);
+      }
+      const pos = clampCardToWorld(
+        worldX - size.width / 2,
+        worldY - Math.min(40, size.height / 2),
+        size.width,
+        size.height,
+      );
+      const created = createNoteboardCard(pos.x, pos.y);
+      created.text = normalized;
+      created.width = size.width;
+      created.height = size.height;
+      created.color = getThemeCardColor(settingsRef.current.theme);
+
+      pushHistory();
+      setState((prev) => {
+        const next = ensureNoteboardData(prev, nodeId);
+        const cards = [created, ...getCardsForNode(next, nodeId)];
+        return {
+          ...next,
+          nodeDataById: {
+            ...next.nodeDataById,
+            [nodeId]: {
+              ...(next.nodeDataById[nodeId] ?? {}),
+              noteboard: {
+                ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
+                cards,
+                view: { ...getViewForNode(next, nodeId) },
+              },
+            },
+          },
+        };
+      });
+
+      setUiState((prev) => ({
+        ...prev,
+        contextMenu: null,
+        selectionBox: null,
+        cardSelection: {
+          nodeId,
+          cardIds: [created.id],
+        },
+      }));
+
+      return true;
+    },
+    [pushHistory],
+  );
+
+  const createImageCardAtWorldPoint = React.useCallback(
+    async (nodeId: string, worldX: number, worldY: number, blob: Blob): Promise<boolean> => {
+      if (!window.testoApi?.saveImageAsset) {
+        return false;
+      }
+
+      const buffer = new Uint8Array(await blob.arrayBuffer());
+      if (buffer.length === 0) {
+        return false;
+      }
+
+      const mimeType = blob.type && blob.type.startsWith('image/') ? blob.type : 'image/png';
+      let saved;
+      try {
+        saved = await window.testoApi.saveImageAsset({
+          bytes: buffer,
+          mimeType,
+        });
+      } catch {
+        return false;
+      }
+      void refreshImageAssets();
+
+      let imageSize: { width: number; height: number } | undefined;
+      try {
+        const bitmap = await createImageBitmap(blob);
+        imageSize = fitImageDimensionsToCardBounds(bitmap.width, bitmap.height);
+        bitmap.close();
+      } catch {
+        imageSize = undefined;
+      }
+
+      const markdown = `![Pasted image](${saved.assetUrl})\n\n[Open image file](${saved.assetUrl})`;
+      return createTextCardAtWorldPoint(nodeId, worldX, worldY, markdown, {
+        preferredSize: imageSize,
+      });
+    },
+    [createTextCardAtWorldPoint, refreshImageAssets],
+  );
+
+  const createImageCardFromAssetUrlAtWorldPoint = React.useCallback(
+    (
+      nodeId: string,
+      worldX: number,
+      worldY: number,
+      assetUrl: string,
+      dimensions?: { width?: number; height?: number },
+    ): boolean => {
+      const safeAssetUrl = assetUrl.trim();
+      if (!safeAssetUrl) {
+        return false;
+      }
+
+      const preferredSize =
+        typeof dimensions?.width === 'number' &&
+        typeof dimensions?.height === 'number' &&
+        dimensions.width > 0 &&
+        dimensions.height > 0
+          ? fitImageDimensionsToCardBounds(dimensions.width, dimensions.height)
+          : undefined;
+      const markdown = `![Pasted image](${safeAssetUrl})\n\n[Open image file](${safeAssetUrl})`;
+      return createTextCardAtWorldPoint(nodeId, worldX, worldY, markdown, {
+        preferredSize,
+      });
+    },
+    [createTextCardAtWorldPoint],
+  );
+
+  const pasteCopiedCardsAtCanvasCenter = React.useCallback(
+    (nodeId: string): boolean => {
+      if (clipboardRef.current?.kind !== 'noteboard-cards') {
+        return false;
+      }
+
+      pushHistory();
+      setState((prev) => {
+        const next = ensureNoteboardData(prev, nodeId);
+        const cards = [...getCardsForNode(next, nodeId)];
+        const view = getViewForNode(next, nodeId);
+        const canvas = canvasRef.current;
+        let anchorX = 0;
+        let anchorY = 0;
+
+        if (canvas) {
+          anchorX = (canvas.clientWidth / 2 - view.offsetX) / view.zoom + NOTEBOARD_WORLD_MIN_X;
+          anchorY = (canvas.clientHeight / 2 - view.offsetY) / view.zoom + NOTEBOARD_WORLD_MIN_Y;
+        }
+
+        const newIds: string[] = [];
+        clipboardRef.current?.cards.forEach((item) => {
+          const pos = clampCardToWorld(anchorX + item.dx, anchorY + item.dy, item.width, item.height);
+          const created = createNoteboardCard(pos.x, pos.y);
+          created.text = item.text;
+          created.color = item.color;
+          created.width = item.width;
+          created.height = item.height;
+          cards.unshift(created);
+          newIds.push(created.id);
+        });
+
+        setUiState((prevUi) => ({
+          ...prevUi,
+          cardSelection: {
+            nodeId,
+            cardIds: newIds,
+          },
+        }));
+
+        return {
+          ...next,
+          nodeDataById: {
+            ...next.nodeDataById,
+            [nodeId]: {
+              ...(next.nodeDataById[nodeId] ?? {}),
+              noteboard: {
+                ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
+                cards,
+                view: { ...view },
+              },
+            },
+          },
+        };
+      });
+
+      return true;
+    },
+    [pushHistory],
+  );
+
+  const pasteClipboardTextAtPoint = React.useCallback(
+    async (nodeId: string, worldX: number, worldY: number): Promise<boolean> => {
+      const text = await readClipboardText();
+      if (!text) {
+        return false;
+      }
+      return createTextCardAtWorldPoint(nodeId, worldX, worldY, text);
+    },
+    [createTextCardAtWorldPoint, readClipboardText],
+  );
+
+  const pasteClipboardImageAtPoint = React.useCallback(
+    async (nodeId: string, worldX: number, worldY: number): Promise<boolean> => {
+      const image = await readClipboardImage();
+      if (!image) {
+        return false;
+      }
+      return createImageCardAtWorldPoint(nodeId, worldX, worldY, image);
+    },
+    [createImageCardAtWorldPoint, readClipboardImage],
+  );
+
+  const pasteSystemClipboardAtPoint = React.useCallback(
+    async (nodeId: string, worldX: number, worldY: number): Promise<boolean> => {
+      if (await pasteClipboardImageAtPoint(nodeId, worldX, worldY)) {
+        return true;
+      }
+      return pasteClipboardTextAtPoint(nodeId, worldX, worldY);
+    },
+    [pasteClipboardImageAtPoint, pasteClipboardTextAtPoint],
+  );
+
+  const handleCanvasDrop = React.useCallback(
+    async (
+      nodeId: string,
+      worldX: number,
+      worldY: number,
+      payload: DroppedCanvasPayload,
+    ): Promise<void> => {
+      const droppedAsset = parseDroppedTestoImageAsset(payload.testoImageAsset);
+      if (droppedAsset) {
+        createImageCardFromAssetUrlAtWorldPoint(nodeId, worldX, worldY, droppedAsset.assetUrl, {
+          width: droppedAsset.width,
+          height: droppedAsset.height,
+        });
+        return;
+      }
+
+      const droppedImage = await extractImageBlobFromDroppedPayload(payload);
+      if (droppedImage) {
+        await createImageCardAtWorldPoint(nodeId, worldX, worldY, droppedImage);
+        return;
+      }
+
+      const fallbackText = normalizeClipboardText(
+        payload.textPlain || payload.textUriList || payload.textHtml,
+      );
+      if (fallbackText) {
+        createTextCardAtWorldPoint(nodeId, worldX, worldY, fallbackText);
+      }
+    },
+    [
+      createImageCardAtWorldPoint,
+      createImageCardFromAssetUrlAtWorldPoint,
+      createTextCardAtWorldPoint,
+      extractImageBlobFromDroppedPayload,
+    ],
+  );
+
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      const target = event.target;
-      const isTextEntryTarget =
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        (target instanceof HTMLElement && target.isContentEditable);
+      const isTextEntryTarget = isTextEntryTargetElement(event.target);
       const activeNode = findNodeById(stateRef.current.nodes, stateRef.current.selectedNodeId);
 
       if (event.key === 'Tab' && !isTextEntryTarget) {
@@ -1500,59 +2014,6 @@ export const App = (): React.ReactElement => {
         return;
       }
 
-      if (key === 'v' && clipboardRef.current?.kind === 'noteboard-cards') {
-        pushHistory();
-        setState((prev) => {
-          const next = ensureNoteboardData(prev, activeNode.id);
-          const cards = [...getCardsForNode(next, activeNode.id)];
-          const view = getViewForNode(next, activeNode.id);
-          const canvas = canvasRef.current;
-          let anchorX = 0;
-          let anchorY = 0;
-
-          if (canvas) {
-            anchorX = (canvas.clientWidth / 2 - view.offsetX) / view.zoom + NOTEBOARD_WORLD_MIN_X;
-            anchorY =
-              (canvas.clientHeight / 2 - view.offsetY) / view.zoom + NOTEBOARD_WORLD_MIN_Y;
-          }
-
-          const newIds: string[] = [];
-          clipboardRef.current.cards.forEach((item) => {
-            const pos = clampCardToWorld(anchorX + item.dx, anchorY + item.dy, item.width, item.height);
-            const created = createNoteboardCard(pos.x, pos.y);
-            created.text = item.text;
-            created.color = item.color;
-            created.width = item.width;
-            created.height = item.height;
-            cards.unshift(created);
-            newIds.push(created.id);
-          });
-
-          setUiState((prevUi) => ({
-            ...prevUi,
-            cardSelection: {
-              nodeId: activeNode.id,
-              cardIds: newIds,
-            },
-          }));
-
-          return {
-            ...next,
-            nodeDataById: {
-              ...next.nodeDataById,
-              [activeNode.id]: {
-                ...(next.nodeDataById[activeNode.id] ?? {}),
-                noteboard: {
-                  ...(next.nodeDataById[activeNode.id]?.noteboard ?? { cards: [] }),
-                  cards,
-                  view: { ...view },
-                },
-              },
-            },
-          };
-        });
-        event.preventDefault();
-      }
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -1560,6 +2021,54 @@ export const App = (): React.ReactElement => {
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [pushHistory, redoHistory, undoHistory]);
+
+  React.useEffect(() => {
+    const onPaste = (event: ClipboardEvent): void => {
+      const activeNode = findNodeById(stateRef.current.nodes, stateRef.current.selectedNodeId);
+      if (!activeNode || activeNode.editorType !== 'noteboard') {
+        return;
+      }
+
+      if (isTextEntryTargetElement(event.target)) {
+        return;
+      }
+
+      const center = getCanvasCenterWorldPoint(activeNode.id);
+      if (!center) {
+        return;
+      }
+
+      const imageBlob = extractImageBlobFromClipboardData(event.clipboardData);
+      if (imageBlob) {
+        event.preventDefault();
+        void createImageCardAtWorldPoint(activeNode.id, center.x, center.y, imageBlob);
+        return;
+      }
+
+      const clipboardText = normalizeClipboardText(event.clipboardData?.getData('text/plain') ?? '');
+      if (clipboardText) {
+        event.preventDefault();
+        createTextCardAtWorldPoint(activeNode.id, center.x, center.y, clipboardText);
+        return;
+      }
+
+      if (clipboardRef.current?.kind === 'noteboard-cards') {
+        event.preventDefault();
+        pasteCopiedCardsAtCanvasCenter(activeNode.id);
+      }
+    };
+
+    window.addEventListener('paste', onPaste);
+    return () => {
+      window.removeEventListener('paste', onPaste);
+    };
+  }, [
+    createImageCardAtWorldPoint,
+    createTextCardAtWorldPoint,
+    extractImageBlobFromClipboardData,
+    getCanvasCenterWorldPoint,
+    pasteCopiedCardsAtCanvasCenter,
+  ]);
 
   React.useEffect(() => {
     const onGlobalPointerDown = (event: PointerEvent): void => {
@@ -1629,6 +2138,10 @@ export const App = (): React.ReactElement => {
         ? uiState.cardSelection.cardIds
         : []
       : [];
+  const selectedDocumentMarkdown =
+    selectedNode && selectedNode.editorType !== 'noteboard'
+      ? getDocumentMarkdownForNode(state, selectedNode.id)
+      : '';
   const selectionRect =
     uiState.selectionBox &&
     selectedNode &&
@@ -2253,14 +2766,12 @@ export const App = (): React.ReactElement => {
               const worldY =
                 (event.clientY - rect.top - selectedView.offsetY) / selectedView.zoom +
                 NOTEBOARD_WORLD_MIN_Y;
-              const menuWidth = 196;
-              const menuHeight = 44;
               const screenX = Math.min(
-                window.innerWidth - menuWidth - 8,
+                window.innerWidth - CONTEXT_MENU_WIDTH - 8,
                 Math.max(8, event.clientX),
               );
               const screenY = Math.min(
-                window.innerHeight - menuHeight - 8,
+                window.innerHeight - CONTEXT_MENU_HEIGHT - 8,
                 Math.max(8, event.clientY),
               );
 
@@ -2276,11 +2787,35 @@ export const App = (): React.ReactElement => {
               }));
               event.preventDefault();
             }}
+            onCanvasDrop={(event) => {
+              if (uiState.isDrawingMode) {
+                return;
+              }
+
+              event.preventDefault();
+              const canvas = canvasRef.current;
+              if (!canvas) {
+                return;
+              }
+
+              const payload: DroppedCanvasPayload = {
+                files: Array.from(event.dataTransfer.files),
+                textPlain: event.dataTransfer.getData('text/plain') ?? '',
+                textUriList: event.dataTransfer.getData('text/uri-list') ?? '',
+                textHtml: event.dataTransfer.getData('text/html') ?? '',
+                testoImageAsset:
+                  event.dataTransfer.getData('application/x-testo-image-asset') ?? '',
+              };
+
+              const world = getWorldPoint(canvas, selectedView, event.clientX, event.clientY);
+              void handleCanvasDrop(selectedNode.id, world.x, world.y, payload);
+            }}
             cardTemplates={availableCardTemplates.map((template) => ({
               id: template.id,
               label: template.label,
               isCustom: template.isCustom,
             }))}
+            imageAssets={imageAssets}
             onAddCardFromTemplateAt={(templateId, clientX, clientY) => {
               const template = availableCardTemplates.find((item) => item.id === templateId);
               const canvas = canvasRef.current;
@@ -2380,6 +2915,16 @@ export const App = (): React.ReactElement => {
                 };
               })
             }
+            onDeleteImageAsset={(relativePath) => {
+              void (async () => {
+                try {
+                  await window.testoApi?.deleteImageAsset(relativePath);
+                } catch {
+                  return;
+                }
+                await refreshImageAssets();
+              })();
+            }}
             onToggleDrawingMode={toggleDrawingMode}
             onCloseDrawingSidebar={closeDrawingMode}
             onDrawingToolChange={(tool) =>
@@ -2751,6 +3296,23 @@ export const App = (): React.ReactElement => {
                 contextMenu: null,
               }));
             }}
+            onPasteTextAtContextMenu={() => {
+              const menu = uiState.contextMenu;
+              if (!menu || menu.nodeId !== selectedNode.id) {
+                return;
+              }
+
+              void (async () => {
+                const pastedFromSystemClipboard = await pasteSystemClipboardAtPoint(
+                  selectedNode.id,
+                  menu.worldX,
+                  menu.worldY,
+                );
+                if (!pastedFromSystemClipboard) {
+                  pasteCopiedCardsAtCanvasCenter(selectedNode.id);
+                }
+              })();
+            }}
             onCreateCardAtPointAndEdit={(clientX, clientY) => {
               const canvas = canvasRef.current;
               if (!canvas) {
@@ -2796,6 +3358,42 @@ export const App = (): React.ReactElement => {
               }));
 
               return created.id;
+            }}
+          />
+        ) : selectedNode ? (
+          <DocumentEditor
+            node={selectedNode}
+            markdown={selectedDocumentMarkdown}
+            onMarkdownEditStart={() => {
+              documentEditSessionsRef.current.delete(selectedNode.id);
+            }}
+            onMarkdownEditEnd={() => {
+              documentEditSessionsRef.current.delete(selectedNode.id);
+            }}
+            onMarkdownChange={(value) => {
+              if (!documentEditSessionsRef.current.has(selectedNode.id)) {
+                pushHistory();
+                documentEditSessionsRef.current.add(selectedNode.id);
+              }
+
+              setState((prev) => {
+                const currentValue = getDocumentMarkdownForNode(prev, selectedNode.id);
+                if (currentValue === value) {
+                  return prev;
+                }
+                return {
+                  ...prev,
+                  nodeDataById: {
+                    ...prev.nodeDataById,
+                    [selectedNode.id]: {
+                      ...(prev.nodeDataById[selectedNode.id] ?? {}),
+                      document: {
+                        markdown: value,
+                      },
+                    },
+                  },
+                };
+              });
             }}
           />
         ) : (

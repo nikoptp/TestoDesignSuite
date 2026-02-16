@@ -26,6 +26,8 @@ const config: ForgeConfig = {
     new AutoUnpackNativesPlugin({}),
     new WebpackPlugin({
       mainConfig,
+      devContentSecurityPolicy:
+        "default-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: http://localhost:* http://127.0.0.1:* https:; img-src 'self' data: https: file: testo-asset:; font-src 'self' data:; frame-src 'self' https://www.youtube.com https://youtube.com https://www.youtube-nocookie.com https://youtu.be;",
       renderer: {
         config: rendererConfig,
         entryPoints: [

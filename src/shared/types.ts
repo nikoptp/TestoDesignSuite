@@ -74,10 +74,32 @@ export type NodeWorkspaceData = {
       offsetY: number;
     };
   };
+  document?: {
+    markdown: string;
+  };
 };
 
 export type CardTemplate = {
   id: string;
   name: string;
   markdown: string;
+};
+
+export type SavedImageAsset = {
+  absolutePath: string;
+  relativePath: string;
+  assetUrl: string;
+  fileUrl: string;
+  deduplicated: boolean;
+};
+
+export type ProjectImageAsset = {
+  absolutePath: string;
+  relativePath: string;
+  assetUrl: string;
+  fileUrl: string;
+  width: number;
+  height: number;
+  sizeBytes: number;
+  updatedAt: number;
 };
