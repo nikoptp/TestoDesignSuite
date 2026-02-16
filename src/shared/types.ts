@@ -23,6 +23,7 @@ export type PersistedTreeState = {
 export type UserSettings = {
   sidebarWidth: number;
   theme: AppTheme;
+  activeCustomThemeId?: string;
   drawingTool?: 'pen' | 'brush' | 'eraser';
   drawingBrush?: NoteboardBrushType;
   drawingSize?: number;
@@ -30,6 +31,7 @@ export type UserSettings = {
   drawingColor?: string;
   drawingPresetColors?: string[];
   cardTemplates?: CardTemplate[];
+  customThemes?: CustomThemeDefinition[];
 };
 
 export type AppTheme = 'parchment' | 'midnight' | 'evergreen';
@@ -83,6 +85,15 @@ export type CardTemplate = {
   id: string;
   name: string;
   markdown: string;
+};
+
+export type CustomThemeDefinition = {
+  id: string;
+  name: string;
+  baseTheme: AppTheme;
+  tokens: Record<string, string>;
+  createdAt: number;
+  updatedAt: number;
 };
 
 export type SavedImageAsset = {

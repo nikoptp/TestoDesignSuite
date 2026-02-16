@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
+  CustomThemeDefinition,
   PersistedTreeState,
   ProjectStatusPayload,
   ProjectSnapshot,
@@ -23,6 +24,10 @@ contextBridge.exposeInMainWorld('testoApi', {
     ipcRenderer.invoke('assets:list-images') as Promise<ProjectImageAsset[]>,
   deleteImageAsset: (relativePath: string): Promise<void> =>
     ipcRenderer.invoke('assets:delete-image', relativePath) as Promise<void>,
+  exportCustomTheme: (theme: CustomThemeDefinition): Promise<boolean> =>
+    ipcRenderer.invoke('themes:export-custom', theme) as Promise<boolean>,
+  importCustomTheme: (): Promise<CustomThemeDefinition | null> =>
+    ipcRenderer.invoke('themes:import-custom') as Promise<CustomThemeDefinition | null>,
   onRequestProjectSnapshot: (
     listener: () => ProjectSnapshot | Promise<ProjectSnapshot>,
   ): (() => void) => {

@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { AnimatePresence, motion } from 'motion/react';
 import type { CategoryNode, EditorType } from '../shared/types';
 import { editorTypeMeta } from '../shared/editor-types';
 
@@ -249,8 +250,8 @@ export const DocumentEditor = ({
       const count = slugCounts.get(baseSlug) ?? 0;
       slugCounts.set(baseSlug, count + 1);
       const id = count === 0 ? baseSlug : `${baseSlug}-${count + 1}`;
-      const Tag = `h${level}` as keyof JSX.IntrinsicElements;
-      return <Tag id={id}>{children}</Tag>;
+      const tagName = `h${level}` as `h${1 | 2 | 3 | 4 | 5 | 6}`;
+      return React.createElement(tagName, { id }, children);
     };
 
     return {
@@ -341,87 +342,41 @@ export const DocumentEditor = ({
         )}
       </header>
 
-      {mode === 'edit' ? (
-        <div
-          className="document-toolbar"
-          role="toolbar"
-          aria-label="Markdown formatting tools"
-        >
-          <button onClick={() => insertBlock('# Heading')}>H1</button>
-          <button onClick={() => insertBlock('## Section')}>H2</button>
-          <button onClick={() => wrapSelection('**', '**')}>Bold</button>
-          <button onClick={() => wrapSelection('_', '_')}>Italic</button>
-          <button onClick={() => insertBlock('- List item')}>List</button>
-          <button onClick={() => insertBlock('- [ ] Task')}>Checklist</button>
-          <button onClick={() => insertBlock('> Quote')}>Quote</button>
-          <button onClick={() => insertBlock('```\ncode\n```')}>Code</button>
-        </div>
-      ) : null}
+      <AnimatePresence initial={false}>
+        {mode === 'edit' ? (
+          <motion.div
+            key="doc-toolbar-edit"
+            className="document-toolbar"
+            role="toolbar"
+            aria-label="Markdown formatting tools"
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.14, ease: 'easeOut' }}
+          >
+            <button onClick={() => insertBlock('# Heading')}>H1</button>
+            <button onClick={() => insertBlock('## Section')}>H2</button>
+            <button onClick={() => wrapSelection('**', '**')}>Bold</button>
+            <button onClick={() => wrapSelection('_', '_')}>Italic</button>
+            <button onClick={() => insertBlock('- List item')}>List</button>
+            <button onClick={() => insertBlock('- [ ] Task')}>Checklist</button>
+            <button onClick={() => insertBlock('> Quote')}>Quote</button>
+            <button onClick={() => insertBlock('```\ncode\n```')}>Code</button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
-      {mode === 'preview' ? (
-        <div className="document-preview-layout">
-          <div className="document-preview document-preview-full">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={createMarkdownComponents()}
-            >
-              {markdown.trim() ? markdown : '*Preview will appear here.*'}
-            </ReactMarkdown>
-          </div>
-          <aside className="document-toc-sidebar" aria-label="Table of contents">
-            <h3 className="document-toc-title">Contents</h3>
-            {tocEntries.length === 0 ? (
-              <p className="document-toc-empty">Add headings to generate a table of contents.</p>
-            ) : (
-              <nav>
-                <ul className="document-toc-list">
-                  {tocEntries.map((entry) => (
-                    <li key={`${entry.id}-${entry.label}`} className="document-toc-item">
-                      <a
-                        className={`document-toc-link level-${entry.level}`}
-                        href={`#${entry.id}`}
-                        style={{ paddingLeft: `${(entry.level - 1) * 10 + 6}px` }}
-                      >
-                        {entry.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </nav>
-            )}
-          </aside>
-        </div>
-      ) : (
-        <div
-          className="document-workspace"
-          ref={containerRef}
-          style={{
-            gridTemplateColumns: `${splitRatio}% 8px 1fr`,
-          }}
-        >
-          <div className="document-pane">
-            <div className="document-pane-title">Markdown</div>
-            <textarea
-              ref={textareaRef}
-              className="document-textarea"
-              value={markdown}
-              placeholder="Start writing markdown..."
-              onFocus={onMarkdownEditStart}
-              onBlur={onMarkdownEditEnd}
-              onChange={(event) => onMarkdownChange(event.target.value, 'typing')}
-            />
-          </div>
-
-          <div
-            className="document-splitter"
-            role="separator"
-            aria-label="Resize editor and preview panes"
-            onPointerDown={onStartResize}
-          ></div>
-
-          <div className="document-pane">
-            <div className="document-pane-title">Preview</div>
-            <div className="document-preview">
+      <AnimatePresence mode="wait" initial={false}>
+        {mode === 'preview' ? (
+          <motion.div
+            key="doc-mode-preview"
+            className="document-preview-layout"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+          >
+            <div className="document-preview document-preview-full">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={createMarkdownComponents()}
@@ -429,9 +384,83 @@ export const DocumentEditor = ({
                 {markdown.trim() ? markdown : '*Preview will appear here.*'}
               </ReactMarkdown>
             </div>
-          </div>
-        </div>
-      )}
+            <motion.aside
+              className="document-toc-sidebar"
+              aria-label="Table of contents"
+              initial={{ opacity: 0, x: 8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 8 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+            >
+              <h3 className="document-toc-title">Contents</h3>
+              {tocEntries.length === 0 ? (
+                <p className="document-toc-empty">Add headings to generate a table of contents.</p>
+              ) : (
+                <nav>
+                  <ul className="document-toc-list">
+                    {tocEntries.map((entry) => (
+                      <li key={`${entry.id}-${entry.label}`} className="document-toc-item">
+                        <a
+                          className={`document-toc-link level-${entry.level}`}
+                          href={`#${entry.id}`}
+                          style={{ paddingLeft: `${(entry.level - 1) * 10 + 6}px` }}
+                        >
+                          {entry.label}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </nav>
+              )}
+            </motion.aside>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="doc-mode-edit"
+            className="document-workspace"
+            ref={containerRef}
+            style={{
+              gridTemplateColumns: `${splitRatio}% 8px 1fr`,
+            }}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+          >
+            <div className="document-pane">
+              <div className="document-pane-title">Markdown</div>
+              <textarea
+                ref={textareaRef}
+                className="document-textarea"
+                value={markdown}
+                placeholder="Start writing markdown..."
+                onFocus={onMarkdownEditStart}
+                onBlur={onMarkdownEditEnd}
+                onChange={(event) => onMarkdownChange(event.target.value, 'typing')}
+              />
+            </div>
+
+            <div
+              className="document-splitter"
+              role="separator"
+              aria-label="Resize editor and preview panes"
+              onPointerDown={onStartResize}
+            ></div>
+
+            <div className="document-pane">
+              <div className="document-pane-title">Preview</div>
+              <div className="document-preview">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={createMarkdownComponents()}
+                >
+                  {markdown.trim() ? markdown : '*Preview will appear here.*'}
+                </ReactMarkdown>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 };

@@ -11,7 +11,7 @@
     "make": "electron-forge make",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
-    "test": "node test/theme-colors.test.js"
+    "test": "node test/run-tests.js"
   },
   "keywords": [],
   "author": {
@@ -20,7 +20,7 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@electron-forge/cli": "^7.11.1",
+    "@electron-forge/cli": "^7.6.1",
     "@electron-forge/maker-deb": "^7.11.1",
     "@electron-forge/maker-rpm": "^7.11.1",
     "@electron-forge/maker-squirrel": "^7.11.1",
@@ -43,10 +43,12 @@
     "typescript": "~4.5.4"
   },
   "dependencies": {
+    "@emotion/is-prop-valid": "^1.4.0",
     "@fortawesome/fontawesome-free": "^7.2.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "electron-squirrel-startup": "^1.0.1",
+    "motion": "^12.34.0",
     "perfect-freehand": "^1.2.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

@@ -1,4 +1,5 @@
 import type {
+  CustomThemeDefinition,
   PersistedTreeState,
   ProjectStatusPayload,
   ProjectSnapshot,
@@ -17,6 +18,8 @@ declare global {
       saveImageAsset: (input: { bytes: Uint8Array; mimeType: string }) => Promise<SavedImageAsset>;
       listImageAssets: () => Promise<ProjectImageAsset[]>;
       deleteImageAsset: (relativePath: string) => Promise<void>;
+      exportCustomTheme: (theme: CustomThemeDefinition) => Promise<boolean>;
+      importCustomTheme: () => Promise<CustomThemeDefinition | null>;
       onRequestProjectSnapshot: (
         listener: () => ProjectSnapshot | Promise<ProjectSnapshot>,
       ) => () => void;

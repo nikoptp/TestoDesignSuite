@@ -23,6 +23,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import type {
+  CustomThemeDefinition,
   PersistedTreeState,
   ProjectStatusPayload,
   ProjectSnapshot,
@@ -61,6 +62,12 @@ type ProjectBundleV1 = {
     mimeType: string;
     dataBase64: string;
   }>;
+};
+
+type CustomThemeBundleV1 = {
+  version: 1;
+  exportedAt: number;
+  theme: CustomThemeDefinition;
 };
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif'];
@@ -109,6 +116,78 @@ const fileExists = async (filePath: string): Promise<boolean> => {
   } catch {
     return false;
   }
+};
+
+const isThemeTokenName = (value: string): boolean =>
+  /^--[a-z0-9-]+$/i.test(value.trim());
+
+const isThemeTokenValue = (value: string): boolean => {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 160) {
+    return false;
+  }
+  if (/[{};]/.test(trimmed)) {
+    return false;
+  }
+  return true;
+};
+
+const isAppTheme = (value: unknown): value is CustomThemeDefinition['baseTheme'] =>
+  value === 'parchment' || value === 'midnight' || value === 'evergreen';
+
+const parseCustomThemeBundle = (raw: string): CustomThemeDefinition | null => {
+  const parsed = JSON.parse(raw) as Partial<CustomThemeBundleV1>;
+  if (parsed.version !== 1 || typeof parsed.theme !== 'object' || parsed.theme === null) {
+    return null;
+  }
+
+  const theme = parsed.theme as Partial<CustomThemeDefinition>;
+  if (
+    typeof theme.id !== 'string' ||
+    !theme.id.trim() ||
+    typeof theme.name !== 'string' ||
+    !theme.name.trim() ||
+    !isAppTheme(theme.baseTheme)
+  ) {
+    return null;
+  }
+
+  if (typeof theme.tokens !== 'object' || theme.tokens === null || Array.isArray(theme.tokens)) {
+    return null;
+  }
+
+  const tokens = Object.fromEntries(
+    Object.entries(theme.tokens as Record<string, unknown>).flatMap(
+      ([tokenKey, tokenValue]): Array<[string, string]> => {
+        if (
+          isThemeTokenName(tokenKey) &&
+          typeof tokenValue === 'string' &&
+          isThemeTokenValue(tokenValue)
+        ) {
+          return [[tokenKey, tokenValue.trim()]];
+        }
+        return [];
+      },
+    ),
+  );
+
+  const createdAt =
+    typeof theme.createdAt === 'number' && Number.isFinite(theme.createdAt)
+      ? theme.createdAt
+      : Date.now();
+  const updatedAt =
+    typeof theme.updatedAt === 'number' && Number.isFinite(theme.updatedAt)
+      ? theme.updatedAt
+      : createdAt;
+
+  return {
+    id: theme.id.trim(),
+    name: theme.name.trim().slice(0, 64),
+    baseTheme: theme.baseTheme,
+    tokens,
+    createdAt,
+    updatedAt,
+  };
 };
 
 const createBackupPath = (filePath: string): string => {
@@ -416,6 +495,62 @@ const loadUserSettings = async (): Promise<UserSettings | null> => {
 const saveUserSettings = async (settings: UserSettings): Promise<void> => {
   const filePath = getUserSettingsPath();
   await safeWriteFile(filePath, JSON.stringify(settings, null, 2));
+};
+
+const exportCustomThemeToFile = async (
+  inputTheme: CustomThemeDefinition,
+): Promise<boolean> => {
+  const focusedWindow = BrowserWindow.getFocusedWindow();
+  if (!focusedWindow) {
+    return false;
+  }
+
+  const result = await dialog.showSaveDialog(focusedWindow, {
+    title: 'Export Custom Theme',
+    defaultPath: `${inputTheme.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'custom-theme'}.testo-theme.json`,
+    filters: [
+      { name: 'Testo Theme', extensions: ['testo-theme', 'json'] },
+      { name: 'JSON', extensions: ['json'] },
+    ],
+  });
+
+  if (result.canceled || !result.filePath) {
+    return false;
+  }
+
+  const bundle: CustomThemeBundleV1 = {
+    version: 1,
+    exportedAt: Date.now(),
+    theme: inputTheme,
+  };
+  await safeWriteFile(result.filePath, JSON.stringify(bundle, null, 2));
+  return true;
+};
+
+const importCustomThemeFromFile = async (): Promise<CustomThemeDefinition | null> => {
+  const focusedWindow = BrowserWindow.getFocusedWindow();
+  if (!focusedWindow) {
+    return null;
+  }
+
+  const result = await dialog.showOpenDialog(focusedWindow, {
+    title: 'Import Custom Theme',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Testo Theme', extensions: ['testo-theme', 'json'] },
+      { name: 'JSON', extensions: ['json'] },
+    ],
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  const filePath = result.filePaths[0];
+  const content = await readFile(filePath, 'utf8');
+  return parseCustomThemeBundle(content);
 };
 
 const mimeTypeFromExtension = (extension: string): string => {
@@ -729,6 +864,10 @@ ipcMain.handle('assets:list-images', async () => listImageAssets());
 ipcMain.handle('assets:delete-image', async (_event, relativePath: string) => {
   await deleteImageAsset(relativePath);
 });
+ipcMain.handle('themes:export-custom', async (_event, theme: CustomThemeDefinition) =>
+  exportCustomThemeToFile(theme),
+);
+ipcMain.handle('themes:import-custom', async () => importCustomThemeFromFile());
 ipcMain.on(
   'project:snapshot-response',
   (
