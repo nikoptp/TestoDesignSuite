@@ -12,16 +12,22 @@
 - React app root: `src/app.tsx`
 - React mount entry: `src/mount.tsx`
 - React components: `src/components/*`
+- Feature hooks/controllers: `src/features/*`
 - Renderer markup/styles: `src/index.html`, `src/index.css`
-- Shared reusable modules: `src/shared/types.ts`, `src/shared/editor-types.ts`, `src/shared/tree-utils.ts`
+- Shared reusable modules: `src/shared/types.ts`, `src/shared/editor-types.ts`, `src/shared/tree-utils.ts`, `src/shared/noteboard-constants.ts`
 - Legacy renderer modules: removed
 - Build/config: `forge.config.ts`, `webpack.*.ts`, `tsconfig.json`, `.eslintrc.json`
-- User settings file (runtime): `%APPDATA%/../Local/<app>/data/user-settings.json` (Electron `userData`)
+- Runtime persistence:
+- Tree state: `%APPDATA%/../Local/<app>/data/tree-state.json` (Electron `userData`)
+- User settings: `%APPDATA%/../Local/<app>/data/user-settings.json` (Electron `userData`)
+- Backups: `%APPDATA%/../Local/<app>/data/backups/*.bak`
+- Project image assets: `%APPDATA%/../Local/<app>/workspace/project-assets/images/*`
 
 ## Development Commands
 - Install deps: `npm install`
 - Start app: `npm start`
 - Lint: `npm run lint`
+- Test: `npm test`
 - Package app: `npm run package`
 - Build distributables: `npm run make`
 
@@ -45,6 +51,9 @@
 - Architecture notes: `docs/architecture/system-notes.md`
 - MVP spec: `docs/architecture/mvp-spec-v1.md`
 - Feature map: `docs/features/feature-map.md`
+- Agent architecture reference: `docs/architecture/agent-architecture-reference.md`
+- Agent change checklist: `docs/architecture/agent-change-checklist.md`
+- Testing strategy: `docs/architecture/testing-plan-v1.md`
 
 ## Change Log
 - 2026-02-10: Electron Forge project initialized and moved to repository root.
@@ -78,6 +87,7 @@
 - 2026-02-11: Migrated core noteboard interactions to React (card CRUD, drag, pan, zoom, context create, selection, copy/paste, keyboard delete).
 - 2026-02-11: Added React noteboard marquee selection rectangle and app-level undo/redo history shortcuts (`Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z`, `Ctrl/Cmd+Y`).
 - 2026-02-11: Promoted React renderer files to `src` root (`src/app.tsx`, `src/mount.tsx`, `src/components/*`) and removed legacy renderer module.
+- 2026-02-17: Documentation refreshed after repository scan; README and architecture/feature docs now reflect implemented project file workflows, theme studio, image assets, and current editor/runtime behavior.
 
 ## Open Questions
 - Single-window only for MVP, or multi-window support early?

@@ -1,77 +1,64 @@
 # MVP Spec v1
 
 ## Scope
-Desktop-only, single-user game design tool with three core modules:
-- Noteboard (canvas cards)
-- Storyboard/Story (documents + presentation view)
-- Map editor (sketch workflow)
+Desktop-only, single-user game design workspace with:
+- node-based organization
+- noteboard canvas
+- markdown document authoring
+- local-first persistence and project files
 
 ## Information Architecture
-- Node-based tree structure.
-- Each node selects an editor type at creation time.
-- Nodes can be nested to multiple levels.
-- Sub-nodes are rendered under parent nodes in one navigation tree.
+- Tree-based node hierarchy (`CategoryNode[]`) with unlimited nesting.
+- Editor type chosen at node creation time.
+- Shared per-node workspace data in `nodeDataById`.
 
-## Module Specs
+## Implemented Modules
 
-### 1) Noteboard
-- Canvas-based workspace.
-- Card primitives:
-  - text card
-  - image card
-  - link card
-  - mixed media card (text + image/link)
-- Core interactions:
-  - create card quickly (double-click / shortcut)
-  - drag and reposition cards
-  - edit card inline
-  - delete/archive card
+### 1) Noteboard (Implemented)
+- Canvas cards with text/image/link content paths.
+- Card interactions: create, edit, drag, resize, delete, duplicate.
+- Selection model: single, ctrl/cmd multi-select, marquee rectangle.
+- Camera model: pan + zoom with world bounds and adaptive grid.
+- Clipboard flows:
+- internal copy/paste of selected cards
+- system clipboard text/image paste into cards
+- image drop/paste persisted to project assets
+- Drawing layer:
+- pen/brush/eraser
+- brush styles, size, opacity, preset colors
+- stroke persistence per node
 
-### 2) Storyboard/Story
-- Multi-document long-form writing.
-- Rich text editor optimized for fast typing first, formatting second.
-- Story presentation mode:
-  - scene/slide sequence
-  - linear playback/navigation
-  - intended for "movie script / pitch deck" style storytelling
+### 2) Document Editor for Non-Noteboard Nodes (Implemented)
+- Non-noteboard editor types currently map to shared markdown editor.
+- Edit + preview modes with split-pane resize in edit mode.
+- Formatting quick-actions (headings, list, checklist, quote, code).
+- Template insertion (GDD, quest spec, lore entry, level brief).
+- Generated table-of-contents for markdown headings.
 
-### 3) Map Editor
-- Sketchbook-style 2D editor for fast ideation.
-- v1 tools:
-  - freehand drawing
-  - shape placement
-  - note annotations on map
-- v1 excludes simulation/play mode and triggerbox logic.
+### 3) Dedicated Story Presentation + Map Modules (Planned)
+- Node types exist (`story-presentation`, `map-sketch`, `level-design`).
+- Dedicated runtime modules for these modes are not implemented yet.
 
 ## Attachments and Embedded Content
-- Supported in MVP:
-  - images
-  - sound files
-  - links
-- Storage strategy:
-  - metadata in JSON documents
-  - binary files stored in app project asset folders
-  - JSON references use relative paths
+- Implemented:
+- image assets (project asset library + drag/drop)
+- links and markdown content
+- Not implemented:
+- audio asset workflows
 
-## Persistence Model
-- JSON-first local persistence.
-- Suggested structure:
-  - `data/projects/<project-id>/project.json`
-  - `data/projects/<project-id>/documents/*.json`
-  - `data/projects/<project-id>/assets/images/*`
-  - `data/projects/<project-id>/assets/audio/*`
-- Autosave required for all core editors.
+## Persistence Model (Current)
+- Tree state: `<userData>/data/tree-state.json`
+- User settings: `<userData>/data/user-settings.json`
+- Backup snapshots: `<userData>/data/backups/*.bak`
+- Project image assets: `<userData>/workspace/project-assets/images/*`
+- Autosave in renderer for tree + settings.
+- Menu-driven project bundle import/export (`.testo`) includes:
+- tree state
+- user settings
+- embedded project images (base64 in bundle)
 
-## Out of Scope (Explicit)
-- Global search
-- Cloud sync / collaboration
-- Custom category system
-- Map simulation/prototype mode
-
-## First Implementation Slices
-1. App shell with node-based tree navigation and nested children. (Implemented)
-2. JSON project load/save service in main process + preload bridge. (Implemented)
-3. Noteboard card editor with basic card CRUD. (Implemented)
-4. Story document editor with multiple documents.
-5. Story presentation mode prototype.
-6. Map editor sketch tools (draw/shapes/notes).
+## Out of Scope (Current)
+- Cloud sync / multi-user collaboration
+- Global cross-project search
+- Audio pipeline
+- Simulation/prototype gameplay mode

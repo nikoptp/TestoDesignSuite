@@ -47,9 +47,10 @@ const getTreeStatePath = (): string =>
 const getUserSettingsPath = (): string =>
   path.join(app.getPath('userData'), 'data', 'user-settings.json');
 const getDataBackupDir = (): string => path.join(app.getPath('userData'), 'data', 'backups');
+const getProjectWorkspaceRoot = (): string => path.join(app.getPath('userData'), 'workspace');
 const getProjectImageAssetsDir = (): string =>
-  path.join(process.cwd(), 'project-assets', 'images');
-const getProjectRootPath = (): string => path.resolve(process.cwd());
+  path.join(getProjectWorkspaceRoot(), 'project-assets', 'images');
+const getProjectRootPath = (): string => path.resolve(getProjectWorkspaceRoot());
 const normalizeRelativePath = (value: string): string => value.split(path.sep).join('/');
 
 type ProjectBundleV1 = {
@@ -335,7 +336,7 @@ const saveImageAsset = async (input: {
     }
   }
 
-  const relativePath = normalizeRelativePath(path.relative(process.cwd(), absolutePath));
+  const relativePath = normalizeRelativePath(path.relative(getProjectRootPath(), absolutePath));
 
   return {
     absolutePath,
@@ -401,7 +402,7 @@ const listImageAssets = async (): Promise<ProjectImageAsset[]> => {
 
     const absolutePath = path.join(imageDir, entry.name);
     const metadata = await stat(absolutePath);
-    const relativePath = normalizeRelativePath(path.relative(process.cwd(), absolutePath));
+    const relativePath = normalizeRelativePath(path.relative(getProjectRootPath(), absolutePath));
     const image = nativeImage.createFromPath(absolutePath);
     const size = image.getSize();
 
@@ -665,9 +666,13 @@ const requestRendererProjectSnapshot = async (
 const applyProjectBundle = async (bundle: ProjectBundleV1): Promise<void> => {
   if (bundle.treeState) {
     await saveTreeState(bundle.treeState);
+  } else {
+    await removeFileIfExists(getTreeStatePath());
   }
   if (bundle.userSettings) {
     await saveUserSettings(bundle.userSettings);
+  } else {
+    await removeFileIfExists(getUserSettingsPath());
   }
 
   const imageDir = getProjectImageAssetsDir();

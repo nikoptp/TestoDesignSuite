@@ -1,15 +1,35 @@
 # System Notes
 
 ## Current Stack
-- Electron Forge
-- Electron + Webpack + TypeScript
+- Electron Forge + Webpack + TypeScript
+- React 19 renderer (`src/app.tsx`, `src/components/*`, `src/features/*`)
+- Markdown rendering via `react-markdown` + `remark-gfm`
 
 ## Application Shape
-- Main process handles window lifecycle and privileged app actions.
-- Preload script defines secure renderer bridge.
-- Renderer process hosts the user interface.
+- Main process (`src/index.ts`) handles:
+- window lifecycle + application menu
+- secure file persistence for tree/settings with backup-on-write
+- project file open/save/new (`.testo` bundle import/export)
+- image asset storage + listing + deletion (`<userData>/workspace/project-assets/images`)
+- custom theme import/export file dialogs
+- `testo-asset://` protocol for safe image serving
+- Preload script (`src/preload.ts`) exposes a typed IPC bridge on `window.testoApi`.
+- Renderer (`src/renderer.ts` -> `src/mount.tsx`) mounts React app and feature hooks.
+
+## Data Model Summary
+- Tree data: `PersistedTreeState` with nested `CategoryNode[]`, selected node, and `nodeDataById` editor payloads.
+- User settings: sidebar width, active theme/custom theme, drawing defaults, card templates.
+- Node workspace payload:
+- Noteboard data: cards, strokes, viewport transform.
+- Document data: markdown string.
+
+## Implemented Editor Behavior
+- `noteboard` nodes render the canvas editor.
+- All non-noteboard node types currently render the markdown `DocumentEditor`.
+- This means dedicated story-presentation/map-specific editors are not yet separate runtime modules.
 
 ## Design Constraints
 - Desktop-first UX.
 - Local-first data storage.
-- Clear module boundaries between UI, domain logic, and storage.
+- Strict main/preload/renderer boundaries.
+- Keep reusable contracts in `src/shared/*`.

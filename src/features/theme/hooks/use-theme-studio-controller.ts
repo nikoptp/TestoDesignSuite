@@ -43,7 +43,7 @@ type ImportCustomThemeResult = {
   errorMessage: string | null;
 };
 
-const buildImportedThemeState = (
+export const buildImportedThemeState = (
   currentThemes: CustomThemeDefinition[],
   normalizedTheme: CustomThemeDefinition,
 ): ImportCustomThemeResult => {
@@ -93,37 +93,47 @@ export const useThemeStudioController = ({
 
   const onCreateCustomTheme = React.useCallback((): void => {
     const baseTheme = uiState.settingsDraftTheme;
-    const baseLabel =
-      themeOptions.find((themeOption) => themeOption.value === baseTheme)?.label ?? 'Theme';
-    const existingCount = (settings.customThemes ?? []).filter(
-      (theme) => theme.baseTheme === baseTheme,
-    ).length;
     const rootStyles = window.getComputedStyle(document.documentElement);
     const seededOverrides = sanitizeThemeTokenOverrides(
       Object.fromEntries(
         THEME_TOKEN_KEYS.map((tokenKey) => [tokenKey, rootStyles.getPropertyValue(tokenKey).trim()]),
       ),
     );
-    const created = createCustomThemeDefinition(
-      `Custom ${baseLabel} ${existingCount + 1}`,
-      baseTheme,
-      seededOverrides,
-    );
+    let createdThemeId: string | null = null;
+
     setSettings((prev) => {
       const current = prev.customThemes ?? [];
       if (current.length >= MAX_CUSTOM_THEMES) {
         return prev;
       }
+      const baseLabel =
+        themeOptions.find((themeOption) => themeOption.value === baseTheme)?.label ?? 'Theme';
+      const existingCount = current.filter((theme) => theme.baseTheme === baseTheme).length;
+      const created = createCustomThemeDefinition(
+        `Custom ${baseLabel} ${existingCount + 1}`,
+        baseTheme,
+        seededOverrides,
+      );
+      createdThemeId = created.id;
       return {
         ...prev,
         customThemes: [...current, created],
       };
     });
+
+    if (!createdThemeId) {
+      showStatus({
+        status: 'error',
+        message: `Theme limit reached (${MAX_CUSTOM_THEMES}). Delete a custom theme before creating a new one.`,
+      });
+      return;
+    }
+
     setUiState((prev) => ({
       ...prev,
-      settingsDraftCustomThemeId: created.id,
+      settingsDraftCustomThemeId: createdThemeId ?? '',
     }));
-  }, [setSettings, setUiState, settings.customThemes, uiState.settingsDraftTheme]);
+  }, [setSettings, setUiState, showStatus, uiState.settingsDraftTheme]);
 
   const onRenameCustomTheme = React.useCallback(
     (name: string): void => {

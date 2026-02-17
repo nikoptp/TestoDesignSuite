@@ -126,12 +126,20 @@ export const useTreeActions = ({
 
   const onSelectCreateType = React.useCallback(
     (type: EditorType): void => {
+      const parentRef = uiState.pendingCreateParentRef;
+      if (parentRef !== 'root' && !findNodeById(state.nodes, parentRef)) {
+        setUiState((prev) => ({
+          ...prev,
+          pendingCreateParentRef: null,
+        }));
+        return;
+      }
+
       pushHistory();
       setState((prev) => {
         const nextNode = createNode(`Untitled Node ${prev.nextNodeNumber}`, type);
         const nextNodes = [...prev.nodes];
         const nextNodeData = { ...prev.nodeDataById, [nextNode.id]: {} };
-        const parentRef = uiState.pendingCreateParentRef;
 
         if (parentRef === 'root') {
           nextNodes.push(nextNode);

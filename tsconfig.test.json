@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM"],
+    "outDir": ".test-dist",
+    "noEmit": false,
+    "declaration": false,
+    "sourceMap": false,
+    "types": [],
+    "noImplicitAny": false,
+    "strict": false
+  },
+  "include": [
+    "src/global.d.ts",
+    "src/shared/types.ts",
+    "src/shared/editor-types.ts",
+    "src/shared/tree-utils.ts",
+    "src/features/theme/theme-schema.ts",
+    "src/features/theme/hooks/use-theme-studio-controller.ts",
+    "src/renderer/persistence-guards.ts",
+    "src/renderer/history-stack.ts",
+    "src/features/app/app-model.ts",
+    "src/renderer/noteboard-utils.ts"
+  ]
+}

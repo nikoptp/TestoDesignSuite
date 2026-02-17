@@ -11,7 +11,10 @@
     "make": "electron-forge make",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
-    "test": "node test/run-tests.js"
+    "build:test": "tsc -p tsconfig.test.json",
+    "test:contracts": "npm run build:test && node test/run-tests.js",
+    "test:unit": "vitest run --config vitest.config.mjs",
+    "test": "npm run test:contracts && npm run test:unit"
   },
   "keywords": [],
   "author": {
@@ -29,6 +32,9 @@
     "@electron-forge/plugin-fuses": "^7.11.1",
     "@electron-forge/plugin-webpack": "^7.11.1",
     "@electron/fuses": "^1.8.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "@vercel/webpack-asset-relocator-loader": "^1.7.3",
@@ -37,10 +43,12 @@
     "eslint": "^8.57.1",
     "eslint-plugin-import": "^2.32.0",
     "fork-ts-checker-webpack-plugin": "^7.3.0",
+    "jsdom": "^28.1.0",
     "node-loader": "^2.1.0",
     "style-loader": "^3.3.4",
     "ts-loader": "^9.5.4",
-    "typescript": "~4.5.4"
+    "typescript": "~4.5.4",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "^1.4.0",

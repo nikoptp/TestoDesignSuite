@@ -1,52 +1,47 @@
 # Feature Map
 
-## Confirmed Features
-- OneNote-style noteboard for fast note capture and organization.
-- Story-focused editor for long-form narrative and lore writing.
-- 2D map editor for level design/blockout workflows.
-- Game-specific content model (not generic notes only).
-- Support for images, sound files, and links in notes/documents.
-- Node-based workspace where each node has an editor type and can be nested under another node.
-- Single-user local-first MVP (no sync in MVP).
-- User-defined grouping via nested nodes in MVP.
-- JSON-based local persistence in MVP.
+## Implemented Features
+- Node tree with nested nodes and per-node editor type selection.
+- Noteboard canvas:
+- text cards + markdown-style content
+- image and link card creation flows
+- drag/resize, multi-select, marquee selection
+- duplicate/copy/paste/delete with undo/redo
+- pan + zoom with adaptive world grid
+- Drawing mode on noteboard:
+- pen/brush/eraser
+- brush presets, size, opacity, color presets
+- per-node stroke persistence and erase interaction
+- Document editor for all non-noteboard node types:
+- markdown edit/preview
+- toolbar quick formatting actions
+- template insertion (GDD, quest, lore, level brief)
+- generated table of contents
+- Theme system:
+- built-in themes
+- custom theme overrides (token-based Theme Studio)
+- custom theme import/export
+- Image asset pipeline:
+- save/list/delete project images via main process
+- project-local workspace storage in `<userData>/workspace/project-assets/images`
+- menu and canvas integration for assets
+- Project lifecycle actions from File menu:
+- new/open/save/save-as project files (`.testo`)
+- project status messages in UI
 
-## Candidate Features
-- Rich text editing with fast default input flow.
-- Per-category editor layouts and interaction patterns:
-  - Noteboard
-  - Story
-  - Lore
-  - Maps
-  - Levels
-- Storyboard as a dedicated view/module (named as must-have by product owner).
-- Story presentation mode similar to slides/powerpoint for narrative flow.
+## Planned / Partial Features
+- Dedicated story-presentation runtime module (node type exists, dedicated UI not yet shipped).
+- Dedicated map/level sketch runtime modules (node types exist, shared document editor used currently).
+- Expanded behavior-test coverage for controllers/hooks (current tests are mostly style/theme guards).
 
 ## Deferred Features
 - Global search.
 - Multi-user collaboration and cloud sync.
 - User-defined custom categories.
-- Paper prototype mode in map editor (playthrough simulation + triggerboxes linked to story/lore/items).
+- Audio attachment workflow.
+- Map simulation/prototype mode (trigger logic/playthrough systems).
 
 ## Open Product Questions
-- Finalize category names and each category's exact content schema.
-- Decide how rich text customization is exposed (toolbar-first, slash commands, shortcuts, or mixed).
-- Define category/subcategory default set for initial release.
-- Define minimum attachment handling for sound files (preview/playback behavior and allowed formats).
-
-## MVP Must-Haves (Locked)
-- Noteboard
-- Storyboard/Story writing workflow
-- Map editor
-
-## Interaction Decisions (Locked)
-- Noteboard uses cards on a canvas.
-- Story module includes:
-  - Long-form document editor with multiple documents.
-  - Script-like presentation mode for story flow.
-- Map editor v1 behaves like a sketchbook for fast iteration:
-  - drawing
-  - shape placement
-  - note annotations
-- Node hierarchy supports multiple nested levels.
-- Sub-nodes are shown under their parent in a single tree view.
+- Should story presentation and map editors be implemented as separate canvases or evolved from current document flows?
+- What minimum audio support is required for MVP+1 (formats, preview UX, storage limits)?
+- How far should template systems go (node templates, project templates, importable bundles)?
