@@ -12,7 +12,6 @@ type UseTreeActionsOptions = {
   setUiState: Dispatch<SetStateAction<UiState>>;
   setSettings: Dispatch<SetStateAction<UserSettings>>;
   pushHistory: () => void;
-  clampSidebarWidth: (value: number) => number;
   isAppTheme: (value: unknown) => boolean;
 };
 
@@ -34,7 +33,6 @@ export const useTreeActions = ({
   setUiState,
   setSettings,
   pushHistory,
-  clampSidebarWidth,
   isAppTheme,
 }: UseTreeActionsOptions): TreeActions => {
   const onSelectNode = React.useCallback(
@@ -140,6 +138,7 @@ export const useTreeActions = ({
         const nextNode = createNode(`Untitled Node ${prev.nextNodeNumber}`, type);
         const nextNodes = [...prev.nodes];
         const nextNodeData = { ...prev.nodeDataById, [nextNode.id]: {} };
+        const collapsedNodeIds = prev.collapsedNodeIds ?? [];
 
         if (parentRef === 'root') {
           nextNodes.push(nextNode);
@@ -157,6 +156,10 @@ export const useTreeActions = ({
           selectedNodeId: nextNode.id,
           nextNodeNumber: prev.nextNodeNumber + 1,
           nodeDataById: nextNodeData,
+          collapsedNodeIds:
+            parentRef === 'root'
+              ? collapsedNodeIds
+              : collapsedNodeIds.filter((id) => id !== parentRef),
         };
       });
 
@@ -191,6 +194,9 @@ export const useTreeActions = ({
       }
 
       const nextNodeData = { ...prev.nodeDataById };
+      const nextCollapsedNodeIds = (prev.collapsedNodeIds ?? []).filter(
+        (nodeId) => !subtreeIds.includes(nodeId),
+      );
       subtreeIds.forEach((nodeId) => {
         delete nextNodeData[nodeId];
       });
@@ -206,6 +212,7 @@ export const useTreeActions = ({
         nodes: nextNodes,
         selectedNodeId: nextSelectedNodeId,
         nodeDataById: nextNodeData,
+        collapsedNodeIds: nextCollapsedNodeIds,
       };
     });
 
@@ -218,10 +225,6 @@ export const useTreeActions = ({
   }, [pushHistory, setState, setUiState, state.nodes, uiState.pendingDeleteNodeId]);
 
   const onSaveSettings = React.useCallback((): void => {
-    const parsed = Number(uiState.settingsDraftSidebarWidth);
-    const nextSidebarWidth = Number.isFinite(parsed)
-      ? clampSidebarWidth(parsed)
-      : settings.sidebarWidth;
     const nextTheme = isAppTheme(uiState.settingsDraftTheme)
       ? uiState.settingsDraftTheme
       : settings.theme;
@@ -236,27 +239,22 @@ export const useTreeActions = ({
 
     setSettings((prev) => ({
       ...prev,
-      sidebarWidth: nextSidebarWidth,
       theme: nextTheme,
       activeCustomThemeId: nextCustomThemeId,
     }));
     setUiState((prev) => ({
       ...prev,
       isSettingsDialogOpen: false,
-      settingsDraftSidebarWidth: String(nextSidebarWidth),
       settingsDraftTheme: nextTheme,
       settingsDraftCustomThemeId: nextCustomThemeId ?? '',
     }));
   }, [
-    clampSidebarWidth,
     isAppTheme,
     setSettings,
     setUiState,
-    settings.sidebarWidth,
     settings.theme,
     settings.customThemes,
     uiState.settingsDraftCustomThemeId,
-    uiState.settingsDraftSidebarWidth,
     uiState.settingsDraftTheme,
   ]);
 

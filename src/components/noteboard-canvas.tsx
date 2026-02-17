@@ -193,6 +193,9 @@ export const NoteboardCanvas = ({
     onCanvasWheel,
     onAddCardFromTemplateAt,
   });
+  const contextMenuCardIsPreview = contextMenuCard
+    ? (previewByCardId[contextMenuCard.id] ?? true)
+    : true;
 
   const strokeLayerCacheRef = React.useRef<WeakMap<NoteboardStroke, React.ReactElement | null>>(
     new WeakMap(),
@@ -354,10 +357,12 @@ export const NoteboardCanvas = ({
           drawingBrush={drawingBrush}
           drawingSize={drawingSize}
           drawingOpacity={drawingOpacity}
+          drawingColor={drawingColor}
           drawingPresetColors={drawingPresetColors}
           onCloseDrawingSidebar={onCloseDrawingSidebar}
           onDrawingToolChange={onDrawingToolChange}
           onDrawingBrushChange={onDrawingBrushChange}
+          onDrawingColorChange={onDrawingColorChange}
           onDrawingSizeChange={onDrawingSizeChange}
           onDrawingOpacityChange={onDrawingOpacityChange}
           onDrawingPresetColorChange={onDrawingPresetColorChange}
@@ -401,6 +406,7 @@ export const NoteboardCanvas = ({
         templateDrag={templateDrag}
         contextMenu={contextMenu}
         cardContextMenu={cardContextMenu}
+        contextMenuCardIsPreview={contextMenuCardIsPreview}
         contextMenuCardColor={contextMenuCard?.color ?? null}
         cardColorPresets={cardColorPresets}
         quickColorMenu={quickColorMenu}
@@ -428,6 +434,17 @@ export const NoteboardCanvas = ({
             .trim();
           const inferredName = (firstLine && firstLine.slice(0, 48)) || 'Custom Template';
           onSaveCardTemplate(inferredName, card.text);
+          closeCardContextMenu();
+        }}
+        onToggleCardPreviewFromContext={(cardId, isPreview) => {
+          if (isPreview) {
+            openCardEditor(cardId);
+          } else {
+            setPreviewByCardId((prev) => ({
+              ...prev,
+              [cardId]: true,
+            }));
+          }
           closeCardContextMenu();
         }}
         onCardColorChangeFromContext={(cardId, color) => {

@@ -113,6 +113,8 @@ export const isPersistedTreeState = (value: unknown): value is PersistedTreeStat
     selectedNodeId?: unknown;
     nextNodeNumber?: unknown;
     nodeDataById?: unknown;
+    sidebarWidth?: unknown;
+    collapsedNodeIds?: unknown;
   };
 
   const nodeDataValid =
@@ -122,6 +124,16 @@ export const isPersistedTreeState = (value: unknown): value is PersistedTreeStat
       Object.values(obj.nodeDataById as Record<string, unknown>).every((entry) =>
         isNodeWorkspaceData(entry),
       ));
+  const sidebarWidthValid =
+    typeof obj.sidebarWidth === 'undefined' ||
+    (typeof obj.sidebarWidth === 'number' &&
+      Number.isFinite(obj.sidebarWidth) &&
+      obj.sidebarWidth >= 120 &&
+      obj.sidebarWidth <= 920);
+  const collapsedNodeIdsValid =
+    typeof obj.collapsedNodeIds === 'undefined' ||
+    (Array.isArray(obj.collapsedNodeIds) &&
+      obj.collapsedNodeIds.every((id) => typeof id === 'string'));
 
   return (
     Array.isArray(obj.nodes) &&
@@ -130,6 +142,8 @@ export const isPersistedTreeState = (value: unknown): value is PersistedTreeStat
     typeof obj.nextNodeNumber === 'number' &&
     Number.isInteger(obj.nextNodeNumber) &&
     obj.nextNodeNumber >= 1 &&
-    nodeDataValid
+    nodeDataValid &&
+    sidebarWidthValid &&
+    collapsedNodeIdsValid
   );
 };

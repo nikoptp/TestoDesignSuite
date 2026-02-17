@@ -46,8 +46,6 @@ import { useThemeStudioController } from './features/theme/hooks/use-theme-studi
 import {
   CARD_COLOR_PRESETS,
   MAX_HISTORY_ENTRIES,
-  MAX_SIDEBAR_WIDTH,
-  MIN_SIDEBAR_WIDTH,
   type AppClipboard,
   type DragState,
   type DrawState,
@@ -83,7 +81,6 @@ export const App = (): React.ReactElement => {
     pendingDeleteNodeId: null,
     pendingCreateParentRef: null,
     isSettingsDialogOpen: false,
-    settingsDraftSidebarWidth: String(defaultSettings.sidebarWidth),
     settingsDraftTheme: defaultSettings.theme,
     settingsDraftCustomThemeId: '',
     isDrawingMode: false,
@@ -327,6 +324,7 @@ export const App = (): React.ReactElement => {
     setImageAssets,
     setIsBootstrapped,
     clampSidebarWidth,
+    defaultSidebarWidth: defaultState.sidebarWidth ?? 320,
     isUserSettings,
     defaultSettings,
     sanitizeDrawingPresetColors,
@@ -360,7 +358,7 @@ export const App = (): React.ReactElement => {
       }
 
       const shellRect = shell.getBoundingClientRect();
-      setSettings((prev) => ({
+      setState((prev) => ({
         ...prev,
         sidebarWidth: clampSidebarWidth(event.clientX - shellRect.left),
       }));
@@ -678,12 +676,10 @@ export const App = (): React.ReactElement => {
     setUiState,
     setSettings,
     pushHistory,
-    clampSidebarWidth,
     isAppTheme,
   });
 
   const {
-    onSidebarWidthDraftChange,
     onThemeDraftChange,
     onCustomThemeDraftChange,
     onCancelSettingsDialog,
@@ -716,7 +712,7 @@ export const App = (): React.ReactElement => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
-      style={{ '--sidebar-width': `${settings.sidebarWidth}px` } as React.CSSProperties}
+      style={{ '--sidebar-width': `${state.sidebarWidth ?? 320}px` } as React.CSSProperties}
     >
       <motion.aside
         className="sidebar"
@@ -758,6 +754,7 @@ export const App = (): React.ReactElement => {
                   editingNodeId: uiState.editingNodeId,
                   editingNameDraft: uiState.editingNameDraft,
                 }}
+                collapsedNodeIds={state.collapsedNodeIds ?? []}
                 onSelectNode={onSelectNode}
                 onBeginRename={onBeginRename}
                 onRenameDraftChange={(value) =>
@@ -768,6 +765,18 @@ export const App = (): React.ReactElement => {
                 }
                 onRenameCommit={onRenameCommit}
                 onRenameCancel={onRenameCancel}
+                onToggleNodeCollapsed={(nodeId) =>
+                  setState((prev) => {
+                    const collapsed = prev.collapsedNodeIds ?? [];
+                    const nextCollapsed = collapsed.includes(nodeId)
+                      ? collapsed.filter((id) => id !== nodeId)
+                      : [...collapsed, nodeId];
+                    return {
+                      ...prev,
+                      collapsedNodeIds: nextCollapsed,
+                    };
+                  })
+                }
                 onAddChildNode={(nodeId) =>
                   setUiState((prev) => ({
                     ...prev,
@@ -923,7 +932,6 @@ export const App = (): React.ReactElement => {
 
       <SettingsDialog
         isVisible={uiState.isSettingsDialogOpen}
-        sidebarWidthValue={uiState.settingsDraftSidebarWidth}
         themeValue={uiState.settingsDraftTheme}
         themeOptions={themeOptions}
         customThemeValue={uiState.settingsDraftCustomThemeId}
@@ -935,9 +943,6 @@ export const App = (): React.ReactElement => {
         }))}
         selectedCustomThemeName={selectedCustomThemeForDraft?.name ?? ''}
         selectedCustomThemeTokens={selectedCustomThemeForDraft?.tokens ?? {}}
-        minSidebarWidth={MIN_SIDEBAR_WIDTH}
-        maxSidebarWidth={MAX_SIDEBAR_WIDTH}
-        onSidebarWidthChange={onSidebarWidthDraftChange}
         onThemeChange={onThemeDraftChange}
         onCustomThemeChange={onCustomThemeDraftChange}
         onCreateCustomTheme={onCreateCustomTheme}

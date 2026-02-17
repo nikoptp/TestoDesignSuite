@@ -67,6 +67,32 @@ export const NoteboardWorld = ({
   onShowCardPreview,
   onOpenCardContextMenu,
 }: NoteboardWorldProps): React.ReactElement => {
+  const getImageOnlyCardUrl = (value: string): string | null => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const lines = trimmed
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length === 0 || lines.length > 2) {
+      return null;
+    }
+    const imageMatch = lines[0]?.match(/^!\[[^\]]*]\(([^)]+)\)$/);
+    if (!imageMatch) {
+      return null;
+    }
+    if (lines.length === 1) {
+      return imageMatch[1];
+    }
+    const linkMatch = lines[1]?.match(/^\[[^\]]+]\(([^)]+)\)$/);
+    if (!linkMatch) {
+      return null;
+    }
+    return linkMatch[1] === imageMatch[1] ? imageMatch[1] : null;
+  };
+
   return (
     <div
       className="noteboard-world"
@@ -96,10 +122,12 @@ export const NoteboardWorld = ({
       {cards.map((card) => {
         const isPreview = previewByCardId[card.id] ?? true;
         const linkPreviews = isPreview ? buildLinkPreviews(card.text) : [];
+        const imageOnlyUrl = isPreview ? getImageOnlyCardUrl(card.text) : null;
+        const isImageOnly = Boolean(imageOnlyUrl);
         return (
           <article
             key={card.id}
-            className={`noteboard-card ${selectedCardIds.includes(card.id) ? 'selected' : ''}`}
+            className={`noteboard-card ${selectedCardIds.includes(card.id) ? 'selected' : ''} ${isImageOnly ? 'image-only' : ''} ${isPreview ? '' : 'editing'}`}
             style={
               {
                 left: `${card.x - NOTEBOARD_WORLD_MIN_X}px`,
@@ -114,16 +142,22 @@ export const NoteboardWorld = ({
             }}
             onPointerDown={(event) => {
               const target = event.target;
-              if (
-                !(target instanceof Element) ||
-                target.closest(
-                  '.card-textarea, .card-markdown-preview, .card-actions, .card-resize-handle',
-                )
-              ) {
+              if (!(target instanceof Element)) {
+                return;
+              }
+              if (target.closest('.card-textarea, .card-resize-handle')) {
+                return;
+              }
+              if (isPreview) {
+                onStartDragCard(card.id, event);
+                return;
+              }
+              const clickedPreview = target.closest('.card-markdown-preview');
+              if (clickedPreview) {
                 return;
               }
               const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-              const border = 10;
+              const border = 6;
               const localX = event.clientX - rect.left;
               const localY = event.clientY - rect.top;
               const isBorderZone =
@@ -143,122 +177,117 @@ export const NoteboardWorld = ({
             }}
             onDoubleClick={(event) => {
               const target = event.target;
-              if (
-                target instanceof Element &&
-                target.closest('.card-actions, .card-resize-handle')
-              ) {
+              if (target instanceof Element && target.closest('.card-resize-handle')) {
                 return;
               }
               event.stopPropagation();
               onOpenCardEditor(card.id);
             }}
           >
-            <textarea
-              className="card-textarea"
-              placeholder="Write card content..."
-              ref={(element) => {
-                cardTextareaRefs.current[card.id] = element;
-              }}
-              value={card.text}
-              onClick={(event) => {
-                event.stopPropagation();
-              }}
-              onFocus={() => onCardTextEditStart(card.id)}
-              onBlur={() => onCardTextEditEnd(card.id)}
-              onChange={(event) => onCardTextChange(card.id, event.target.value)}
-              style={{ display: isPreview ? 'none' : undefined }}
-            />
-            {isPreview ? (
-              <div
-                className="card-markdown-preview"
+            <div className={`card-body ${isImageOnly ? 'image-only' : ''}`}>
+              <textarea
+                className="card-textarea"
+                placeholder="Write card content..."
+                ref={(element) => {
+                  cardTextareaRefs.current[card.id] = element;
+                }}
+                value={card.text}
                 onClick={(event) => {
                   event.stopPropagation();
                 }}
-              >
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  urlTransform={markdownUrlTransform}
-                  components={{
-                    img: ({ src, alt, ...props }) => {
-                      const safeSrc = typeof src === 'string' ? src.trim() : '';
-                      if (!safeSrc) {
-                        return null;
-                      }
-                      return <img {...props} src={safeSrc} alt={alt ?? ''} />;
-                    },
-                    a: ({ href, children, ...props }) => {
-                      const safeHref = typeof href === 'string' ? href.trim() : '';
-                      if (!safeHref) {
-                        return <>{children}</>;
-                      }
-                      return (
-                        <a
-                          {...props}
-                          href={safeHref}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                          }}
-                        >
-                          {children}
-                        </a>
-                      );
-                    },
-                  }}
-                >
-                  {card.text.trim() ? card.text : '*No content yet.*'}
-                </ReactMarkdown>
-                {linkPreviews.length > 0 ? (
-                  <div className="card-link-preview-list">
-                    {linkPreviews.map((preview, index) => (
-                      <div key={`${card.id}-${preview.url}-${index}`} className="card-link-preview">
-                        <div className="card-link-preview-media">
-                          {preview.kind === 'youtube' ? (
-                            <iframe
-                              title={`YouTube preview ${index + 1}`}
-                              src={preview.embedUrl}
-                              loading="lazy"
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                              allowFullScreen
-                            ></iframe>
-                          ) : (
-                            <img src={preview.imageUrl} alt="Linked media preview" loading="lazy" />
-                          )}
-                        </div>
-                        <a
-                          href={preview.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="card-link-preview-link"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                          }}
-                        >
-                          {preview.url}
-                        </a>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-            <div className="card-actions">
-              <button
-                className="icon-action"
-                title={isPreview ? 'Edit markdown' : 'Preview markdown'}
-                aria-label={isPreview ? 'Edit markdown' : 'Preview markdown'}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (isPreview) {
-                    onOpenCardEditor(card.id);
-                    return;
-                  }
+                onFocus={() => onCardTextEditStart(card.id)}
+                onBlur={() => {
+                  onCardTextEditEnd(card.id);
                   onShowCardPreview(card.id);
                 }}
-              >
-                <i className={isPreview ? 'fa-solid fa-pen' : 'fa-solid fa-eye'}></i>
-              </button>
+                onChange={(event) => onCardTextChange(card.id, event.target.value)}
+                style={{ display: isPreview ? 'none' : undefined }}
+              />
+              {isPreview ? (
+                <div
+                  className={`card-markdown-preview ${isImageOnly ? 'image-only' : ''}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                  }}
+                >
+                  {isImageOnly && imageOnlyUrl ? (
+                    <img src={markdownUrlTransform(imageOnlyUrl)} alt="Card image" loading="lazy" />
+                  ) : (
+                    <>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        urlTransform={markdownUrlTransform}
+                        components={{
+                          img: ({ src, alt, ...props }) => {
+                            const safeSrc = typeof src === 'string' ? src.trim() : '';
+                            if (!safeSrc) {
+                              return null;
+                            }
+                            return <img {...props} src={safeSrc} alt={alt ?? ''} />;
+                          },
+                          a: ({ href, children, ...props }) => {
+                            const safeHref = typeof href === 'string' ? href.trim() : '';
+                            if (!safeHref) {
+                              return <>{children}</>;
+                            }
+                            return (
+                              <a
+                                {...props}
+                                href={safeHref}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                }}
+                              >
+                                {children}
+                              </a>
+                            );
+                          },
+                        }}
+                      >
+                        {card.text.trim() ? card.text : '*No content yet.*'}
+                      </ReactMarkdown>
+                      {linkPreviews.length > 0 ? (
+                        <div className="card-link-preview-list">
+                          {linkPreviews.map((preview, index) => (
+                            <div key={`${card.id}-${preview.url}-${index}`} className="card-link-preview">
+                              <div className="card-link-preview-media">
+                                {preview.kind === 'youtube' ? (
+                                  <iframe
+                                    title={`YouTube preview ${index + 1}`}
+                                    src={preview.embedUrl}
+                                    loading="lazy"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                  ></iframe>
+                                ) : (
+                                  <img
+                                    src={preview.imageUrl}
+                                    alt="Linked media preview"
+                                    loading="lazy"
+                                  />
+                                )}
+                              </div>
+                              <a
+                                href={preview.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="card-link-preview-link"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                }}
+                              >
+                                {preview.url}
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              ) : null}
             </div>
             <button
               className="card-resize-handle"
@@ -285,4 +314,3 @@ export const NoteboardWorld = ({
     </div>
   );
 };
-

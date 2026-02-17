@@ -10,6 +10,7 @@ type ProjectBootstrapOptions = {
   setImageAssets: Dispatch<SetStateAction<ProjectImageAsset[]>>;
   setIsBootstrapped: Dispatch<SetStateAction<boolean>>;
   clampSidebarWidth: (value: number) => number;
+  defaultSidebarWidth: number;
   isUserSettings: (value: unknown) => value is UserSettings;
   defaultSettings: UserSettings;
   sanitizeDrawingPresetColors: (input: unknown) => string[];
@@ -60,6 +61,7 @@ export const useProjectBootstrap = ({
   setImageAssets,
   setIsBootstrapped,
   clampSidebarWidth,
+  defaultSidebarWidth,
   isUserSettings,
   defaultSettings,
   sanitizeDrawingPresetColors,
@@ -82,11 +84,20 @@ export const useProjectBootstrap = ({
         ]);
 
         if (!cancelled && loadedState && isPersistedTreeState(loadedState)) {
+          const collapsedNodeIds = Array.isArray(loadedState.collapsedNodeIds)
+            ? [...new Set(loadedState.collapsedNodeIds.filter((id) => typeof id === 'string'))]
+            : [];
           setState({
             nodes: loadedState.nodes,
             selectedNodeId: loadedState.selectedNodeId,
             nextNodeNumber: loadedState.nextNodeNumber,
             nodeDataById: loadedState.nodeDataById ?? {},
+            sidebarWidth: clampSidebarWidth(
+              typeof loadedState.sidebarWidth === 'number'
+                ? loadedState.sidebarWidth
+                : defaultSidebarWidth,
+            ),
+            collapsedNodeIds,
           });
         }
 
@@ -98,7 +109,6 @@ export const useProjectBootstrap = ({
               ? loadedSettings.activeCustomThemeId
               : undefined;
           setSettings({
-            sidebarWidth: clampSidebarWidth(loadedSettings.sidebarWidth),
             theme: loadedSettings.theme ?? defaultSettings.theme,
             activeCustomThemeId,
             drawingTool: loadedSettings.drawingTool ?? defaultSettings.drawingTool,
@@ -131,6 +141,7 @@ export const useProjectBootstrap = ({
     };
   }, [
     clampSidebarWidth,
+    defaultSidebarWidth,
     defaultSettings,
     isUserSettings,
     sanitizeCardTemplates,

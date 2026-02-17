@@ -18,10 +18,11 @@ export type PersistedTreeState = {
   selectedNodeId: string | null;
   nextNodeNumber: number;
   nodeDataById: Record<string, NodeWorkspaceData>;
+  sidebarWidth?: number;
+  collapsedNodeIds?: string[];
 };
 
 export type UserSettings = {
-  sidebarWidth: number;
   theme: AppTheme;
   activeCustomThemeId?: string;
   drawingTool?: 'pen' | 'brush' | 'eraser';

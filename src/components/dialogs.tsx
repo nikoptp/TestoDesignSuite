@@ -109,16 +109,12 @@ export const CreateNodeDialog = ({
 
 type SettingsDialogProps = {
   isVisible: boolean;
-  sidebarWidthValue: string;
   themeValue: AppTheme;
   themeOptions: Array<{ value: AppTheme; label: string }>;
   customThemeValue: string;
   customThemeOptions: Array<{ value: string; label: string }>;
   selectedCustomThemeName: string;
   selectedCustomThemeTokens: Record<string, string>;
-  minSidebarWidth: number;
-  maxSidebarWidth: number;
-  onSidebarWidthChange: (value: string) => void;
   onThemeChange: (value: AppTheme) => void;
   onCustomThemeChange: (value: string) => void;
   onCreateCustomTheme: () => void;
@@ -133,16 +129,12 @@ type SettingsDialogProps = {
 
 export const SettingsDialog = ({
   isVisible,
-  sidebarWidthValue,
   themeValue,
   themeOptions,
   customThemeValue,
   customThemeOptions,
   selectedCustomThemeName,
   selectedCustomThemeTokens,
-  minSidebarWidth,
-  maxSidebarWidth,
-  onSidebarWidthChange,
   onThemeChange,
   onCustomThemeChange,
   onCreateCustomTheme,
@@ -169,17 +161,6 @@ export const SettingsDialog = ({
       <div className="confirm-dialog settings-dialog">
         <h3>Settings</h3>
         <p>Update user preferences for your workspace.</p>
-        <label className="settings-field">
-          <span className="settings-field-label">Sidebar Width (px)</span>
-          <input
-            className="settings-input"
-            type="number"
-            min={minSidebarWidth}
-            max={maxSidebarWidth}
-            value={sidebarWidthValue}
-            onChange={(event) => onSidebarWidthChange(event.target.value)}
-          />
-        </label>
         <label className="settings-field">
           <span className="settings-field-label">Theme</span>
           <select

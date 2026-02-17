@@ -10,7 +10,6 @@ type UseSettingsDialogControllerOptions = {
 };
 
 type SettingsDialogController = {
-  onSidebarWidthDraftChange: (value: string) => void;
   onThemeDraftChange: (value: UserSettings['theme']) => void;
   onCustomThemeDraftChange: (value: string) => void;
   onCancelSettingsDialog: () => void;
@@ -26,7 +25,6 @@ export const useSettingsDialogController = ({
       setUiState((prev) => ({
         ...prev,
         isSettingsDialogOpen: true,
-        settingsDraftSidebarWidth: String(settingsRef.current.sidebarWidth),
         settingsDraftTheme: settingsRef.current.theme,
         settingsDraftCustomThemeId: settingsRef.current.activeCustomThemeId ?? '',
       }));
@@ -38,16 +36,6 @@ export const useSettingsDialogController = ({
       }
     };
   }, [setUiState, settingsRef]);
-
-  const onSidebarWidthDraftChange = React.useCallback(
-    (value: string): void => {
-      setUiState((prev) => ({
-        ...prev,
-        settingsDraftSidebarWidth: value,
-      }));
-    },
-    [setUiState],
-  );
 
   const onThemeDraftChange = React.useCallback(
     (value: UserSettings['theme']): void => {
@@ -79,17 +67,14 @@ export const useSettingsDialogController = ({
     setUiState((prev) => ({
       ...prev,
       isSettingsDialogOpen: false,
-      settingsDraftSidebarWidth: String(settings.sidebarWidth),
       settingsDraftTheme: settings.theme,
       settingsDraftCustomThemeId: settings.activeCustomThemeId ?? '',
     }));
-  }, [setUiState, settings.activeCustomThemeId, settings.sidebarWidth, settings.theme]);
+  }, [setUiState, settings.activeCustomThemeId, settings.theme]);
 
   return {
-    onSidebarWidthDraftChange,
     onThemeDraftChange,
     onCustomThemeDraftChange,
     onCancelSettingsDialog,
   };
 };
-

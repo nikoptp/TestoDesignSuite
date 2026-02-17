@@ -28,7 +28,6 @@ export type UiState = {
   pendingDeleteNodeId: string | null;
   pendingCreateParentRef: string | 'root' | null;
   isSettingsDialogOpen: boolean;
-  settingsDraftSidebarWidth: string;
   settingsDraftTheme: AppTheme;
   settingsDraftCustomThemeId: string;
   isDrawingMode: boolean;
@@ -156,8 +155,8 @@ export const MAX_SIDEBAR_WIDTH = 620;
 export const MAX_ZOOM = 2.5;
 export const MAX_HISTORY_ENTRIES = 120;
 export const MAX_DRAW_SIZE = 64;
-export const CARD_MAX_WIDTH = 560;
-export const CARD_MAX_HEIGHT = 520;
+export const CARD_MAX_WIDTH = 920;
+export const CARD_MAX_HEIGHT = 820;
 export const CARD_AUTO_MAX_WIDTH = 420;
 export const CONTEXT_MENU_WIDTH = 228;
 export const CONTEXT_MENU_HEIGHT = 86;
@@ -245,10 +244,11 @@ export const defaultState: PersistedTreeState = {
   selectedNodeId: 'node-1',
   nextNodeNumber: 4,
   nodeDataById: {},
+  sidebarWidth: 320,
+  collapsedNodeIds: [],
 };
 
 export const defaultSettings: UserSettings = {
-  sidebarWidth: 320,
   theme: 'parchment',
   drawingTool: 'brush',
   drawingBrush: 'ink',
@@ -557,7 +557,6 @@ export const isUserSettings = (value: unknown): value is UserSettings => {
   }
 
   const obj = value as {
-    sidebarWidth?: unknown;
     theme?: unknown;
     activeCustomThemeId?: unknown;
     drawingTool?: unknown;
@@ -570,10 +569,6 @@ export const isUserSettings = (value: unknown): value is UserSettings => {
     customThemes?: unknown;
   };
   return (
-    typeof obj.sidebarWidth === 'number' &&
-    Number.isFinite(obj.sidebarWidth) &&
-    obj.sidebarWidth >= MIN_SIDEBAR_WIDTH &&
-    obj.sidebarWidth <= MAX_SIDEBAR_WIDTH &&
     (obj.theme === undefined || isAppTheme(obj.theme)) &&
     (obj.activeCustomThemeId === undefined ||
       (typeof obj.activeCustomThemeId === 'string' && obj.activeCustomThemeId.trim().length > 0)) &&

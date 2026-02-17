@@ -10,10 +10,12 @@ type NoteboardDrawSidebarProps = {
   drawingBrush: NoteboardBrushType;
   drawingSize: number;
   drawingOpacity: number;
+  drawingColor: string;
   drawingPresetColors: string[];
   onCloseDrawingSidebar: () => void;
   onDrawingToolChange: (tool: 'pen' | 'brush' | 'eraser') => void;
   onDrawingBrushChange: (brush: NoteboardBrushType) => void;
+  onDrawingColorChange: (color: string) => void;
   onDrawingSizeChange: (size: number) => void;
   onDrawingOpacityChange: (opacity: number) => void;
   onDrawingPresetColorChange: (index: number, color: string) => void;
@@ -25,14 +27,18 @@ export const NoteboardDrawSidebar = ({
   drawingBrush,
   drawingSize,
   drawingOpacity,
+  drawingColor,
   drawingPresetColors,
   onCloseDrawingSidebar,
   onDrawingToolChange,
   onDrawingBrushChange,
+  onDrawingColorChange,
   onDrawingSizeChange,
   onDrawingOpacityChange,
   onDrawingPresetColorChange,
 }: NoteboardDrawSidebarProps): React.ReactElement => {
+  const colorInputRefs = React.useRef<Array<HTMLInputElement | null>>([]);
+
   return (
     <AnimatePresence initial={false}>
       {isDrawingMode ? (
@@ -133,14 +139,31 @@ export const NoteboardDrawSidebar = ({
                 <span className="settings-field-label">Preset Colors</span>
                 <div className="preset-color-grid">
                   {drawingPresetColors.map((presetColor, index) => (
-                    <input
-                      key={`${index}-${presetColor}`}
-                      className="settings-input color-input preset-color-input"
-                      type="color"
-                      value={presetColor}
-                      onChange={(event) => onDrawingPresetColorChange(index, event.target.value)}
-                      aria-label={`Preset color ${index + 1}`}
-                    />
+                    <React.Fragment key={`${index}-${presetColor}`}>
+                      <button
+                        type="button"
+                        className={`preset-color-swatch ${drawingColor === presetColor ? 'active' : ''}`}
+                        style={{ backgroundColor: presetColor }}
+                        aria-label={`Use preset color ${index + 1}`}
+                        title={`${presetColor} (double-click to edit)`}
+                        onClick={() => onDrawingColorChange(presetColor)}
+                        onDoubleClick={() => colorInputRefs.current[index]?.click()}
+                      ></button>
+                      <input
+                        ref={(element) => {
+                          colorInputRefs.current[index] = element;
+                        }}
+                        className="preset-color-hidden-input"
+                        type="color"
+                        value={presetColor}
+                        onChange={(event) => {
+                          onDrawingPresetColorChange(index, event.target.value);
+                          onDrawingColorChange(event.target.value);
+                        }}
+                        aria-label={`Edit preset color ${index + 1}`}
+                        tabIndex={-1}
+                      />
+                    </React.Fragment>
                   ))}
                 </div>
               </label>
@@ -181,4 +204,3 @@ export const NoteboardDrawSidebar = ({
     </AnimatePresence>
   );
 };
-

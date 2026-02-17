@@ -11,11 +11,13 @@ export type NodeTreeViewState = {
 type NodeTreeProps = {
   nodes: CategoryNode[];
   viewState: NodeTreeViewState;
+  collapsedNodeIds: string[];
   onSelectNode: (nodeId: string) => void;
   onBeginRename: (nodeId: string) => void;
   onRenameDraftChange: (value: string) => void;
   onRenameCommit: () => void;
   onRenameCancel: () => void;
+  onToggleNodeCollapsed: (nodeId: string) => void;
   onAddChildNode: (nodeId: string) => void;
   onRequestDeleteNode: (nodeId: string) => void;
 };
@@ -32,15 +34,28 @@ const NodeItem = ({
   onRenameDraftChange,
   onRenameCommit,
   onRenameCancel,
+  collapsedNodeIds,
+  onToggleNodeCollapsed,
   onAddChildNode,
   onRequestDeleteNode,
 }: NodeItemProps): React.ReactElement => {
   const isEditing = viewState.editingNodeId === node.id;
   const meta = editorTypeMeta(node.editorType);
+  const hasChildren = node.children.length > 0;
+  const isCollapsed = hasChildren && collapsedNodeIds.includes(node.id);
 
   return (
     <li>
       <div className="tree-row">
+        <button
+          className={`icon-action secondary collapse-toggle ${!hasChildren ? 'invisible' : ''}`}
+          title={isCollapsed ? 'Expand node' : 'Collapse node'}
+          aria-label={isCollapsed ? 'Expand node' : 'Collapse node'}
+          onClick={() => onToggleNodeCollapsed(node.id)}
+          disabled={!hasChildren}
+        >
+          <i className={`fa-solid ${isCollapsed ? 'fa-chevron-right' : 'fa-chevron-down'}`}></i>
+        </button>
         {isEditing ? (
           <div className="tree-item editing">
             <span className="node-category-icon" title={meta.label} aria-label={meta.label}>
@@ -96,16 +111,18 @@ const NodeItem = ({
         </div>
       </div>
 
-      {node.children.length > 0 ? (
+      {hasChildren && !isCollapsed ? (
         <ul className="tree-list nested">
           <NodeTree
             nodes={node.children}
             viewState={viewState}
+            collapsedNodeIds={collapsedNodeIds}
             onSelectNode={onSelectNode}
             onBeginRename={onBeginRename}
             onRenameDraftChange={onRenameDraftChange}
             onRenameCommit={onRenameCommit}
             onRenameCancel={onRenameCancel}
+            onToggleNodeCollapsed={onToggleNodeCollapsed}
             onAddChildNode={onAddChildNode}
             onRequestDeleteNode={onRequestDeleteNode}
           />

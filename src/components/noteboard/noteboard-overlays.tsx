@@ -41,6 +41,7 @@ type NoteboardOverlaysProps = {
   templateDrag: TemplateDragState;
   contextMenu: ContextMenuState;
   cardContextMenu: CardContextMenuState;
+  contextMenuCardIsPreview: boolean;
   contextMenuCardColor: string | null;
   cardColorPresets: string[];
   quickColorMenu: QuickColorMenuState;
@@ -56,6 +57,7 @@ type NoteboardOverlaysProps = {
   onCreateCardAtContextMenu: () => void;
   onPasteTextAtContextMenu: () => void;
   onSaveCardAsTemplateFromContext: (cardId: string) => void;
+  onToggleCardPreviewFromContext: (cardId: string, isPreview: boolean) => void;
   onCardColorChangeFromContext: (cardId: string, color: string) => void;
   onDeleteCardFromContext: (cardId: string) => void;
   onQuickColorEnter: (color: string) => void;
@@ -71,6 +73,7 @@ export const NoteboardOverlays = ({
   templateDrag,
   contextMenu,
   cardContextMenu,
+  contextMenuCardIsPreview,
   contextMenuCardColor,
   cardColorPresets,
   quickColorMenu,
@@ -86,6 +89,7 @@ export const NoteboardOverlays = ({
   onCreateCardAtContextMenu,
   onPasteTextAtContextMenu,
   onSaveCardAsTemplateFromContext,
+  onToggleCardPreviewFromContext,
   onCardColorChangeFromContext,
   onDeleteCardFromContext,
   onQuickColorEnter,
@@ -227,6 +231,15 @@ export const NoteboardOverlays = ({
             >
               <i className="fa-solid fa-bookmark"></i>
               <span>Save As Template</span>
+            </button>
+            <button
+              className="context-menu-item"
+              onClick={() =>
+                onToggleCardPreviewFromContext(cardContextMenu.cardId, contextMenuCardIsPreview)
+              }
+            >
+              <i className={contextMenuCardIsPreview ? 'fa-solid fa-pen' : 'fa-solid fa-eye'}></i>
+              <span>{contextMenuCardIsPreview ? 'Edit Card' : 'Preview Card'}</span>
             </button>
             <div className="card-context-colors">
               {cardColorPresets.map((presetColor, index) => (

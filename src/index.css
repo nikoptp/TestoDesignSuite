@@ -395,8 +395,21 @@ button:hover {
 
 .tree-row {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto 1fr auto;
   gap: 6px;
+}
+
+.collapse-toggle {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  border-radius: 6px;
+}
+
+.collapse-toggle.invisible {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .node-actions {
@@ -667,12 +680,12 @@ body.is-resizing-sidebar * {
 
 .noteboard-card {
   position: absolute;
-  border: 1px solid color-mix(in srgb, var(--card-fill, var(--card-border)) 54%, var(--card-tone-border) 16%);
-  border-top-width: 12px;
-  border-top-color: color-mix(in srgb, var(--card-fill, var(--card-border)) 65%, var(--card-tone-border-top) 35%);
+  border: 0.5px solid
+    color-mix(in srgb, var(--card-fill, var(--card-border)) 44%, var(--card-tone-border) 16%);
+  border-top-color: color-mix(in srgb, var(--card-fill, var(--card-border)) 58%, var(--card-tone-border-top) 24%);
   border-radius: 0;
   background: var(--card-fill, color-mix(in srgb, var(--card-bg-start) 92%, var(--card-tone-accent) 8%));
-  padding: 2px;
+  padding: 1px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -681,6 +694,16 @@ body.is-resizing-sidebar * {
     0 6px 15px color-mix(in srgb, var(--card-shadow) 56%, transparent);
   cursor: default;
   overflow: hidden;
+  transform-origin: center;
+  transition:
+    transform 150ms ease,
+    box-shadow 180ms ease,
+    border-width 180ms ease,
+    border-color 180ms ease,
+    padding 180ms ease,
+    gap 180ms ease,
+    outline-color 180ms ease;
+  animation: card-pop-in 180ms ease-out;
 }
 
 .noteboard-canvas.drawing-mode .noteboard-card {
@@ -690,9 +713,51 @@ body.is-resizing-sidebar * {
 .noteboard-card.selected {
   border-color: var(--card-selected-border);
   border-top-color: var(--card-selected-border);
+  transform: translateY(-1px);
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--card-selected-ring) 75%, transparent),
     0 10px 20px color-mix(in srgb, var(--card-selected-shadow) 88%, transparent);
+}
+
+.noteboard-card.image-only {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  gap: 0;
+}
+
+.noteboard-card.image-only.selected {
+  outline: 2px solid color-mix(in srgb, var(--card-selected-ring) 88%, var(--card-selected-border));
+  outline-offset: 1px;
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--card-selected-shadow) 74%, transparent);
+}
+
+.noteboard-canvas:not(.drawing-mode) .noteboard-card:not(.image-only):hover {
+  transform: translateY(-2px) scale(1.008);
+  border-width: 1px;
+  border-color: color-mix(in srgb, var(--card-fill, var(--card-border)) 54%, var(--card-tone-border) 16%);
+  padding: 2px;
+  gap: 3px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--card-gloss-highlight) 36%, transparent) inset,
+    0 10px 20px color-mix(in srgb, var(--card-shadow) 66%, transparent);
+}
+
+.noteboard-canvas:not(.drawing-mode) .noteboard-card.image-only:hover {
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--card-shadow) 60%, transparent);
+}
+
+.card-body {
+  min-height: 0;
+  flex: 1;
+  padding: 6px;
+  background: color-mix(in srgb, var(--textarea-bg) 88%, transparent);
+}
+
+.card-body.image-only {
+  padding: 0;
+  background: transparent;
 }
 
 .noteboard-toolbar {
@@ -1064,9 +1129,9 @@ body.is-resizing-sidebar * {
   min-height: 0;
   resize: none;
   flex: 1;
-  border: 1px solid color-mix(in srgb, var(--textarea-border) 60%, transparent);
+  border: 0;
   border-radius: 0;
-  padding: 4px 6px;
+  padding: 4px 5px;
   font: inherit;
   background: var(--textarea-bg);
   color: var(--app-text);
@@ -1078,13 +1143,18 @@ body.is-resizing-sidebar * {
   min-height: 0;
   flex: 1;
   overflow: auto;
-  border: 1px solid color-mix(in srgb, var(--textarea-border) 60%, transparent);
+  border: 0;
   border-radius: 0;
-  padding: 4px 6px;
+  padding: 4px 5px;
   background: var(--textarea-bg);
   color: var(--app-text);
   font-size: 13px;
   line-height: 1.32;
+}
+
+.card-markdown-preview.image-only {
+  overflow: hidden;
+  padding: 0;
 }
 
 .card-markdown-preview > *:first-child {
@@ -1193,6 +1263,12 @@ body.is-resizing-sidebar * {
   height: auto;
 }
 
+.card-markdown-preview.image-only img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .card-markdown-preview th,
 .card-markdown-preview td {
   border: 1px solid var(--textarea-border);
@@ -1207,25 +1283,13 @@ body.is-resizing-sidebar * {
   outline-offset: 1px;
 }
 
-.card-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 3px;
-  position: absolute;
-  top: 1px;
-  right: 4px;
-  z-index: 3;
+.noteboard-card.image-only .card-resize-handle {
+  border: 0;
 }
 
-.card-actions .icon-action {
-  width: 18px;
-  min-width: 18px;
-  height: 18px;
+.noteboard-card.editing .card-body {
   padding: 0;
-  border-radius: 0;
-  border: 1px solid color-mix(in srgb, var(--chrome-outline) 20%, transparent);
-  background: color-mix(in srgb, var(--surface-soft) 76%, transparent);
-  font-size: 9px;
+  background: transparent;
 }
 
 .card-resize-handle {
@@ -1243,6 +1307,10 @@ body.is-resizing-sidebar * {
   align-items: center;
   justify-content: center;
   font-size: 10px;
+}
+
+.noteboard-card.editing .card-textarea {
+  height: 100%;
 }
 
 .card-context-colors {
@@ -1727,6 +1795,30 @@ body.is-resizing-doc-split * {
   padding: 3px;
 }
 
+.preset-color-swatch {
+  min-height: 34px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--swatch-outline) 28%, transparent);
+}
+
+.preset-color-swatch.active {
+  border-color: var(--active-item-border);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--app-bg) 84%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--active-item-border) 92%, transparent),
+    0 6px 14px color-mix(in srgb, var(--active-item-border) 46%, transparent);
+  transform: scale(1.04);
+}
+
+.preset-color-hidden-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .canvas-context-menu {
   position: fixed;
   z-index: 50;
@@ -2106,14 +2198,12 @@ button:active {
 
 .card-actions {
   gap: 2px;
-  top: 0;
-  right: 2px;
 }
 
 .card-actions .icon-action {
-  width: 16px;
-  min-width: 16px;
-  height: 16px;
+  width: 14px;
+  min-width: 14px;
+  height: 14px;
 }
 
 .card-resize-handle {
@@ -2141,6 +2231,24 @@ button:active {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes card-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .noteboard-card {
+    animation: none;
+    transition: none;
   }
 }
 

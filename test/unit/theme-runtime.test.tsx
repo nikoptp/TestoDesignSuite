@@ -4,7 +4,6 @@ import type { UserSettings } from '../../src/shared/types';
 import { useThemeRuntime } from '../../src/features/theme/hooks/use-theme-runtime';
 
 const baseSettings = (): UserSettings => ({
-  sidebarWidth: 320,
   theme: 'parchment',
   cardTemplates: [],
   customThemes: [],
