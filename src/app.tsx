@@ -513,6 +513,7 @@ export const App = (): React.ReactElement => {
     selectedNode && selectedNode.editorType !== 'noteboard'
       ? getDocumentMarkdownForNode(state, selectedNode.id)
       : '';
+
   const selectionRect =
     uiState.selectionBox &&
     selectedNode &&
