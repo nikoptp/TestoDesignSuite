@@ -1,7 +1,7 @@
 {
   "name": "testo-design-suite",
   "productName": "testo-design-suite",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "My Electron application description",
   "main": ".webpack/main",
   "private": true,
@@ -9,6 +9,8 @@
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
+    "installer:custom": "node scripts/build-custom-installer.js",
+    "build:windows:custom-installer": "npm run package && npm run installer:custom",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
     "build:test": "tsc -p tsconfig.test.json",
@@ -34,7 +36,8 @@
     "@electron/fuses": "^1.8.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "@vercel/webpack-asset-relocator-loader": "^1.7.3",
@@ -51,10 +54,7 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@emotion/is-prop-valid": "^1.4.0",
     "@fortawesome/fontawesome-free": "^7.2.0",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
     "electron-squirrel-startup": "^1.0.1",
     "motion": "^12.34.0",
     "perfect-freehand": "^1.2.3",

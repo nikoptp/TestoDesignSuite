@@ -49,6 +49,81 @@ export const findNodeById = (
   return found;
 };
 
+type NodeLocation = {
+  container: CategoryNode[];
+  index: number;
+};
+
+const findNodeLocationById = (
+  nodes: CategoryNode[],
+  id: string,
+): NodeLocation | undefined => {
+  const index = nodes.findIndex((node) => node.id === id);
+  if (index >= 0) {
+    return { container: nodes, index };
+  }
+
+  for (const node of nodes) {
+    const nested = findNodeLocationById(node.children, id);
+    if (nested) {
+      return nested;
+    }
+  }
+
+  return undefined;
+};
+
+export const moveNodeById = (
+  nodes: CategoryNode[],
+  sourceId: string,
+  targetId: string,
+  position: 'before' | 'after' | 'inside',
+): boolean => {
+  if (sourceId === targetId) {
+    return false;
+  }
+
+  const sourceNode = findNodeById(nodes, sourceId);
+  if (!sourceNode) {
+    return false;
+  }
+
+  const targetInsideSource = walkNodes([sourceNode], (node) => node.id === targetId);
+  if (targetInsideSource) {
+    return false;
+  }
+
+  const sourceLocation = findNodeLocationById(nodes, sourceId);
+  if (!sourceLocation) {
+    return false;
+  }
+
+  const [movedNode] = sourceLocation.container.splice(sourceLocation.index, 1);
+  if (!movedNode) {
+    return false;
+  }
+
+  const targetLocation = findNodeLocationById(nodes, targetId);
+  if (!targetLocation) {
+    sourceLocation.container.splice(sourceLocation.index, 0, movedNode);
+    return false;
+  }
+
+  if (position === 'inside') {
+    const targetNode = targetLocation.container[targetLocation.index];
+    if (!targetNode) {
+      sourceLocation.container.splice(sourceLocation.index, 0, movedNode);
+      return false;
+    }
+    targetNode.children.push(movedNode);
+    return true;
+  }
+
+  const insertIndex = position === 'before' ? targetLocation.index : targetLocation.index + 1;
+  targetLocation.container.splice(insertIndex, 0, movedNode);
+  return true;
+};
+
 export const removeNodeById = (nodes: CategoryNode[], id: string): boolean => {
   const index = nodes.findIndex((node) => node.id === id);
   if (index >= 0) {

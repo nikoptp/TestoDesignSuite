@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
   CustomThemeDefinition,
+  LaunchState,
   PersistedTreeState,
   ProjectStatusPayload,
   ProjectSnapshot,
@@ -69,4 +70,14 @@ contextBridge.exposeInMainWorld('testoApi', {
       ipcRenderer.removeListener('menu:project-status', wrapped);
     };
   },
+  getLaunchState: (): Promise<LaunchState> =>
+    ipcRenderer.invoke('project:launch-state') as Promise<LaunchState>,
+  openProjectFileDialog: (): Promise<boolean> =>
+    ipcRenderer.invoke('project:open-dialog') as Promise<boolean>,
+  openRecentProject: (filePath: string): Promise<boolean> =>
+    ipcRenderer.invoke('project:open-recent', filePath) as Promise<boolean>,
+  createNewProject: (): Promise<boolean> =>
+    ipcRenderer.invoke('project:new') as Promise<boolean>,
+  checkForUpdates: (): Promise<void> =>
+    ipcRenderer.invoke('app:check-updates') as Promise<void>,
 });

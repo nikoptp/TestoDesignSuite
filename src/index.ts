@@ -6,6 +6,7 @@ import {
   Menu,
   nativeImage,
   protocol,
+  shell,
   type MenuItemConstructorOptions,
 } from 'electron';
 import {
@@ -19,15 +20,18 @@ import {
   unlink,
   writeFile,
 } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import type {
   CustomThemeDefinition,
+  LaunchState,
   PersistedTreeState,
   ProjectStatusPayload,
   ProjectSnapshot,
   ProjectImageAsset,
+  RecentProjectEntry,
   SavedImageAsset,
   UserSettings,
 } from './shared/types';
@@ -47,11 +51,95 @@ const getTreeStatePath = (): string =>
 const getUserSettingsPath = (): string =>
   path.join(app.getPath('userData'), 'data', 'user-settings.json');
 const getDataBackupDir = (): string => path.join(app.getPath('userData'), 'data', 'backups');
-const getProjectWorkspaceRoot = (): string => path.join(app.getPath('userData'), 'workspace');
+const getInstallConfigPath = (): string =>
+  path.join(app.getPath('userData'), 'data', 'install-config.json');
+const getDefaultWorkspaceRoot = (): string => path.join(app.getPath('userData'), 'workspace');
+const getInstallerFallbackConfigPath = (): string => {
+  const localAppData =
+    process.env.LOCALAPPDATA ?? path.join(app.getPath('home'), 'AppData', 'Local');
+  return path.join(localAppData, app.getName(), 'data', 'install-config.json');
+};
+const readInstallerWorkspaceRoot = (): string | null => {
+  const candidates = [getInstallConfigPath(), getInstallerFallbackConfigPath()];
+  for (const candidate of candidates) {
+    try {
+      if (!existsSync(candidate)) {
+        continue;
+      }
+      const parsed = JSON.parse(readFileSync(candidate, 'utf8')) as {
+        workspaceRoot?: unknown;
+      };
+      if (typeof parsed.workspaceRoot === 'string' && parsed.workspaceRoot.trim()) {
+        return path.resolve(parsed.workspaceRoot.trim());
+      }
+    } catch {
+      // Ignore malformed installer config and fall back to defaults.
+    }
+  }
+
+  return null;
+};
+const getRecentProjectsPath = (): string =>
+  path.join(app.getPath('userData'), 'data', 'recent-projects.json');
+let resolvedWorkspaceRoot: string | null = null;
+
+const getProjectWorkspaceRoot = (): string => {
+  if (resolvedWorkspaceRoot) {
+    return resolvedWorkspaceRoot;
+  }
+
+  resolvedWorkspaceRoot = path.resolve(readInstallerWorkspaceRoot() ?? getDefaultWorkspaceRoot());
+  return resolvedWorkspaceRoot;
+};
+
+const isPermissionError = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  ((error as { code?: string }).code === 'EPERM' || (error as { code?: string }).code === 'EACCES');
+
+const canWriteToWorkspaceRoot = async (candidate: string): Promise<boolean> => {
+  try {
+    await mkdir(candidate, { recursive: true });
+    const probePath = path.join(candidate, '.testo-write-probe');
+    await writeFile(probePath, 'ok');
+    await unlink(probePath);
+    return true;
+  } catch (error: unknown) {
+    if (isPermissionError(error)) {
+      return false;
+    }
+    return false;
+  }
+};
+
+const ensureWritableWorkspaceRoot = async (): Promise<string> => {
+  const configured = readInstallerWorkspaceRoot();
+  const fallback = getDefaultWorkspaceRoot();
+  const candidates = [configured, fallback].filter((value): value is string => Boolean(value));
+  const seen = new Set<string>();
+
+  for (const candidate of candidates) {
+    const normalized = path.resolve(candidate);
+    if (seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    if (await canWriteToWorkspaceRoot(normalized)) {
+      resolvedWorkspaceRoot = normalized;
+      return normalized;
+    }
+  }
+
+  await mkdir(fallback, { recursive: true });
+  resolvedWorkspaceRoot = path.resolve(fallback);
+  return resolvedWorkspaceRoot;
+};
 const getProjectImageAssetsDir = (): string =>
   path.join(getProjectWorkspaceRoot(), 'project-assets', 'images');
 const getProjectRootPath = (): string => path.resolve(getProjectWorkspaceRoot());
 const normalizeRelativePath = (value: string): string => value.split(path.sep).join('/');
+const getWindowIconPath = (): string => path.join(app.getAppPath(), 'images', 'icon.png');
 
 type ProjectBundleV1 = {
   version: 1;
@@ -71,8 +159,17 @@ type CustomThemeBundleV1 = {
   theme: CustomThemeDefinition;
 };
 
+type RecentProjectsFile = {
+  recentProjects: RecentProjectEntry[];
+  lastActiveProjectPath: string | null;
+};
+
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif'];
 const PROJECT_SNAPSHOT_TIMEOUT_MS = 1600;
+const MAX_RECENT_PROJECTS = 12;
+const PRIMARY_PROJECT_EXTENSION = 'prjt';
+const LEGACY_PROJECT_EXTENSION = 'testo';
+const SKIP_SPLASH_QUERY_PARAM = 'skipSplashOnce';
 
 type PendingSnapshotRequest = {
   senderId: number;
@@ -118,6 +215,92 @@ const fileExists = async (filePath: string): Promise<boolean> => {
     return false;
   }
 };
+
+const sanitizeRecentProjects = (value: unknown): RecentProjectEntry[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const unique = new Map<string, RecentProjectEntry>();
+  value.forEach((item) => {
+    if (typeof item !== 'object' || item === null) {
+      return;
+    }
+
+    const candidate = item as {
+      filePath?: unknown;
+      fileName?: unknown;
+      lastOpenedAt?: unknown;
+    };
+    if (
+      typeof candidate.filePath !== 'string' ||
+      !candidate.filePath.trim() ||
+      typeof candidate.fileName !== 'string' ||
+      !candidate.fileName.trim() ||
+      typeof candidate.lastOpenedAt !== 'number' ||
+      !Number.isFinite(candidate.lastOpenedAt)
+    ) {
+      return;
+    }
+
+    const filePath = candidate.filePath.trim();
+    const existing = unique.get(filePath);
+    if (!existing || candidate.lastOpenedAt > existing.lastOpenedAt) {
+      unique.set(filePath, {
+        filePath,
+        fileName: candidate.fileName.trim(),
+        lastOpenedAt: candidate.lastOpenedAt,
+      });
+    }
+  });
+
+  return [...unique.values()]
+    .sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)
+    .slice(0, MAX_RECENT_PROJECTS);
+};
+
+const loadRecentProjectsState = async (): Promise<RecentProjectsFile> => {
+  const raw = await loadJsonWithBackup<Partial<RecentProjectsFile>>(getRecentProjectsPath());
+  const recentProjects = sanitizeRecentProjects(raw?.recentProjects);
+  const lastActiveProjectPath =
+    typeof raw?.lastActiveProjectPath === 'string' && raw.lastActiveProjectPath.trim()
+      ? raw.lastActiveProjectPath.trim()
+      : null;
+  return {
+    recentProjects,
+    lastActiveProjectPath,
+  };
+};
+
+const saveRecentProjectsState = async (state: RecentProjectsFile): Promise<void> => {
+  await safeWriteFile(getRecentProjectsPath(), JSON.stringify(state, null, 2));
+};
+
+const upsertRecentProject = (
+  current: RecentProjectsFile,
+  filePath: string,
+  at: number,
+): RecentProjectsFile => {
+  const fileName = path.basename(filePath);
+  const nextRecentProjects = sanitizeRecentProjects([
+    { filePath, fileName, lastOpenedAt: at },
+    ...current.recentProjects,
+  ]);
+
+  return {
+    recentProjects: nextRecentProjects,
+    lastActiveProjectPath: filePath,
+  };
+};
+
+const removeRecentProjectPath = (
+  current: RecentProjectsFile,
+  filePath: string,
+): RecentProjectsFile => ({
+  recentProjects: current.recentProjects.filter((entry) => entry.filePath !== filePath),
+  lastActiveProjectPath:
+    current.lastActiveProjectPath === filePath ? null : current.lastActiveProjectPath,
+});
 
 const isThemeTokenName = (value: string): boolean =>
   /^--[a-z0-9-]+$/i.test(value.trim());
@@ -663,6 +846,25 @@ const requestRendererProjectSnapshot = async (
   });
 };
 
+const reloadSkippingSplashOnce = async (window: BrowserWindow): Promise<boolean> => {
+  if (window.isDestroyed()) {
+    return false;
+  }
+
+  try {
+    const currentUrl = window.webContents.getURL();
+    if (!currentUrl) {
+      return false;
+    }
+    const nextUrl = new URL(currentUrl);
+    nextUrl.searchParams.set(SKIP_SPLASH_QUERY_PARAM, '1');
+    await window.loadURL(nextUrl.toString());
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const applyProjectBundle = async (bundle: ProjectBundleV1): Promise<void> => {
   if (bundle.treeState) {
     await saveTreeState(bundle.treeState);
@@ -698,6 +900,179 @@ const applyProjectBundle = async (bundle: ProjectBundleV1): Promise<void> => {
 };
 
 let activeProjectFilePath: string | null = null;
+let mainWindowRef: BrowserWindow | null = null;
+
+type ReleaseLookupResult = {
+  repo: string;
+  latestVersion: string;
+  latestTag: string;
+  downloadUrl: string;
+};
+
+const UPDATE_REPO_SLUG = (process.env.TESTO_UPDATE_REPO ?? '').trim();
+
+const normalizeVersionTag = (value: string): string =>
+  value.trim().replace(/^v/i, '').split('-')[0];
+
+const compareVersions = (left: string, right: string): number => {
+  const leftParts = normalizeVersionTag(left)
+    .split('.')
+    .map((part) => Number.parseInt(part, 10));
+  const rightParts = normalizeVersionTag(right)
+    .split('.')
+    .map((part) => Number.parseInt(part, 10));
+
+  const maxParts = Math.max(leftParts.length, rightParts.length);
+  for (let i = 0; i < maxParts; i += 1) {
+    const l = Number.isFinite(leftParts[i]) ? leftParts[i] : 0;
+    const r = Number.isFinite(rightParts[i]) ? rightParts[i] : 0;
+    if (l > r) {
+      return 1;
+    }
+    if (l < r) {
+      return -1;
+    }
+  }
+
+  return 0;
+};
+
+const fetchLatestGithubRelease = async (repo: string): Promise<ReleaseLookupResult> => {
+  const endpoint = `https://api.github.com/repos/${repo}/releases/latest`;
+  const response = await fetch(endpoint, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': `${app.getName()}/${app.getVersion()}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`GitHub releases request failed with ${response.status}.`);
+  }
+
+  const payload = (await response.json()) as {
+    tag_name?: unknown;
+    html_url?: unknown;
+  };
+  if (typeof payload.tag_name !== 'string' || !payload.tag_name.trim()) {
+    throw new Error('Latest GitHub release is missing tag_name.');
+  }
+
+  const latestVersion = normalizeVersionTag(payload.tag_name);
+  if (!latestVersion) {
+    throw new Error('Latest GitHub release tag is invalid.');
+  }
+
+  const downloadUrl =
+    typeof payload.html_url === 'string' && payload.html_url.trim()
+      ? payload.html_url
+      : `https://github.com/${repo}/releases/latest`;
+
+  return {
+    repo,
+    latestVersion,
+    latestTag: payload.tag_name.trim(),
+    downloadUrl: downloadUrl.trim(),
+  };
+};
+
+const checkForGithubUpdates = async (manual: boolean): Promise<void> => {
+  const currentVersion = normalizeVersionTag(app.getVersion());
+  const focusedWindow = BrowserWindow.getFocusedWindow() ?? mainWindowRef;
+
+  if (!UPDATE_REPO_SLUG) {
+    if (manual) {
+      emitProjectStatus(focusedWindow, {
+        status: 'info',
+        action: 'update',
+        filePath: null,
+        message:
+          'Updates are not configured. Set TESTO_UPDATE_REPO to your GitHub repo (owner/name).',
+      });
+    }
+    return;
+  }
+
+  try {
+    const latest = await fetchLatestGithubRelease(UPDATE_REPO_SLUG);
+    const comparison = compareVersions(latest.latestVersion, currentVersion);
+
+    if (comparison > 0) {
+      emitProjectStatus(focusedWindow, {
+        status: 'info',
+        action: 'update',
+        filePath: null,
+        message: `Update available: v${latest.latestVersion} (current v${currentVersion}).`,
+      });
+
+      if (manual && focusedWindow) {
+        const result = await dialog.showMessageBox(focusedWindow, {
+          type: 'info',
+          buttons: ['Open Download Page', 'Later'],
+          defaultId: 0,
+          cancelId: 1,
+          title: 'Update Available',
+          message: `Version ${latest.latestTag} is available.`,
+          detail: `Current version: v${currentVersion}\nLatest version: v${latest.latestVersion}`,
+        });
+
+        if (result.response === 0) {
+          await shell.openExternal(latest.downloadUrl);
+        }
+      }
+      return;
+    }
+
+    if (manual) {
+      emitProjectStatus(focusedWindow, {
+        status: 'success',
+        action: 'update',
+        filePath: null,
+        message: `You're on the latest version (v${currentVersion}).`,
+      });
+    }
+  } catch (error: unknown) {
+    if (!manual) {
+      return;
+    }
+
+    emitProjectStatus(focusedWindow, {
+      status: 'error',
+      action: 'update',
+      filePath: null,
+      message: `Update check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    });
+  }
+};
+
+const getLaunchState = async (): Promise<LaunchState> => {
+  const recentState = await loadRecentProjectsState();
+  const existingEntries: RecentProjectEntry[] = [];
+  for (const entry of recentState.recentProjects) {
+    if (await fileExists(entry.filePath)) {
+      existingEntries.push(entry);
+    }
+  }
+
+  const hasLastActive =
+    recentState.lastActiveProjectPath && (await fileExists(recentState.lastActiveProjectPath));
+  const nextState: RecentProjectsFile = {
+    recentProjects: existingEntries,
+    lastActiveProjectPath: hasLastActive ? recentState.lastActiveProjectPath : null,
+  };
+
+  const changed =
+    nextState.recentProjects.length !== recentState.recentProjects.length ||
+    nextState.lastActiveProjectPath !== recentState.lastActiveProjectPath;
+  if (changed) {
+    await saveRecentProjectsState(nextState);
+  }
+
+  return {
+    recentProjects: nextState.recentProjects,
+    lastActiveProjectPath: nextState.lastActiveProjectPath,
+  };
+};
 
 const emitProjectStatus = (
   window: BrowserWindow | null,
@@ -713,30 +1088,50 @@ const emitProjectStatus = (
   window.webContents.send('menu:project-status', statusPayload);
 };
 
-const saveProjectFileAs = async (): Promise<void> => {
+const markProjectAsRecent = async (filePath: string): Promise<void> => {
+  const current = await loadRecentProjectsState();
+  const next = upsertRecentProject(current, filePath, Date.now());
+  await saveRecentProjectsState(next);
+};
+
+const removeRecentProject = async (filePath: string): Promise<void> => {
+  const current = await loadRecentProjectsState();
+  const next = removeRecentProjectPath(current, filePath);
+  await saveRecentProjectsState(next);
+};
+
+const saveProjectFileAs = async (): Promise<boolean> => {
   const focusedWindow = BrowserWindow.getFocusedWindow();
   if (!focusedWindow) {
-    return;
+    return false;
   }
 
   const result = await dialog.showSaveDialog(focusedWindow, {
     title: 'Save Project File',
-    defaultPath: activeProjectFilePath ?? path.join(getProjectRootPath(), 'untitled.testo'),
-    filters: [{ name: 'Testo Project', extensions: ['testo'] }],
+    defaultPath:
+      activeProjectFilePath ?? path.join(getProjectRootPath(), `untitled.${PRIMARY_PROJECT_EXTENSION}`),
+    filters: [
+      {
+        name: 'Testo Project',
+        extensions: [PRIMARY_PROJECT_EXTENSION],
+      },
+    ],
   });
   if (result.canceled || !result.filePath) {
-    return;
+    return false;
   }
 
   try {
     await writeProjectBundle(result.filePath);
     activeProjectFilePath = result.filePath;
+    await markProjectAsRecent(result.filePath);
     emitProjectStatus(focusedWindow, {
       status: 'success',
       action: 'save-as',
       filePath: result.filePath,
       message: `Saved project as ${path.basename(result.filePath)}.`,
     });
+    return true;
   } catch (error: unknown) {
     emitProjectStatus(focusedWindow, {
       status: 'error',
@@ -744,23 +1139,25 @@ const saveProjectFileAs = async (): Promise<void> => {
       filePath: result.filePath,
       message: `Save As failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     });
+    return false;
   }
 };
 
-const saveProjectFile = async (): Promise<void> => {
+const saveProjectFile = async (): Promise<boolean> => {
   if (!activeProjectFilePath) {
-    await saveProjectFileAs();
-    return;
+    return saveProjectFileAs();
   }
   const focusedWindow = BrowserWindow.getFocusedWindow();
   try {
     await writeProjectBundle(activeProjectFilePath);
+    await markProjectAsRecent(activeProjectFilePath);
     emitProjectStatus(focusedWindow, {
       status: 'success',
       action: 'save',
       filePath: activeProjectFilePath,
       message: `Saved ${path.basename(activeProjectFilePath)}.`,
     });
+    return true;
   } catch (error: unknown) {
     emitProjectStatus(focusedWindow, {
       status: 'error',
@@ -768,49 +1165,83 @@ const saveProjectFile = async (): Promise<void> => {
       filePath: activeProjectFilePath,
       message: `Save failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     });
+    return false;
   }
 };
 
-const openProjectFile = async (): Promise<void> => {
-  const focusedWindow = BrowserWindow.getFocusedWindow();
-  if (!focusedWindow) {
-    return;
-  }
-
-  const result = await dialog.showOpenDialog(focusedWindow, {
-    title: 'Open Project File',
-    properties: ['openFile'],
-    filters: [{ name: 'Testo Project', extensions: ['testo'] }],
-  });
-  if (result.canceled || result.filePaths.length === 0) {
-    return;
-  }
-
+const openProjectByPath = async (
+  filePath: string,
+  focusedWindow: BrowserWindow,
+): Promise<boolean> => {
   try {
-    const filePath = result.filePaths[0];
+    await ensureWritableWorkspaceRoot();
     const bundle = await readProjectBundle(filePath);
     await applyProjectBundle(bundle);
     activeProjectFilePath = filePath;
+    await markProjectAsRecent(filePath);
     emitProjectStatus(focusedWindow, {
       status: 'success',
       action: 'open',
       filePath,
       message: `Opened ${path.basename(filePath)}.`,
     });
-    focusedWindow.reload();
+    const reloaded = await reloadSkippingSplashOnce(focusedWindow);
+    if (!reloaded) {
+      focusedWindow.reload();
+    }
+    return true;
   } catch (error: unknown) {
+    await removeRecentProject(filePath);
     emitProjectStatus(focusedWindow, {
       status: 'error',
       action: 'open',
+      filePath,
       message: `Open failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     });
+    return false;
   }
 };
 
-const createNewProject = async (): Promise<void> => {
+const openProjectFile = async (): Promise<boolean> => {
   const focusedWindow = BrowserWindow.getFocusedWindow();
   if (!focusedWindow) {
-    return;
+    return false;
+  }
+
+  const result = await dialog.showOpenDialog(focusedWindow, {
+    title: 'Open Project File',
+    properties: ['openFile'],
+    filters: [
+      {
+        name: 'Testo Project',
+        extensions: [PRIMARY_PROJECT_EXTENSION, LEGACY_PROJECT_EXTENSION],
+      },
+    ],
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return false;
+  }
+
+  return openProjectByPath(result.filePaths[0], focusedWindow);
+};
+
+const openRecentProject = async (filePath: string): Promise<boolean> => {
+  const focusedWindow = BrowserWindow.getFocusedWindow();
+  if (!focusedWindow) {
+    return false;
+  }
+
+  if (!filePath.trim()) {
+    return false;
+  }
+
+  return openProjectByPath(filePath.trim(), focusedWindow);
+};
+
+const createNewProject = async (): Promise<boolean> => {
+  const focusedWindow = BrowserWindow.getFocusedWindow();
+  if (!focusedWindow) {
+    return false;
   }
 
   const result = await dialog.showMessageBox(focusedWindow, {
@@ -824,19 +1255,27 @@ const createNewProject = async (): Promise<void> => {
   });
 
   if (result.response !== 0) {
-    return;
+    return false;
   }
 
   try {
     await clearCurrentProjectData();
     activeProjectFilePath = null;
+    await saveRecentProjectsState({
+      ...(await loadRecentProjectsState()),
+      lastActiveProjectPath: null,
+    });
     emitProjectStatus(focusedWindow, {
       status: 'success',
       action: 'new',
       filePath: null,
       message: 'Created a new project workspace.',
     });
-    focusedWindow.reload();
+    const reloaded = await reloadSkippingSplashOnce(focusedWindow);
+    if (!reloaded) {
+      focusedWindow.reload();
+    }
+    return true;
   } catch (error: unknown) {
     emitProjectStatus(focusedWindow, {
       status: 'error',
@@ -844,6 +1283,7 @@ const createNewProject = async (): Promise<void> => {
       filePath: null,
       message: `New project failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     });
+    return false;
   }
 };
 
@@ -873,6 +1313,15 @@ ipcMain.handle('themes:export-custom', async (_event, theme: CustomThemeDefiniti
   exportCustomThemeToFile(theme),
 );
 ipcMain.handle('themes:import-custom', async () => importCustomThemeFromFile());
+ipcMain.handle('project:launch-state', async () => getLaunchState());
+ipcMain.handle('project:open-dialog', async () => openProjectFile());
+ipcMain.handle('project:open-recent', async (_event, filePath: string) =>
+  openRecentProject(filePath),
+);
+ipcMain.handle('project:new', async () => createNewProject());
+ipcMain.handle('app:check-updates', async () => {
+  await checkForGithubUpdates(true);
+});
 ipcMain.on(
   'project:snapshot-response',
   (
@@ -925,6 +1374,26 @@ const openSettingsFromMenu = (): void => {
 };
 
 const buildAppMenu = (): void => {
+  const viewMenu: MenuItemConstructorOptions['submenu'] = app.isPackaged
+    ? [
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ]
+    : [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ];
+
   const template: MenuItemConstructorOptions[] = [
     {
       label: 'File',
@@ -969,21 +1438,37 @@ const buildAppMenu = (): void => {
       ],
     },
     { role: 'editMenu' },
-    { role: 'viewMenu' },
+    {
+      label: 'View',
+      submenu: viewMenu,
+    },
     { role: 'windowMenu' },
-    { role: 'help' },
+    {
+      role: 'help',
+      submenu: [
+        {
+          label: 'Check for Updates...',
+          click: () => {
+            void checkForGithubUpdates(true);
+          },
+        },
+      ],
+    },
   ];
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 };
 
-const createWindow = (): void => {
+const createWindow = (): BrowserWindow => {
+  const windowIcon = nativeImage.createFromPath(getWindowIconPath());
   // Create the browser window.
   const mainWindow = new BrowserWindow({
     height: 1080,
     width: 1920,
+    icon: windowIcon.isEmpty() ? undefined : windowIcon,
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
+      devTools: !app.isPackaged,
     },
   });
 
@@ -993,15 +1478,34 @@ const createWindow = (): void => {
   if (!app.isPackaged) {
     mainWindow.webContents.openDevTools();
   }
+
+  return mainWindow;
 };
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', () => {
-  registerAssetProtocol();
-  buildAppMenu();
-  createWindow();
+  const windowIcon = nativeImage.createFromPath(getWindowIconPath());
+  if (process.platform === 'darwin' && !windowIcon.isEmpty()) {
+    app.dock.setIcon(windowIcon);
+  }
+
+  void (async () => {
+    try {
+      await ensureWritableWorkspaceRoot();
+      const launchState = await getLaunchState();
+      activeProjectFilePath = launchState.lastActiveProjectPath;
+    } catch {
+      activeProjectFilePath = null;
+    }
+    registerAssetProtocol();
+    buildAppMenu();
+    mainWindowRef = createWindow();
+    setTimeout(() => {
+      void checkForGithubUpdates(false);
+    }, 1200);
+  })();
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common
@@ -1017,7 +1521,7 @@ app.on('activate', () => {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    mainWindowRef = createWindow();
   }
 });
 

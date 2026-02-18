@@ -1,8 +1,10 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type {
+  LaunchState,
   PersistedTreeState,
   ProjectImageAsset,
+  RecentProjectEntry,
   UserSettings,
 } from './shared/types';
 import {
@@ -12,15 +14,17 @@ import {
 import {
   countDescendants,
   findNodeById,
+  moveNodeById,
 } from './shared/tree-utils';
 import {
 } from './renderer/noteboard-utils';
 import { appendPointWithPressure } from './renderer/noteboard-drawing';
-import { NodeTree } from './components/node-tree';
+import { NodeTree, type NodeDropPosition } from './components/node-tree';
 import { CreateNodeDialog, DeleteNodeDialog, SettingsDialog } from './components/dialogs';
 import { EditorPanel } from './components/editor-panel';
 import { NoteboardCanvas } from './components/noteboard-canvas';
 import { DocumentEditor } from './components/document-editor';
+import { StartupSplash } from './components/startup-splash';
 import {
   useProjectBootstrap,
   useProjectSnapshotResponder,
@@ -71,7 +75,32 @@ import {
   themeOptions,
 } from './features/app/app-model';
 
+const SKIP_SPLASH_ONCE_KEY = 'testo.splash.skipOnce';
+const SKIP_SPLASH_QUERY_PARAM = 'skipSplashOnce';
+
 export const App = (): React.ReactElement => {
+  const [isStartupSplashVisible, setIsStartupSplashVisible] = React.useState(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get(SKIP_SPLASH_QUERY_PARAM) === '1') {
+        url.searchParams.delete(SKIP_SPLASH_QUERY_PARAM);
+        window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+        return false;
+      }
+    } catch {
+      // Ignore URL parsing/access issues and fall back to localStorage flag.
+    }
+
+    try {
+      if (window.localStorage.getItem(SKIP_SPLASH_ONCE_KEY) === '1') {
+        window.localStorage.removeItem(SKIP_SPLASH_ONCE_KEY);
+        return false;
+      }
+    } catch {
+      // Ignore storage access issues and keep splash visible by default.
+    }
+    return true;
+  });
   const [state, setState] = React.useState<PersistedTreeState>(defaultState);
   const [settings, setSettings] = React.useState<UserSettings>(defaultSettings);
   const [imageAssets, setImageAssets] = React.useState<ProjectImageAsset[]>([]);
@@ -93,6 +122,10 @@ export const App = (): React.ReactElement => {
   });
   const [isResizing, setIsResizing] = React.useState(false);
   const [isBootstrapped, setIsBootstrapped] = React.useState(false);
+  const [isStartupActionBusy, setIsStartupActionBusy] = React.useState(false);
+  const [, setStartupStatusMessage] = React.useState('Preparing workspace...');
+  const [recentProjects, setRecentProjects] = React.useState<RecentProjectEntry[]>([]);
+  const [lastActiveProjectPath, setLastActiveProjectPath] = React.useState<string | null>(null);
   const shellRef = React.useRef<HTMLDivElement | null>(null);
   const canvasRef = React.useRef<HTMLDivElement | null>(null);
   const dragRef = React.useRef<DragState | null>(null);
@@ -341,6 +374,40 @@ export const App = (): React.ReactElement => {
     settings,
     timerRef: settingsSaveTimerRef,
   });
+
+  React.useEffect(() => {
+    if (!isBootstrapped) {
+      return;
+    }
+
+    if (!window.testoApi?.getLaunchState) {
+      setStartupStatusMessage('Choose a startup option.');
+      return;
+    }
+
+    let cancelled = false;
+    const loadLaunchState = async (): Promise<void> => {
+      try {
+        const launchState: LaunchState = await window.testoApi.getLaunchState();
+        if (cancelled) {
+          return;
+        }
+        setRecentProjects(launchState.recentProjects);
+        setLastActiveProjectPath(launchState.lastActiveProjectPath);
+        setStartupStatusMessage('Choose a startup option.');
+      } catch {
+        if (cancelled) {
+          return;
+        }
+        setStartupStatusMessage('Unable to load recent projects.');
+      }
+    };
+
+    void loadLaunchState();
+    return () => {
+      cancelled = true;
+    };
+  }, [isBootstrapped]);
 
   const onBeginResize = React.useCallback(() => {
     setIsResizing(true);
@@ -680,6 +747,142 @@ export const App = (): React.ReactElement => {
     isAppTheme,
   });
 
+  const onMoveNode = React.useCallback(
+    (sourceId: string, targetId: string, position: NodeDropPosition): void => {
+      setState((prev) => {
+        const nextNodes = [...prev.nodes];
+        const didMove = moveNodeById(nextNodes, sourceId, targetId, position);
+        if (!didMove) {
+          return prev;
+        }
+
+        pushHistory();
+        return {
+          ...prev,
+          nodes: nextNodes,
+        };
+      });
+      setUiState((prev) => ({
+        ...prev,
+        contextMenu: null,
+        selectionBox: null,
+      }));
+    },
+    [pushHistory, setState, setUiState],
+  );
+
+  const onContinueFromSplash = React.useCallback((): void => {
+    setIsStartupSplashVisible(false);
+  }, []);
+
+  const onOpenProjectFromSplash = React.useCallback(async (): Promise<void> => {
+    if (!window.testoApi?.openProjectFileDialog) {
+      return;
+    }
+
+    setIsStartupActionBusy(true);
+    setStartupStatusMessage('Opening project...');
+    try {
+      window.localStorage.setItem(SKIP_SPLASH_ONCE_KEY, '1');
+    } catch {
+      // Ignore storage access issues.
+    }
+    try {
+      const opened = await window.testoApi.openProjectFileDialog();
+      if (opened) {
+        setIsStartupSplashVisible(false);
+      } else {
+        try {
+          window.localStorage.removeItem(SKIP_SPLASH_ONCE_KEY);
+        } catch {
+          // Ignore storage access issues.
+        }
+        setStartupStatusMessage('Open canceled.');
+      }
+    } catch {
+      try {
+        window.localStorage.removeItem(SKIP_SPLASH_ONCE_KEY);
+      } catch {
+        // Ignore storage access issues.
+      }
+      setStartupStatusMessage('Open failed.');
+    } finally {
+      setIsStartupActionBusy(false);
+    }
+  }, []);
+
+  const onCreateProjectFromSplash = React.useCallback(async (): Promise<void> => {
+    if (!window.testoApi?.createNewProject) {
+      return;
+    }
+
+    setIsStartupActionBusy(true);
+    setStartupStatusMessage('Creating project...');
+    try {
+      window.localStorage.setItem(SKIP_SPLASH_ONCE_KEY, '1');
+    } catch {
+      // Ignore storage access issues.
+    }
+    try {
+      const created = await window.testoApi.createNewProject();
+      if (created) {
+        setIsStartupSplashVisible(false);
+      } else {
+        try {
+          window.localStorage.removeItem(SKIP_SPLASH_ONCE_KEY);
+        } catch {
+          // Ignore storage access issues.
+        }
+        setStartupStatusMessage('New project canceled.');
+      }
+    } catch {
+      try {
+        window.localStorage.removeItem(SKIP_SPLASH_ONCE_KEY);
+      } catch {
+        // Ignore storage access issues.
+      }
+      setStartupStatusMessage('New project failed.');
+    } finally {
+      setIsStartupActionBusy(false);
+    }
+  }, []);
+
+  const onOpenRecentFromSplash = React.useCallback(async (filePath: string): Promise<void> => {
+    if (!window.testoApi?.openRecentProject) {
+      return;
+    }
+
+    setIsStartupActionBusy(true);
+    setStartupStatusMessage('Opening recent project...');
+    try {
+      window.localStorage.setItem(SKIP_SPLASH_ONCE_KEY, '1');
+    } catch {
+      // Ignore storage access issues.
+    }
+    try {
+      const opened = await window.testoApi.openRecentProject(filePath);
+      if (opened) {
+        setIsStartupSplashVisible(false);
+      } else {
+        try {
+          window.localStorage.removeItem(SKIP_SPLASH_ONCE_KEY);
+        } catch {
+          // Ignore storage access issues.
+        }
+        setStartupStatusMessage('Unable to open selected project.');
+      }
+    } catch {
+      try {
+        window.localStorage.removeItem(SKIP_SPLASH_ONCE_KEY);
+      } catch {
+        // Ignore storage access issues.
+      }
+      setStartupStatusMessage('Unable to open selected project.');
+    } finally {
+      setIsStartupActionBusy(false);
+    }
+  }, []);
+
   const {
     onThemeDraftChange,
     onCustomThemeDraftChange,
@@ -790,6 +993,7 @@ export const App = (): React.ReactElement => {
                     pendingDeleteNodeId: nodeId,
                   }))
                 }
+                onMoveNode={onMoveNode}
               />
             </ul>
           </div>
@@ -906,6 +1110,19 @@ export const App = (): React.ReactElement => {
           )}
         </AnimatePresence>
       </main>
+
+      {isStartupSplashVisible ? (
+        <StartupSplash
+          recentProjects={recentProjects}
+          lastActiveProjectPath={lastActiveProjectPath}
+          isBusy={!isBootstrapped || isStartupActionBusy}
+          onContinue={onContinueFromSplash}
+          onOpenProject={onOpenProjectFromSplash}
+          onBrowseProject={onOpenProjectFromSplash}
+          onCreateNewProject={onCreateProjectFromSplash}
+          onOpenRecentProject={onOpenRecentFromSplash}
+        />
+      ) : null}
 
       <DeleteNodeDialog
         pendingDeleteNode={pendingDeleteNode}

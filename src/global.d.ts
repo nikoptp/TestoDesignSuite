@@ -1,5 +1,6 @@
 import type {
   CustomThemeDefinition,
+  LaunchState,
   PersistedTreeState,
   ProjectStatusPayload,
   ProjectSnapshot,
@@ -25,6 +26,11 @@ declare global {
       ) => () => void;
       onOpenSettings: (listener: () => void) => () => void;
       onProjectStatus: (listener: (payload: ProjectStatusPayload) => void) => () => void;
+      getLaunchState: () => Promise<LaunchState>;
+      openProjectFileDialog: () => Promise<boolean>;
+      openRecentProject: (filePath: string) => Promise<boolean>;
+      createNewProject: () => Promise<boolean>;
+      checkForUpdates: () => Promise<void>;
     };
   }
 }

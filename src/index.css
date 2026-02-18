@@ -388,7 +388,7 @@ button:hover {
 
 .tree-list.nested {
   margin-top: 6px;
-  margin-left: 14px;
+  margin-left: 18px;
   padding-left: 12px;
   border-left: 1px dashed var(--tree-nested-border);
 }
@@ -397,6 +397,34 @@ button:hover {
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 6px;
+  position: relative;
+}
+
+.tree-row.dragging {
+  opacity: 0.55;
+}
+
+.tree-row.drop-before::before,
+.tree-row.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 28px;
+  right: 0;
+  border-top: 2px solid color-mix(in srgb, var(--active-item-border) 88%, transparent);
+  pointer-events: none;
+}
+
+.tree-row.drop-before::before {
+  top: -4px;
+}
+
+.tree-row.drop-after::after {
+  bottom: -4px;
+}
+
+.tree-row.drop-inside {
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--active-item-border) 76%, transparent) inset;
 }
 
 .collapse-toggle {
@@ -1632,6 +1660,174 @@ body.is-resizing-doc-split * {
   padding: 16px;
 }
 
+.startup-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--app-bg) 4%, transparent) 0%,
+      color-mix(in srgb, var(--app-bg) 58%, transparent) 55%,
+      var(--app-bg) 100%
+    ),
+    radial-gradient(
+      140% 120% at 80% -10%,
+      color-mix(in srgb, var(--active-item-border) 20%, transparent) 0%,
+      transparent 58%
+    ),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.24) 0%, rgba(0, 0, 0, 0.44) 100%),
+    url('../images/NeonFlex.png') no-repeat,
+    var(--dialog-backdrop);
+  background-position: center, center, center, 50% calc(50% - 280px), center;
+  background-size: auto, auto, auto, min(100vmin, 1024px) auto, auto;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.startup-splash-panel {
+  width: min(980px, 100%);
+  max-height: min(88vh, 860px);
+  overflow: auto;
+  background: color-mix(in srgb, var(--dialog-bg) 74%, var(--app-bg));
+  border: 1px solid color-mix(in srgb, var(--dialog-border) 90%, transparent);
+  border-radius: 14px;
+  box-shadow: 0 22px 48px color-mix(in srgb, var(--context-shadow) 82%, transparent);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.startup-splash-panel h2,
+.startup-splash-panel h3,
+.startup-splash-panel p {
+  margin: 0;
+}
+
+.startup-splash-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.startup-action-card {
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-start;
+  text-align: left;
+  border-radius: 10px;
+}
+
+.startup-action-card > i {
+  width: 28px;
+  min-width: 28px;
+  text-align: center;
+  font-size: 15px;
+  color: color-mix(in srgb, var(--button-text) 90%, var(--active-item-border));
+}
+
+.startup-action-card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.startup-action-card-copy strong {
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.startup-action-card-copy small {
+  font-size: 11px;
+  color: var(--muted-text);
+  line-height: 1.35;
+}
+
+@media (max-width: 860px) {
+  .startup-splash-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+.startup-splash-last-path {
+  font-size: 12px;
+  color: var(--muted-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.startup-splash-recent {
+  border: 1px solid color-mix(in srgb, var(--dialog-border) 64%, transparent);
+  border-radius: 10px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.startup-splash-recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.startup-splash-recent-item {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.startup-splash-recent-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.startup-splash-recent-main > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.startup-splash-recent-icon {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border-radius: 4px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--app-bg) 12%, transparent) 0%,
+      color-mix(in srgb, var(--app-bg) 48%, transparent) 100%
+    ),
+    url('../images/file-icons/file-icon-prjt.png') center/cover no-repeat;
+  border: 1px solid color-mix(in srgb, var(--dialog-border) 72%, transparent);
+}
+
+.startup-splash-recent-item small {
+  color: var(--muted-text);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.startup-splash-empty {
+  color: var(--muted-text);
+  font-size: 12px;
+}
+
 .confirm-dialog {
   width: min(460px, 100%);
   background: var(--dialog-bg);
@@ -1946,7 +2142,7 @@ body.is-resizing-doc-split * {
 
 .tree-list.nested {
   margin-top: 4px;
-  margin-left: 10px;
+  margin-left: 14px;
   padding-left: 8px;
 }
 

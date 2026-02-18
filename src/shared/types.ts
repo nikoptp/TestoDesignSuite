@@ -123,8 +123,19 @@ export type ProjectSnapshot = {
 
 export type ProjectStatusPayload = {
   status: 'success' | 'error' | 'info';
-  action: 'save' | 'save-as' | 'open' | 'new';
+  action: 'save' | 'save-as' | 'open' | 'new' | 'update';
   message: string;
   filePath?: string | null;
   at: number;
+};
+
+export type RecentProjectEntry = {
+  filePath: string;
+  fileName: string;
+  lastOpenedAt: number;
+};
+
+export type LaunchState = {
+  recentProjects: RecentProjectEntry[];
+  lastActiveProjectPath: string | null;
 };

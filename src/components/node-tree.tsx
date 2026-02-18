@@ -2,6 +2,8 @@ import React from 'react';
 import type { CategoryNode } from '../shared/types';
 import { editorTypeMeta } from '../shared/editor-types';
 
+export type NodeDropPosition = 'before' | 'after' | 'inside';
+
 export type NodeTreeViewState = {
   selectedNodeId: string | null;
   editingNodeId: string | null;
@@ -20,10 +22,33 @@ type NodeTreeProps = {
   onToggleNodeCollapsed: (nodeId: string) => void;
   onAddChildNode: (nodeId: string) => void;
   onRequestDeleteNode: (nodeId: string) => void;
+  onMoveNode: (sourceId: string, targetId: string, position: NodeDropPosition) => void;
+};
+
+type NodeDropHint = {
+  targetNodeId: string;
+  position: NodeDropPosition;
 };
 
 type NodeItemProps = NodeTreeProps & {
   node: CategoryNode;
+  draggedNodeId: string | null;
+  dropHint: NodeDropHint | null;
+  onDragStartNode: (event: React.DragEvent, nodeId: string) => void;
+  onDragEndNode: () => void;
+  onDragOverNode: (event: React.DragEvent<HTMLDivElement>, nodeId: string) => void;
+  onDragLeaveNode: (event: React.DragEvent<HTMLDivElement>, nodeId: string) => void;
+  onDropNode: (event: React.DragEvent<HTMLDivElement>, nodeId: string) => void;
+};
+
+type NodeTreeBranchProps = NodeTreeProps & {
+  draggedNodeId: string | null;
+  dropHint: NodeDropHint | null;
+  onDragStartNode: (event: React.DragEvent, nodeId: string) => void;
+  onDragEndNode: () => void;
+  onDragOverNode: (event: React.DragEvent<HTMLDivElement>, nodeId: string) => void;
+  onDragLeaveNode: (event: React.DragEvent<HTMLDivElement>, nodeId: string) => void;
+  onDropNode: (event: React.DragEvent<HTMLDivElement>, nodeId: string) => void;
 };
 
 const NodeItem = ({
@@ -38,15 +63,32 @@ const NodeItem = ({
   onToggleNodeCollapsed,
   onAddChildNode,
   onRequestDeleteNode,
+  onMoveNode,
+  draggedNodeId,
+  dropHint,
+  onDragStartNode,
+  onDragEndNode,
+  onDragOverNode,
+  onDragLeaveNode,
+  onDropNode,
 }: NodeItemProps): React.ReactElement => {
   const isEditing = viewState.editingNodeId === node.id;
   const meta = editorTypeMeta(node.editorType);
   const hasChildren = node.children.length > 0;
   const isCollapsed = hasChildren && collapsedNodeIds.includes(node.id);
+  const isDragged = draggedNodeId === node.id;
+  const isDropBefore = dropHint?.targetNodeId === node.id && dropHint.position === 'before';
+  const isDropAfter = dropHint?.targetNodeId === node.id && dropHint.position === 'after';
+  const isDropInside = dropHint?.targetNodeId === node.id && dropHint.position === 'inside';
 
   return (
     <li>
-      <div className="tree-row">
+      <div
+        className={`tree-row ${isDragged ? 'dragging' : ''} ${isDropBefore ? 'drop-before' : ''} ${isDropAfter ? 'drop-after' : ''} ${isDropInside ? 'drop-inside' : ''}`}
+        onDragOver={(event) => onDragOverNode(event, node.id)}
+        onDragLeave={(event) => onDragLeaveNode(event, node.id)}
+        onDrop={(event) => onDropNode(event, node.id)}
+      >
         <button
           className={`icon-action secondary collapse-toggle ${!hasChildren ? 'invisible' : ''}`}
           title={isCollapsed ? 'Expand node' : 'Collapse node'}
@@ -84,6 +126,9 @@ const NodeItem = ({
             title={meta.label}
             onClick={() => onSelectNode(node.id)}
             onDoubleClick={() => onBeginRename(node.id)}
+            draggable={viewState.editingNodeId === null}
+            onDragStart={(event) => onDragStartNode(event, node.id)}
+            onDragEnd={onDragEndNode}
           >
             <span className="node-category-icon" aria-label={meta.label}>
               <i className={meta.iconClass}></i>
@@ -113,7 +158,7 @@ const NodeItem = ({
 
       {hasChildren && !isCollapsed ? (
         <ul className="tree-list nested">
-          <NodeTree
+          <NodeTreeBranch
             nodes={node.children}
             viewState={viewState}
             collapsedNodeIds={collapsedNodeIds}
@@ -125,6 +170,14 @@ const NodeItem = ({
             onToggleNodeCollapsed={onToggleNodeCollapsed}
             onAddChildNode={onAddChildNode}
             onRequestDeleteNode={onRequestDeleteNode}
+            onMoveNode={onMoveNode}
+            draggedNodeId={draggedNodeId}
+            dropHint={dropHint}
+            onDragStartNode={onDragStartNode}
+            onDragEndNode={onDragEndNode}
+            onDragOverNode={onDragOverNode}
+            onDragLeaveNode={onDragLeaveNode}
+            onDropNode={onDropNode}
           />
         </ul>
       ) : null}
@@ -132,7 +185,7 @@ const NodeItem = ({
   );
 };
 
-export const NodeTree = (props: NodeTreeProps): React.ReactElement => {
+const NodeTreeBranch = (props: NodeTreeBranchProps): React.ReactElement => {
   const { nodes } = props;
 
   return (
@@ -141,5 +194,113 @@ export const NodeTree = (props: NodeTreeProps): React.ReactElement => {
         <NodeItem key={node.id} node={node} {...props} />
       ))}
     </>
+  );
+};
+
+export const NodeTree = (props: NodeTreeProps): React.ReactElement => {
+  const [draggedNodeId, setDraggedNodeId] = React.useState<string | null>(null);
+  const [dropHint, setDropHint] = React.useState<NodeDropHint | null>(null);
+
+  const clearDragState = React.useCallback(() => {
+    setDraggedNodeId(null);
+    setDropHint(null);
+  }, []);
+
+  const onDragStartNode = React.useCallback((event: React.DragEvent, nodeId: string) => {
+    if (props.viewState.editingNodeId) {
+      event.preventDefault();
+      return;
+    }
+
+    setDraggedNodeId(nodeId);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', nodeId);
+  }, [props.viewState.editingNodeId]);
+
+  const onDragEndNode = React.useCallback(() => {
+    clearDragState();
+  }, [clearDragState]);
+
+  const onDragOverNode = React.useCallback(
+    (event: React.DragEvent<HTMLDivElement>, nodeId: string) => {
+      if (props.viewState.editingNodeId) {
+        return;
+      }
+
+      const draggedId = draggedNodeId ?? event.dataTransfer.getData('text/plain');
+      if (!draggedId || draggedId === nodeId) {
+        if (dropHint) {
+          setDropHint(null);
+        }
+        return;
+      }
+
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      const rect = event.currentTarget.getBoundingClientRect();
+      const topThreshold = rect.top + rect.height * 0.28;
+      const bottomThreshold = rect.bottom - rect.height * 0.28;
+      const position: NodeDropPosition =
+        event.clientY < topThreshold
+          ? 'before'
+          : event.clientY > bottomThreshold
+            ? 'after'
+            : 'inside';
+      setDropHint((prev) =>
+        prev && prev.targetNodeId === nodeId && prev.position === position
+          ? prev
+          : { targetNodeId: nodeId, position },
+      );
+    },
+    [draggedNodeId, dropHint, props.viewState.editingNodeId],
+  );
+
+  const onDragLeaveNode = React.useCallback(
+    (event: React.DragEvent<HTMLDivElement>, nodeId: string) => {
+      if (dropHint?.targetNodeId !== nodeId) {
+        return;
+      }
+
+      const relatedTarget = event.relatedTarget;
+      if (relatedTarget instanceof Element && event.currentTarget.contains(relatedTarget)) {
+        return;
+      }
+      setDropHint(null);
+    },
+    [dropHint],
+  );
+
+  const onDropNode = React.useCallback(
+    (event: React.DragEvent<HTMLDivElement>, nodeId: string) => {
+      event.preventDefault();
+      if (props.viewState.editingNodeId) {
+        clearDragState();
+        return;
+      }
+
+      const draggedId = draggedNodeId ?? event.dataTransfer.getData('text/plain');
+      const nextDropHint = dropHint;
+      clearDragState();
+
+      if (!draggedId || !nextDropHint || nextDropHint.targetNodeId !== nodeId) {
+        return;
+      }
+
+      props.onMoveNode(draggedId, nodeId, nextDropHint.position);
+    },
+    [clearDragState, draggedNodeId, dropHint, props],
+  );
+
+  return (
+    <NodeTreeBranch
+      {...props}
+      draggedNodeId={draggedNodeId}
+      dropHint={dropHint}
+      onDragStartNode={onDragStartNode}
+      onDragEndNode={onDragEndNode}
+      onDragOverNode={onDragOverNode}
+      onDragLeaveNode={onDragLeaveNode}
+      onDropNode={onDropNode}
+    />
   );
 };

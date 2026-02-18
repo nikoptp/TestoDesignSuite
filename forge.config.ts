@@ -7,6 +7,8 @@ import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-nati
 import { WebpackPlugin } from '@electron-forge/plugin-webpack';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
+import { readdir, unlink } from 'node:fs/promises';
+import path from 'node:path';
 
 import { mainConfig } from './webpack.main.config';
 import { rendererConfig } from './webpack.renderer.config';
@@ -14,10 +16,31 @@ import { rendererConfig } from './webpack.renderer.config';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    icon: './images/icon',
+  },
+  hooks: {
+    packageAfterExtract: async (_forgeConfig, buildPath) => {
+      const localesDir = path.join(buildPath, 'locales');
+      let entries: string[] = [];
+      try {
+        entries = await readdir(localesDir);
+      } catch {
+        return;
+      }
+
+      const keep = new Set(['en-US.pak']);
+      await Promise.all(
+        entries
+          .filter((entry) => entry.toLowerCase().endsWith('.pak') && !keep.has(entry))
+          .map((entry) => unlink(path.join(localesDir, entry))),
+      );
+    },
   },
   rebuildConfig: {},
   makers: [
-    new MakerSquirrel({}),
+    new MakerSquirrel({
+      setupIcon: './images/icon.ico',
+    }),
     new MakerZIP({}, ['darwin']),
     new MakerRpm({}),
     new MakerDeb({}),
