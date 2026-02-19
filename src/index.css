@@ -71,6 +71,8 @@
   --chrome-outline: #000000;
   --swatch-outline: #000000;
   --quick-swatch-contrast: #000000;
+  --splash-image-shadow-start: rgba(0, 0, 0, 0.24);
+  --splash-image-shadow-end: rgba(0, 0, 0, 0.44);
 
   color: var(--app-text);
   background: var(--app-bg);
@@ -150,6 +152,8 @@
   --chrome-outline: #000000;
   --swatch-outline: #000000;
   --quick-swatch-contrast: #000000;
+  --splash-image-shadow-start: rgba(0, 0, 0, 0.24);
+  --splash-image-shadow-end: rgba(0, 0, 0, 0.44);
 }
 
 :root[data-theme='evergreen'] {
@@ -225,6 +229,8 @@
   --chrome-outline: #000000;
   --swatch-outline: #000000;
   --quick-swatch-contrast: #000000;
+  --splash-image-shadow-start: rgba(0, 0, 0, 0.24);
+  --splash-image-shadow-end: rgba(0, 0, 0, 0.44);
 }
 
 * {
@@ -1676,7 +1682,11 @@ body.is-resizing-doc-split * {
       color-mix(in srgb, var(--active-item-border) 20%, transparent) 0%,
       transparent 58%
     ),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.24) 0%, rgba(0, 0, 0, 0.44) 100%),
+    linear-gradient(
+      180deg,
+      var(--splash-image-shadow-start) 0%,
+      var(--splash-image-shadow-end) 100%
+    ),
     url('../images/NeonFlex.png') no-repeat,
     var(--dialog-backdrop);
   background-position: center, center, center, 50% calc(50% - 280px), center;

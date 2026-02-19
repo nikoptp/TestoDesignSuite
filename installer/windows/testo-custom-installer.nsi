@@ -22,15 +22,16 @@
 !define MUI_BGCOLOR "0B1018"
 !define MUI_TEXTCOLOR "E8ECFF"
 !define MUI_WELCOMEPAGE_TITLE "Welcome to the ${APP_NAME} Setup Wizard"
-!define MUI_WELCOMEPAGE_TEXT "This wizard will guide you through the installation of ${APP_NAME}.$\r$\n$\r$\nChoose where the app is installed, set your default project folder, and select optional startup shortcuts."
+!define MUI_WELCOMEPAGE_TEXT "This wizard will guide you through the installation of ${APP_NAME}.$\r$\n$\r$\nSet your default project folder and select optional startup shortcuts."
 !define MUI_FINISHPAGE_TITLE "Completing the ${APP_NAME} Setup Wizard"
 !define MUI_FINISHPAGE_TEXT "Setup has finished installing ${APP_NAME} on your computer."
 
 Name "${APP_NAME}"
 OutFile "..\..\out\custom-installer\testo-design-suite-${APP_VERSION}.exe"
-InstallDir "$PROGRAMFILES64\${APP_DIR_NAME}"
+InstallDir "$LOCALAPPDATA\Programs\${APP_DIR_NAME}"
 InstallDirRegKey HKCU "Software\${APP_ID}" "InstallDir"
-RequestExecutionLevel admin
+RequestExecutionLevel user
+SetShellVarContext current
 Unicode true
 SetCompressor /SOLID lzma
 ShowInstDetails show
@@ -43,7 +44,6 @@ Var ProjectDirPath
 
 !define MUI_ABORTWARNING
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_DIRECTORY
 Page custom ProjectDirPageCreate ProjectDirPageLeave
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
@@ -98,7 +98,9 @@ Section "Uninstall"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}"
   Call un.UnregisterFileAssociations
 
+  IfFileExists "$INSTDIR\${APP_EXE}" 0 done
   RMDir /r "$INSTDIR"
+  done:
 SectionEnd
 
 Function .onInstSuccess
