@@ -4,6 +4,8 @@ const path = require('node:path');
 
 const projectRoot = path.resolve(__dirname, '..');
 const mainPath = path.join(projectRoot, 'src', 'index.ts');
+const jsonStorePath = path.join(projectRoot, 'src', 'main', 'json-file-store.ts');
+const appMenuPath = path.join(projectRoot, 'src', 'main', 'app-menu.ts');
 const projectLifecyclePath = path.join(
   projectRoot,
   'src',
@@ -14,6 +16,8 @@ const projectLifecyclePath = path.join(
 );
 
 const mainSource = fs.readFileSync(mainPath, 'utf8');
+const jsonStoreSource = fs.readFileSync(jsonStorePath, 'utf8');
+const appMenuSource = fs.readFileSync(appMenuPath, 'utf8');
 const projectLifecycleSource = fs.readFileSync(projectLifecyclePath, 'utf8');
 
 const run = (name, fn) => {
@@ -33,7 +37,7 @@ const run = (name, fn) => {
 
 run('safeWriteFile keeps temp-write + atomic rename pattern', () => {
   assert.match(
-    mainSource,
+    jsonStoreSource,
     /const safeWriteFile = async[\s\S]*?await maybeBackupFile\(filePath\);[\s\S]*?const tempPath = `\$\{filePath\}\.tmp`[\s\S]*?await writeFile\(tempPath, content\);[\s\S]*?await rename\(tempPath, filePath\);/m,
     'Expected safeWriteFile to backup, write temp file, then rename atomically',
   );
@@ -72,10 +76,9 @@ run('file menu keeps expected project lifecycle accelerators', () => {
   expectedAccelerators.forEach((accelerator) => {
     const escaped = accelerator.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     assert.match(
-      mainSource,
+      appMenuSource,
       new RegExp(`accelerator:\\s*'${escaped}'`),
       `Expected menu accelerator ${accelerator} to be present`,
     );
   });
 });
-

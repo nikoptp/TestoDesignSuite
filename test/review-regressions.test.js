@@ -4,6 +4,8 @@ const path = require('node:path');
 
 const projectRoot = path.resolve(__dirname, '..');
 const indexPath = path.join(projectRoot, 'src', 'index.ts');
+const workspacePathsPath = path.join(projectRoot, 'src', 'main', 'workspace-paths.ts');
+const projectBundlePath = path.join(projectRoot, 'src', 'main', 'project-bundle.ts');
 const themeControllerPath = path.join(
   projectRoot,
   'src',
@@ -22,6 +24,8 @@ const treeActionsPath = path.join(
 );
 
 const indexSource = fs.readFileSync(indexPath, 'utf8');
+const workspacePathsSource = fs.readFileSync(workspacePathsPath, 'utf8');
+const projectBundleSource = fs.readFileSync(projectBundlePath, 'utf8');
 const themeControllerSource = fs.readFileSync(themeControllerPath, 'utf8');
 const treeActionsSource = fs.readFileSync(treeActionsPath, 'utf8');
 
@@ -42,28 +46,33 @@ const run = (name, fn) => {
 
 run('main process avoids process.cwd for workspace storage', () => {
   assert.match(
-    indexSource,
-    /const getProjectWorkspaceRoot = \(\): string => path\.join\(app\.getPath\('userData'\), 'workspace'\);/,
-    'Expected workspace root to be derived from Electron userData path',
+    workspacePathsSource,
+    /const getDefaultWorkspaceRoot = \(\): string => path\.join\(app\.getPath\('userData'\), 'workspace'\);/,
+    'Expected default workspace root to be derived from Electron userData path',
+  );
+  assert.match(
+    workspacePathsSource,
+    /const getProjectWorkspaceRoot = \(\): string => \{/,
+    'Expected project workspace root resolver to exist',
   );
   assert.ok(
-    !/path\.join\(process\.cwd\(\), 'project-assets', 'images'\)/.test(indexSource),
+    !/path\.join\(process\.cwd\(\), 'project-assets', 'images'\)/.test(workspacePathsSource),
     'Did not expect project assets path to use process.cwd()',
   );
   assert.ok(
-    !/path\.relative\(process\.cwd\(\), absolutePath\)/.test(indexSource),
+    !/path\.relative\(process\.cwd\(\), absolutePath\)/.test(workspacePathsSource),
     'Did not expect relative asset paths to be derived from process.cwd()',
   );
 });
 
 run('project bundle import clears stale persisted tree/settings when null', () => {
   assert.match(
-    indexSource,
+    projectBundleSource,
     /if \(bundle\.treeState\) \{\s*await saveTreeState\(bundle\.treeState\);\s*\} else \{\s*await removeFileIfExists\(getTreeStatePath\(\)\);\s*\}/s,
     'Expected tree-state file cleanup when imported bundle omits treeState',
   );
   assert.match(
-    indexSource,
+    projectBundleSource,
     /if \(bundle\.userSettings\) \{\s*await saveUserSettings\(bundle\.userSettings\);\s*\} else \{\s*await removeFileIfExists\(getUserSettingsPath\(\)\);\s*\}/s,
     'Expected user-settings file cleanup when imported bundle omits userSettings',
   );
@@ -94,4 +103,3 @@ run('node creation validates parent before recording history', () => {
     'Expected parent validation before pushHistory in create-node action',
   );
 });
-
