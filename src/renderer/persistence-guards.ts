@@ -22,6 +22,55 @@ const isNode = (value: unknown): value is CategoryNode => {
   );
 };
 
+const isKanbanCard = (card: unknown): boolean => {
+  if (typeof card !== 'object' || card === null) {
+    return false;
+  }
+  const item = card as {
+    id?: unknown;
+    title?: unknown;
+    markdown?: unknown;
+    taskNumber?: unknown;
+    priority?: unknown;
+    columnId?: unknown;
+    collaboration?: unknown;
+    createdAt?: unknown;
+    updatedAt?: unknown;
+  };
+  const collaboration = item.collaboration;
+  const watcherIds = (collaboration as { watcherIds?: unknown } | undefined)?.watcherIds;
+  const collaborationValid =
+    typeof collaboration === 'undefined' ||
+    (typeof collaboration === 'object' &&
+      collaboration !== null &&
+      !Array.isArray(collaboration) &&
+      ((collaboration as { assigneeId?: unknown }).assigneeId === undefined ||
+        typeof (collaboration as { assigneeId?: unknown }).assigneeId === 'string' ||
+        (collaboration as { assigneeId?: unknown }).assigneeId === null) &&
+      ((collaboration as { createdById?: unknown }).createdById === undefined ||
+        typeof (collaboration as { createdById?: unknown }).createdById === 'string' ||
+        (collaboration as { createdById?: unknown }).createdById === null) &&
+      (watcherIds === undefined ||
+        (Array.isArray(watcherIds) && watcherIds.every((value) => typeof value === 'string'))));
+
+  return (
+    typeof item.id === 'string' &&
+    typeof item.title === 'string' &&
+    typeof item.markdown === 'string' &&
+    typeof item.taskNumber === 'number' &&
+    Number.isInteger(item.taskNumber) &&
+    item.taskNumber >= 1 &&
+    (item.priority === 'none' ||
+      item.priority === 'low' ||
+      item.priority === 'medium' ||
+      item.priority === 'high') &&
+    typeof item.columnId === 'string' &&
+    collaborationValid &&
+    typeof item.createdAt === 'number' &&
+    typeof item.updatedAt === 'number'
+  );
+};
+
 const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
   if (typeof value !== 'object' || value === null) {
     return false;
@@ -30,6 +79,7 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
   const obj = value as {
     noteboard?: unknown;
     document?: unknown;
+    kanban?: unknown;
   };
 
   if (typeof obj.noteboard !== 'undefined') {
@@ -100,6 +150,58 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
     }
   }
 
+  if (typeof obj.kanban !== 'undefined') {
+    if (typeof obj.kanban !== 'object' || obj.kanban === null) {
+      return false;
+    }
+    const kanban = obj.kanban as {
+      columns?: unknown;
+      cards?: unknown;
+      nextTaskNumber?: unknown;
+      collapsedColumnIds?: unknown;
+    };
+    if (
+      !Array.isArray(kanban.columns) ||
+      !Array.isArray(kanban.cards) ||
+      typeof kanban.nextTaskNumber !== 'number' ||
+      !Number.isInteger(kanban.nextTaskNumber) ||
+      kanban.nextTaskNumber < 1
+    ) {
+      return false;
+    }
+
+    const columnsValid = kanban.columns.every((column) => {
+      if (typeof column !== 'object' || column === null) {
+        return false;
+      }
+      const item = column as {
+        id?: unknown;
+        name?: unknown;
+        color?: unknown;
+      };
+      return (
+        typeof item.id === 'string' &&
+        typeof item.name === 'string' &&
+        typeof item.color === 'string'
+      );
+    });
+    if (!columnsValid) {
+      return false;
+    }
+
+    if (!kanban.cards.every((card) => isKanbanCard(card))) {
+      return false;
+    }
+
+    if (
+      typeof kanban.collapsedColumnIds !== 'undefined' &&
+      (!Array.isArray(kanban.collapsedColumnIds) ||
+        !kanban.collapsedColumnIds.every((id) => typeof id === 'string'))
+    ) {
+      return false;
+    }
+  }
+
   return true;
 };
 
@@ -113,6 +215,7 @@ export const isPersistedTreeState = (value: unknown): value is PersistedTreeStat
     selectedNodeId?: unknown;
     nextNodeNumber?: unknown;
     nodeDataById?: unknown;
+    sharedKanbanBacklogCards?: unknown;
     sidebarWidth?: unknown;
     collapsedNodeIds?: unknown;
   };
@@ -134,6 +237,10 @@ export const isPersistedTreeState = (value: unknown): value is PersistedTreeStat
     typeof obj.collapsedNodeIds === 'undefined' ||
     (Array.isArray(obj.collapsedNodeIds) &&
       obj.collapsedNodeIds.every((id) => typeof id === 'string'));
+  const sharedKanbanBacklogCardsValid =
+    typeof obj.sharedKanbanBacklogCards === 'undefined' ||
+    (Array.isArray(obj.sharedKanbanBacklogCards) &&
+      obj.sharedKanbanBacklogCards.every((card) => isKanbanCard(card)));
 
   return (
     Array.isArray(obj.nodes) &&
@@ -143,6 +250,7 @@ export const isPersistedTreeState = (value: unknown): value is PersistedTreeStat
     Number.isInteger(obj.nextNodeNumber) &&
     obj.nextNodeNumber >= 1 &&
     nodeDataValid &&
+    sharedKanbanBacklogCardsValid &&
     sidebarWidthValid &&
     collapsedNodeIdsValid
   );

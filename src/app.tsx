@@ -1,6 +1,7 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type {
+  KanbanPriority,
   LaunchState,
   PersistedTreeState,
   ProjectImageAsset,
@@ -24,6 +25,7 @@ import { CreateNodeDialog, DeleteNodeDialog, SettingsDialog } from './components
 import { EditorPanel } from './components/editor-panel';
 import { NoteboardCanvas } from './components/noteboard-canvas';
 import { DocumentEditor } from './components/document-editor';
+import { KanbanBoard } from './components/kanban-board';
 import { StartupSplash } from './components/startup-splash';
 import {
   useProjectBootstrap,
@@ -62,7 +64,10 @@ import {
   defaultSettings,
   defaultState,
   ensureNoteboardData,
+  ensureKanbanData,
   getCardsForNode,
+  getKanbanBoardForNode,
+  getSharedKanbanBacklogCards,
   getDocumentMarkdownForNode,
   getStrokesForNode,
   getThemeCardColor,
@@ -74,6 +79,18 @@ import {
   sanitizeDrawingPresetColors,
   themeOptions,
 } from './features/app/app-model';
+import {
+  addKanbanColumn,
+  createKanbanCard,
+  deleteKanbanCard,
+  deleteKanbanColumn,
+  migrateKanbanCards,
+  moveKanbanCard,
+  pasteKanbanCard,
+  recolorKanbanColumn,
+  renameKanbanColumn,
+  updateKanbanCard,
+} from './features/app/kanban-state';
 
 const SKIP_SPLASH_ONCE_KEY = 'testo.splash.skipOnce';
 const SKIP_SPLASH_QUERY_PARAM = 'skipSplashOnce';
@@ -542,6 +559,14 @@ export const App = (): React.ReactElement => {
     setState((prev) => ensureNoteboardData(prev, selectedNode.id));
   }, [selectedNode]);
 
+  React.useEffect(() => {
+    if (!selectedNode || selectedNode.editorType !== 'kanban-board') {
+      return;
+    }
+
+    setState((prev) => ensureKanbanData(prev, selectedNode.id));
+  }, [selectedNode]);
+
   const pendingDeleteNode = React.useMemo(
     () => findNodeById(state.nodes, uiState.pendingDeleteNodeId),
     [state.nodes, uiState.pendingDeleteNodeId],
@@ -577,9 +602,37 @@ export const App = (): React.ReactElement => {
         : []
       : [];
   const selectedDocumentMarkdown =
-    selectedNode && selectedNode.editorType !== 'noteboard'
+    selectedNode &&
+    selectedNode.editorType !== 'noteboard' &&
+    selectedNode.editorType !== 'kanban-board'
       ? getDocumentMarkdownForNode(state, selectedNode.id)
       : '';
+  const selectedKanban =
+    selectedNode && selectedNode.editorType === 'kanban-board'
+      ? getKanbanBoardForNode(state, selectedNode.id)
+      : null;
+  const sharedKanbanBacklogCards = getSharedKanbanBacklogCards(state);
+
+  const collectKanbanNodes = React.useCallback((nodes: typeof state.nodes): Array<{ nodeId: string; name: string }> => {
+    const result: Array<{ nodeId: string; name: string }> = [];
+    const visit = (items: typeof state.nodes): void => {
+      items.forEach((node) => {
+        if (node.editorType === 'kanban-board') {
+          result.push({ nodeId: node.id, name: node.name });
+        }
+        if (node.children.length > 0) {
+          visit(node.children);
+        }
+      });
+    };
+    visit(nodes);
+    return result;
+  }, []);
+
+  const kanbanMigrateTargets =
+    selectedNode && selectedNode.editorType === 'kanban-board'
+      ? collectKanbanNodes(state.nodes).filter((node) => node.nodeId !== selectedNode.id)
+      : [];
 
   const selectionRect =
     uiState.selectionBox &&
@@ -909,6 +962,199 @@ export const App = (): React.ReactElement => {
     showStatus: ({ status, message }) => showTransientProjectStatus(status, message),
   });
 
+  const onKanbanCreateCard = React.useCallback(
+    (columnId: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'kanban-board') {
+        return;
+      }
+
+      pushHistory();
+      setState((prev) => createKanbanCard(prev, selectedNode.id, columnId));
+    },
+    [pushHistory, selectedNode],
+  );
+
+  const onKanbanMoveCard = React.useCallback(
+    (input: {
+      cardId: string;
+      fromSharedBacklog: boolean;
+      toColumnId: string;
+      toIndex: number;
+    }): void => {
+      if (!selectedNode || selectedNode.editorType !== 'kanban-board') {
+        return;
+      }
+
+      pushHistory();
+      setState((prev) => moveKanbanCard(prev, selectedNode.id, input));
+    },
+    [pushHistory, selectedNode],
+  );
+
+  const onKanbanCardTitleChange = React.useCallback(
+    (cardId: string, fromSharedBacklog: boolean, title: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'kanban-board') {
+        return;
+      }
+
+      setState((prev) =>
+        updateKanbanCard(prev, selectedNode.id, {
+          cardId,
+          fromSharedBacklog,
+          patch: { title },
+        }),
+      );
+    },
+    [selectedNode],
+  );
+
+  const onKanbanCardPriorityChange = React.useCallback(
+    (cardId: string, fromSharedBacklog: boolean, priority: KanbanPriority): void => {
+      if (!selectedNode || selectedNode.editorType !== 'kanban-board') {
+        return;
+      }
+      setState((prev) =>
+        updateKanbanCard(prev, selectedNode.id, {
+          cardId,
+          fromSharedBacklog,
+          patch: { priority },
+        }),
+      );
+    },
+    [selectedNode],
+  );
+
+  const onKanbanCardMarkdownChange = React.useCallback(
+    (cardId: string, fromSharedBacklog: boolean, markdown: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'kanban-board') {
+        return;
+      }
+      setState((prev) =>
+        updateKanbanCard(prev, selectedNode.id, {
+          cardId,
+          fromSharedBacklog,
+          patch: { markdown },
+        }),
+      );
+    },
+    [selectedNode],
+  );
+
+  const onKanbanAddColumn = React.useCallback((): void => {
+    if (!selectedNode || selectedNode.editorType !== 'kanban-board') {
+      return;
+    }
+    pushHistory();
+    setState((prev) => addKanbanColumn(prev, selectedNode.id));
+  }, [pushHistory, selectedNode]);
+
+  const onKanbanRenameColumn = React.useCallback(
+    (columnId: string, name: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'kanban-board') {
+        return;
+      }
+      setState((prev) => renameKanbanColumn(prev, selectedNode.id, columnId, name));
+    },
+    [selectedNode],
+  );
+
+  const onKanbanColumnColorChange = React.useCallback(
+    (columnId: string, color: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'kanban-board') {
+        return;
+      }
+      setState((prev) => recolorKanbanColumn(prev, selectedNode.id, columnId, color));
+    },
+    [selectedNode],
+  );
+
+  const onKanbanDeleteColumn = React.useCallback(
+    (columnId: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'kanban-board' || columnId === 'backlog') {
+        return;
+      }
+      pushHistory();
+      setState((prev) => deleteKanbanColumn(prev, selectedNode.id, columnId));
+    },
+    [pushHistory, selectedNode],
+  );
+
+  const onKanbanMigrate = React.useCallback(
+    (targetNodeId: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'kanban-board') {
+        return;
+      }
+      if (!targetNodeId || targetNodeId === selectedNode.id) {
+        return;
+      }
+
+      pushHistory();
+      setState((prev) => migrateKanbanCards(prev, selectedNode.id, targetNodeId));
+    },
+    [pushHistory, selectedNode],
+  );
+
+  const onKanbanToggleColumnCollapsed = React.useCallback(
+    (columnId: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'kanban-board') {
+        return;
+      }
+      setState((prev) => {
+        const next = ensureKanbanData(prev, selectedNode.id);
+        const workspace = next.nodeDataById[selectedNode.id] ?? {};
+        const board = getKanbanBoardForNode(next, selectedNode.id);
+        const current = board.collapsedColumnIds ?? [];
+        const nextCollapsed = current.includes(columnId)
+          ? current.filter((id) => id !== columnId)
+          : [...current, columnId];
+
+        return {
+          ...next,
+          nodeDataById: {
+            ...next.nodeDataById,
+            [selectedNode.id]: {
+              ...workspace,
+              kanban: {
+                ...board,
+                collapsedColumnIds: nextCollapsed,
+              },
+            },
+          },
+        };
+      });
+    },
+    [selectedNode],
+  );
+
+  const onKanbanDeleteCard = React.useCallback(
+    (cardId: string, fromSharedBacklog: boolean): void => {
+      if (!selectedNode || selectedNode.editorType !== 'kanban-board') {
+        return;
+      }
+      pushHistory();
+      setState((prev) => deleteKanbanCard(prev, selectedNode.id, cardId, fromSharedBacklog));
+    },
+    [pushHistory, selectedNode],
+  );
+
+  const onKanbanPasteCard = React.useCallback(
+    (
+      targetColumnId: string,
+      draft: {
+        title: string;
+        markdown: string;
+        priority: KanbanPriority;
+      },
+    ): void => {
+      if (!selectedNode || selectedNode.editorType !== 'kanban-board') {
+        return;
+      }
+      pushHistory();
+      setState((prev) => pasteKanbanCard(prev, selectedNode.id, { targetColumnId, draft }));
+    },
+    [pushHistory, selectedNode],
+  );
+
   return (
     <motion.div
       ref={shellRef}
@@ -1077,6 +1323,36 @@ export const App = (): React.ReactElement => {
                 onCreateCardAtContextMenu={onCreateCardAtContextMenu}
                 onPasteTextAtContextMenu={onPasteTextAtContextMenu}
                 onCreateCardAtPointAndEdit={onCreateCardAtPointAndEdit}
+              />
+            </motion.div>
+          ) : selectedNode && selectedNode.editorType === 'kanban-board' && selectedKanban ? (
+            <motion.div
+              key={`kanban-${selectedNode.id}`}
+              className="main-view"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+            >
+              <KanbanBoard
+                columns={selectedKanban.columns}
+                boardCards={selectedKanban.cards}
+                sharedBacklogCards={sharedKanbanBacklogCards}
+                collapsedColumnIds={selectedKanban.collapsedColumnIds}
+                migrateTargets={kanbanMigrateTargets}
+                onCreateCard={onKanbanCreateCard}
+                onMoveCard={onKanbanMoveCard}
+                onCardTitleChange={onKanbanCardTitleChange}
+                onCardPriorityChange={onKanbanCardPriorityChange}
+                onCardMarkdownChange={onKanbanCardMarkdownChange}
+                onDeleteCard={onKanbanDeleteCard}
+                onPasteCard={onKanbanPasteCard}
+                onAddColumn={onKanbanAddColumn}
+                onRenameColumn={onKanbanRenameColumn}
+                onColumnColorChange={onKanbanColumnColorChange}
+                onDeleteColumn={onKanbanDeleteColumn}
+                onMigrate={onKanbanMigrate}
+                onToggleColumnCollapsed={onKanbanToggleColumnCollapsed}
               />
             </motion.div>
           ) : selectedNode ? (

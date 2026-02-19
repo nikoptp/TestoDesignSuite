@@ -8,6 +8,7 @@ export type EditorTypeOption = {
 
 export const editorTypeOptions: EditorTypeOption[] = [
   { value: 'noteboard', label: 'Noteboard', iconClass: 'fa-regular fa-note-sticky' },
+  { value: 'kanban-board', label: 'Kanban Board', iconClass: 'fa-solid fa-table-columns' },
   { value: 'story-document', label: 'Story Document', iconClass: 'fa-solid fa-file-lines' },
   { value: 'story-presentation', label: 'Story Presentation', iconClass: 'fa-solid fa-clapperboard' },
   { value: 'lore-document', label: 'Lore Document', iconClass: 'fa-solid fa-book-open' },

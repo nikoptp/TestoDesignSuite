@@ -36,12 +36,20 @@ const treeUtilsModule = require(path.join(
   'shared',
   'tree-utils.js',
 ));
+const appModelModule = require(path.join(
+  projectRoot,
+  '.test-dist',
+  'features',
+  'app',
+  'app-model.js',
+));
 
 const { createHistoryStack } = historyStackModule;
 const { isPersistedTreeState } = persistenceGuardsModule;
 const { sanitizeThemeTokenOverrides, createCustomThemeDefinition } = themeSchemaModule;
 const { buildImportedThemeState } = themeControllerModule;
 const { createNode, removeNodeById, findNodeById } = treeUtilsModule;
+const { KANBAN_DEFAULT_COLUMNS, ensureKanbanData } = appModelModule;
 
 const run = (name, fn) => {
   try {
@@ -109,6 +117,144 @@ run('persistence guard accepts modern noteboard payload with strokes/view', () =
   };
 
   assert.equal(isPersistedTreeState(state), true);
+});
+
+run('persistence guard accepts kanban state with shared backlog cards', () => {
+  const state = {
+    nodes: [
+      {
+        id: 'node-kanban',
+        name: 'Kanban',
+        editorType: 'kanban-board',
+        children: [],
+      },
+    ],
+    selectedNodeId: 'node-kanban',
+    nextNodeNumber: 2,
+    nodeDataById: {
+      'node-kanban': {
+        kanban: {
+          columns: KANBAN_DEFAULT_COLUMNS.map((column) => ({ ...column })),
+          cards: [
+            {
+              id: 'board-card-1',
+              title: 'Board task',
+              markdown: 'Board details',
+              taskNumber: 1,
+              priority: 'medium',
+              columnId: 'todo',
+              collaboration: {
+                assigneeId: 'user-1',
+                createdById: 'user-2',
+                watcherIds: ['user-3'],
+              },
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            },
+          ],
+          nextTaskNumber: 2,
+        },
+      },
+    },
+    sharedKanbanBacklogCards: [
+      {
+        id: 'shared-1',
+        title: 'Shared task',
+        markdown: 'Shared details',
+        taskNumber: 99,
+        priority: 'low',
+        columnId: 'backlog',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ],
+  };
+
+  assert.equal(isPersistedTreeState(state), true);
+});
+
+run('persistence guard rejects kanban state with invalid card markdown', () => {
+  const invalidState = {
+    nodes: [
+      {
+        id: 'node-kanban',
+        name: 'Kanban',
+        editorType: 'kanban-board',
+        children: [],
+      },
+    ],
+    selectedNodeId: 'node-kanban',
+    nextNodeNumber: 2,
+    nodeDataById: {
+      'node-kanban': {
+        kanban: {
+          columns: KANBAN_DEFAULT_COLUMNS.map((column) => ({ ...column })),
+          cards: [
+            {
+              id: 'broken-card',
+              title: 'Broken task',
+              markdown: 123,
+              taskNumber: 1,
+              priority: 'none',
+              columnId: 'todo',
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            },
+          ],
+          nextTaskNumber: 2,
+        },
+      },
+    },
+  };
+
+  assert.equal(isPersistedTreeState(invalidState), false);
+});
+
+run('ensureKanbanData migrates legacy Backlog column ids to canonical backlog', () => {
+  const now = Date.now();
+  const legacyState = {
+    nodes: [
+      {
+        id: 'node-kanban',
+        name: 'Legacy Kanban',
+        editorType: 'kanban-board',
+        children: [],
+      },
+    ],
+    selectedNodeId: 'node-kanban',
+    nextNodeNumber: 2,
+    nodeDataById: {
+      'node-kanban': {
+        kanban: {
+          columns: [
+            { id: 'legacy-backlog', name: 'Backlog', color: '#5f6f8a' },
+            { id: 'todo', name: 'To Do', color: '#4e6d91' },
+          ],
+          cards: [
+            {
+              id: 'task-1',
+              title: 'Task from legacy backlog',
+              markdown: '',
+              taskNumber: 1,
+              priority: 'none',
+              columnId: 'legacy-backlog',
+              createdAt: now,
+              updatedAt: now,
+            },
+          ],
+          nextTaskNumber: 2,
+        },
+      },
+    },
+    sharedKanbanBacklogCards: [],
+  };
+
+  const normalized = ensureKanbanData(legacyState, 'node-kanban');
+  const columns = normalized.nodeDataById['node-kanban'].kanban.columns;
+  const backlogColumns = columns.filter((column) => column.id === 'backlog');
+
+  assert.equal(backlogColumns.length, 1);
+  assert.equal(normalized.nodeDataById['node-kanban'].kanban.cards[0].columnId, 'backlog');
 });
 
 run('theme token sanitizer drops unknown and unsafe values', () => {

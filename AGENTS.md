@@ -37,6 +37,7 @@
 - Prefer small, composable modules over monolithic files.
 - Separate views and components into separate files when possible.
 - Move reused functions into library files so they are easy to access across the application.
+- For editors and interactive views, implement quick actions and action history by default where applicable (keyboard shortcuts, context actions, and undo/redo-safe mutations).
 - Run lint before finalizing code changes.
 - Avoid destructive git commands unless explicitly requested.
 

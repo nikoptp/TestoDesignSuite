@@ -1,5 +1,6 @@
 export type EditorType =
   | 'noteboard'
+  | 'kanban-board'
   | 'story-document'
   | 'story-presentation'
   | 'lore-document'
@@ -18,6 +19,7 @@ export type PersistedTreeState = {
   selectedNodeId: string | null;
   nextNodeNumber: number;
   nodeDataById: Record<string, NodeWorkspaceData>;
+  sharedKanbanBacklogCards?: KanbanCard[];
   sidebarWidth?: number;
   collapsedNodeIds?: string[];
 };
@@ -67,6 +69,30 @@ export type NoteboardStroke = {
   points: NoteboardStrokePoint[];
 };
 
+export type KanbanPriority = 'none' | 'low' | 'medium' | 'high';
+
+export type KanbanColumn = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+export type KanbanCard = {
+  id: string;
+  title: string;
+  markdown: string;
+  taskNumber: number;
+  priority: KanbanPriority;
+  columnId: string;
+  collaboration?: {
+    assigneeId?: string | null;
+    createdById?: string | null;
+    watcherIds?: string[];
+  };
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type NodeWorkspaceData = {
   noteboard?: {
     cards: NoteboardCard[];
@@ -79,6 +105,12 @@ export type NodeWorkspaceData = {
   };
   document?: {
     markdown: string;
+  };
+  kanban?: {
+    columns: KanbanColumn[];
+    cards: KanbanCard[];
+    nextTaskNumber: number;
+    collapsedColumnIds?: string[];
   };
 };
 

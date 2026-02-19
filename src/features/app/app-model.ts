@@ -2,6 +2,9 @@ import type {
   AppTheme,
   CardTemplate,
   CategoryNode,
+  KanbanCard,
+  KanbanColumn,
+  KanbanPriority,
   NoteboardBrushType,
   NoteboardCard,
   NoteboardStroke,
@@ -244,6 +247,7 @@ export const defaultState: PersistedTreeState = {
   selectedNodeId: 'node-1',
   nextNodeNumber: 4,
   nodeDataById: {},
+  sharedKanbanBacklogCards: [],
   sidebarWidth: 320,
   collapsedNodeIds: [],
 };
@@ -677,6 +681,199 @@ export const getViewForNode = (state: PersistedTreeState, nodeId: string): Noteb
 
 export const getDocumentMarkdownForNode = (state: PersistedTreeState, nodeId: string): string =>
   state.nodeDataById[nodeId]?.document?.markdown ?? '';
+
+export const KANBAN_DEFAULT_COLUMNS: KanbanColumn[] = [
+  { id: 'backlog', name: 'Backlog', color: '#5f6f8a' },
+  { id: 'todo', name: 'To Do', color: '#4e6d91' },
+  { id: 'doing', name: 'Doing', color: '#d4b63a' },
+  { id: 'done', name: 'Done', color: '#5b9a5b' },
+];
+
+export const KANBAN_PRIORITY_ORDER: KanbanPriority[] = ['none', 'low', 'medium', 'high'];
+
+export const getKanbanBoardForNode = (
+  state: PersistedTreeState,
+  nodeId: string,
+): {
+  columns: KanbanColumn[];
+  cards: KanbanCard[];
+  nextTaskNumber: number;
+  collapsedColumnIds: string[];
+} => {
+  const kanban = state.nodeDataById[nodeId]?.kanban;
+  return {
+    columns: kanban?.columns ?? KANBAN_DEFAULT_COLUMNS,
+    cards: kanban?.cards ?? [],
+    nextTaskNumber: kanban?.nextTaskNumber ?? 1,
+    collapsedColumnIds: kanban?.collapsedColumnIds ?? [],
+  };
+};
+
+export const getSharedKanbanBacklogCards = (state: PersistedTreeState): KanbanCard[] =>
+  state.sharedKanbanBacklogCards ?? [];
+
+export const ensureKanbanData = (
+  state: PersistedTreeState,
+  nodeId: string,
+): PersistedTreeState => {
+  const workspace = state.nodeDataById[nodeId];
+  const kanban = workspace?.kanban;
+
+  const sourceColumns = Array.isArray(kanban?.columns) ? kanban.columns : KANBAN_DEFAULT_COLUMNS;
+  const seenColumnIds = new Set<string>();
+  const legacyToNormalizedColumnId = new Map<string, string>();
+  const columns = sourceColumns
+    .filter((column) => typeof column?.id === 'string' && typeof column?.name === 'string')
+    .map((column) => {
+      const rawId = column.id.trim();
+      const normalizedName = column.name.trim() || 'Column';
+      const isBacklogByName = normalizedName.toLowerCase() === 'backlog';
+      const normalizedIdBase =
+        rawId.toLowerCase().replace(/[^a-z0-9-_]+/g, '-') || 'column';
+      const normalizedId = isBacklogByName ? 'backlog' : normalizedIdBase;
+      let nextId = normalizedId;
+      let suffix = 2;
+      while (seenColumnIds.has(nextId)) {
+        nextId = `${normalizedId}-${suffix}`;
+        suffix += 1;
+      }
+      seenColumnIds.add(nextId);
+      if (rawId) {
+        legacyToNormalizedColumnId.set(rawId, nextId);
+      }
+      return {
+        id: nextId,
+        name: isBacklogByName ? 'Backlog' : normalizedName,
+        color:
+          typeof (column as Partial<KanbanColumn>).color === 'string' &&
+          isHexColor((column as Partial<KanbanColumn>).color as string)
+            ? ((column as Partial<KanbanColumn>).color as string)
+            : '#5f6f8a',
+      } as KanbanColumn;
+    });
+
+  const hasBacklog = columns.some((column) => column.id === 'backlog');
+  if (!hasBacklog) {
+    columns.unshift({ id: 'backlog', name: 'Backlog', color: '#5f6f8a' });
+  }
+
+  const cards = Array.isArray(kanban?.cards)
+    ? kanban.cards
+        .filter((card) => card && typeof card.id === 'string' && typeof card.title === 'string')
+        .map((card) => {
+          const rawColumnId =
+            typeof card.columnId === 'string' && card.columnId.trim() ? card.columnId.trim() : 'todo';
+          const mappedColumnId = legacyToNormalizedColumnId.get(rawColumnId) ?? rawColumnId;
+          const hasMappedColumn = columns.some((column) => column.id === mappedColumnId);
+          const fallbackColumnId =
+            columns.find((column) => column.id === 'todo')?.id ??
+            columns.find((column) => column.id !== 'backlog')?.id ??
+            'backlog';
+
+          return {
+            ...card,
+            markdown: typeof card.markdown === 'string' ? card.markdown : '',
+            priority: KANBAN_PRIORITY_ORDER.includes(card.priority) ? card.priority : 'none',
+            columnId: hasMappedColumn ? mappedColumnId : fallbackColumnId,
+            collaboration:
+              typeof card.collaboration === 'object' && card.collaboration !== null
+                ? {
+                    assigneeId:
+                      typeof card.collaboration.assigneeId === 'string' ||
+                      card.collaboration.assigneeId === null
+                        ? card.collaboration.assigneeId
+                        : undefined,
+                    createdById:
+                      typeof card.collaboration.createdById === 'string' ||
+                      card.collaboration.createdById === null
+                        ? card.collaboration.createdById
+                        : undefined,
+                    watcherIds: Array.isArray(card.collaboration.watcherIds)
+                      ? card.collaboration.watcherIds.filter(
+                          (watcherId): watcherId is string => typeof watcherId === 'string',
+                        )
+                      : undefined,
+                  }
+                : undefined,
+            taskNumber:
+              typeof card.taskNumber === 'number' &&
+              Number.isInteger(card.taskNumber) &&
+              card.taskNumber >= 1
+                ? card.taskNumber
+                : 1,
+          };
+        })
+    : [];
+
+  const sharedBacklog = Array.isArray(state.sharedKanbanBacklogCards)
+    ? state.sharedKanbanBacklogCards
+        .filter((card) => card && typeof card.id === 'string' && typeof card.title === 'string')
+        .map((card) => ({
+          ...card,
+          markdown: typeof card.markdown === 'string' ? card.markdown : '',
+          priority: KANBAN_PRIORITY_ORDER.includes(card.priority) ? card.priority : 'none',
+          columnId: 'backlog',
+          collaboration:
+            typeof card.collaboration === 'object' && card.collaboration !== null
+              ? {
+                  assigneeId:
+                    typeof card.collaboration.assigneeId === 'string' ||
+                    card.collaboration.assigneeId === null
+                      ? card.collaboration.assigneeId
+                      : undefined,
+                  createdById:
+                    typeof card.collaboration.createdById === 'string' ||
+                    card.collaboration.createdById === null
+                      ? card.collaboration.createdById
+                      : undefined,
+                  watcherIds: Array.isArray(card.collaboration.watcherIds)
+                    ? card.collaboration.watcherIds.filter(
+                        (watcherId): watcherId is string => typeof watcherId === 'string',
+                      )
+                    : undefined,
+                }
+              : undefined,
+          taskNumber:
+            typeof card.taskNumber === 'number' && Number.isInteger(card.taskNumber) && card.taskNumber >= 1
+              ? card.taskNumber
+              : 1,
+        }))
+    : [];
+
+  const maxKnownTaskNumber = Math.max(
+    0,
+    ...cards.map((card) => card.taskNumber),
+    ...sharedBacklog.map((card) => card.taskNumber),
+  );
+  const collapsedColumnIds = Array.isArray(kanban?.collapsedColumnIds)
+    ? [...new Set(kanban.collapsedColumnIds.filter((id): id is string => typeof id === 'string'))].filter(
+        (id) => columns.some((column) => column.id === id),
+      )
+    : [];
+  const nextTaskNumber =
+    typeof kanban?.nextTaskNumber === 'number' &&
+    Number.isInteger(kanban.nextTaskNumber) &&
+    kanban.nextTaskNumber >= 1
+      ? Math.max(kanban.nextTaskNumber, maxKnownTaskNumber + 1)
+      : Math.max(1, maxKnownTaskNumber + 1);
+
+  return {
+    ...state,
+    nodeDataById: {
+      ...state.nodeDataById,
+      [nodeId]: {
+        ...(workspace ?? {}),
+        kanban: {
+          columns,
+          cards,
+          nextTaskNumber,
+          collapsedColumnIds,
+        },
+      },
+    },
+    sharedKanbanBacklogCards: sharedBacklog,
+  };
+};
 
 export const ensureNoteboardData = (
   state: PersistedTreeState,

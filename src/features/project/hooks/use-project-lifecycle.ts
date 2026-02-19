@@ -92,6 +92,7 @@ export const useProjectBootstrap = ({
             selectedNodeId: loadedState.selectedNodeId,
             nextNodeNumber: loadedState.nextNodeNumber,
             nodeDataById: loadedState.nodeDataById ?? {},
+            sharedKanbanBacklogCards: loadedState.sharedKanbanBacklogCards ?? [],
             sidebarWidth: clampSidebarWidth(
               typeof loadedState.sidebarWidth === 'number'
                 ? loadedState.sidebarWidth
