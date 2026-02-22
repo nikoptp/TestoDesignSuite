@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ProjectImageAsset } from '../shared/types';
+import { setImageAssetDragPayload } from '../shared/drag-payloads';
 
 type ImageAssetSidebarProps = {
   assets: ProjectImageAsset[];
@@ -27,18 +28,12 @@ export const ImageAssetSidebar = ({
                 className="image-asset-thumb"
                 draggable
                 onDragStart={(event) => {
-                  event.dataTransfer.effectAllowed = 'copy';
-                  event.dataTransfer.setData(
-                    'application/x-testo-image-asset',
-                    JSON.stringify({
-                      assetUrl: asset.assetUrl,
-                      relativePath: asset.relativePath,
-                      width: asset.width,
-                      height: asset.height,
-                    }),
-                  );
-                  event.dataTransfer.setData('text/uri-list', asset.assetUrl);
-                  event.dataTransfer.setData('text/plain', asset.assetUrl);
+                  setImageAssetDragPayload(event.dataTransfer, {
+                    assetUrl: asset.assetUrl,
+                    relativePath: asset.relativePath,
+                    width: asset.width,
+                    height: asset.height,
+                  });
                 }}
                 title={asset.relativePath}
               >

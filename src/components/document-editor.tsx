@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { AnimatePresence, motion } from 'motion/react';
 import type { CategoryNode, EditorType } from '../shared/types';
 import { editorTypeMeta } from '../shared/editor-types';
+import { startWindowPointerSession } from '../shared/pointer-session';
 
 type DocTemplate = {
   id: string;
@@ -295,20 +296,23 @@ export const DocumentEditor = ({
       return;
     }
     const rect = container.getBoundingClientRect();
+    let cleanupSession: (() => void) | null = null;
     const onMove = (moveEvent: PointerEvent): void => {
       const nextRatio = ((moveEvent.clientX - rect.left) / rect.width) * 100;
       setSplitRatio(clamp(nextRatio, 28, 72));
       moveEvent.preventDefault();
     };
     const onUp = (): void => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      document.body.classList.remove('is-resizing-doc-split');
+      cleanupSession?.();
+      cleanupSession = null;
     };
 
-    document.body.classList.add('is-resizing-doc-split');
-    window.addEventListener('pointermove', onMove, { passive: false });
-    window.addEventListener('pointerup', onUp, { passive: false });
+    cleanupSession = startWindowPointerSession({
+      onMove,
+      onEnd: onUp,
+      passive: false,
+      bodyClassName: 'is-resizing-doc-split',
+    });
     event.preventDefault();
   }, []);
 

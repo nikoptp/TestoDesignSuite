@@ -1,6 +1,7 @@
 import React from 'react';
 import type { CategoryNode } from '../shared/types';
 import { editorTypeMeta } from '../shared/editor-types';
+import { getTreeNodeDragPayload, setTreeNodeDragPayload } from '../shared/drag-payloads';
 
 export type NodeDropPosition = 'before' | 'after' | 'inside';
 
@@ -213,8 +214,7 @@ export const NodeTree = (props: NodeTreeProps): React.ReactElement => {
     }
 
     setDraggedNodeId(nodeId);
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', nodeId);
+    setTreeNodeDragPayload(event.dataTransfer, nodeId);
   }, [props.viewState.editingNodeId]);
 
   const onDragEndNode = React.useCallback(() => {
@@ -227,7 +227,7 @@ export const NodeTree = (props: NodeTreeProps): React.ReactElement => {
         return;
       }
 
-      const draggedId = draggedNodeId ?? event.dataTransfer.getData('text/plain');
+      const draggedId = draggedNodeId ?? getTreeNodeDragPayload(event.dataTransfer);
       if (!draggedId || draggedId === nodeId) {
         if (dropHint) {
           setDropHint(null);
@@ -278,7 +278,7 @@ export const NodeTree = (props: NodeTreeProps): React.ReactElement => {
         return;
       }
 
-      const draggedId = draggedNodeId ?? event.dataTransfer.getData('text/plain');
+      const draggedId = draggedNodeId ?? getTreeNodeDragPayload(event.dataTransfer);
       const nextDropHint = dropHint;
       clearDragState();
 

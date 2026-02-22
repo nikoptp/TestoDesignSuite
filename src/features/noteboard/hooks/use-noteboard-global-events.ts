@@ -2,6 +2,7 @@ import React from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { PersistedTreeState } from '../../../shared/types';
 import { findNodeById } from '../../../shared/tree-utils';
+import { useGlobalKeydown } from '../../../shared/hooks/use-global-keydown';
 import {
   type AppClipboard,
   type UiState,
@@ -11,6 +12,7 @@ import {
   isTextEntryTargetElement,
   normalizeClipboardText,
 } from '../../app/app-model';
+import { updateNodeNoteboardData } from '../../app/workspace-node-updaters';
 
 const NOTEBOARD_CARDS_CLIPBOARD_MARKER = '__testo_noteboard_cards__';
 
@@ -63,71 +65,70 @@ export const useNoteboardKeyboardShortcuts = ({
   undoHistory,
   redoHistory,
 }: UseNoteboardKeyboardShortcutsOptions): void => {
-  React.useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      const isTextEntryTarget = isTextEntryTargetElement(event.target);
-      const activeNode = findNodeById(stateRef.current.nodes, stateRef.current.selectedNodeId);
-      const isDocumentEditorNode = Boolean(activeNode && activeNode.editorType !== 'noteboard');
-      const shouldUseDocumentHistoryShortcut =
-        Boolean(activeNode) && documentQuickUndoNodeIdRef.current === activeNode.id;
+  const onKeyDown = React.useCallback((event: KeyboardEvent): void => {
+    const isTextEntryTarget = isTextEntryTargetElement(event.target);
+    const activeNode = findNodeById(stateRef.current.nodes, stateRef.current.selectedNodeId);
+    const isDocumentEditorNode = Boolean(activeNode && activeNode.editorType !== 'noteboard');
+    const shouldUseDocumentHistoryShortcut =
+      Boolean(activeNode) && documentQuickUndoNodeIdRef.current === activeNode.id;
 
-      if (event.key === 'Tab' && !isTextEntryTarget) {
-        if (activeNode?.editorType === 'noteboard') {
-          drawRef.current = null;
-          drawPointQueueRef.current = [];
-          if (drawRafRef.current !== null) {
-            window.cancelAnimationFrame(drawRafRef.current);
-            drawRafRef.current = null;
-          }
-          document.body.classList.remove('is-drawing-canvas');
-          setUiState((prev) => ({
-            ...prev,
-            isDrawingMode: !prev.isDrawingMode,
-            contextMenu: null,
-            selectionBox: null,
-          }));
-          event.preventDefault();
+    if (event.key === 'Tab' && !isTextEntryTarget) {
+      if (activeNode?.editorType === 'noteboard') {
+        drawRef.current = null;
+        drawPointQueueRef.current = [];
+        if (drawRafRef.current !== null) {
+          window.cancelAnimationFrame(drawRafRef.current);
+          drawRafRef.current = null;
         }
-        return;
+        document.body.classList.remove('is-drawing-canvas');
+        setUiState((prev) => ({
+          ...prev,
+          isDrawingMode: !prev.isDrawingMode,
+          contextMenu: null,
+          selectionBox: null,
+        }));
+        event.preventDefault();
       }
+      return;
+    }
 
-      const mod = event.ctrlKey || event.metaKey;
-      if (mod) {
-        const key = event.key.toLowerCase();
-        if (key === 'z' || key === 'y') {
-          if (isTextEntryTarget) {
-            if (!isDocumentEditorNode || !shouldUseDocumentHistoryShortcut) {
-              return;
-            }
+    const mod = event.ctrlKey || event.metaKey;
+    if (mod) {
+      const key = event.key.toLowerCase();
+      if (key === 'z' || key === 'y') {
+        if (isTextEntryTarget) {
+          if (!isDocumentEditorNode || !shouldUseDocumentHistoryShortcut) {
+            return;
           }
+        }
 
-          if (key === 'z') {
-            if (event.shiftKey) {
-              redoHistory();
-            } else {
-              undoHistory();
-            }
-          } else {
+        if (key === 'z') {
+          if (event.shiftKey) {
             redoHistory();
+          } else {
+            undoHistory();
           }
-
-          if (isDocumentEditorNode && activeNode) {
-            documentQuickUndoNodeIdRef.current = activeNode.id;
-          }
-
-          event.preventDefault();
-          return;
+        } else {
+          redoHistory();
         }
-      }
 
-      if (!activeNode || activeNode.editorType !== 'noteboard') {
+        if (isDocumentEditorNode && activeNode) {
+          documentQuickUndoNodeIdRef.current = activeNode.id;
+        }
+
+        event.preventDefault();
         return;
       }
+    }
 
-      const selectedIds =
-        uiStateRef.current.cardSelection.nodeId === activeNode.id
-          ? uiStateRef.current.cardSelection.cardIds
-          : [];
+    if (!activeNode || activeNode.editorType !== 'noteboard') {
+      return;
+    }
+
+    const selectedIds =
+      uiStateRef.current.cardSelection.nodeId === activeNode.id
+        ? uiStateRef.current.cardSelection.cardIds
+        : [];
 
       if (event.key === 'Delete' && !isTextEntryTarget && selectedIds.length > 0) {
         pushHistory();
@@ -136,20 +137,11 @@ export const useNoteboardKeyboardShortcuts = ({
           const cards = getCardsForNode(next, activeNode.id).filter(
             (card) => !selectedIds.includes(card.id),
           );
-          return {
-            ...next,
-            nodeDataById: {
-              ...next.nodeDataById,
-              [activeNode.id]: {
-                ...(next.nodeDataById[activeNode.id] ?? {}),
-                noteboard: {
-                  ...(next.nodeDataById[activeNode.id]?.noteboard ?? { cards: [] }),
-                  cards,
-                  view: { ...getViewForNode(next, activeNode.id) },
-                },
-              },
-            },
-          };
+          return updateNodeNoteboardData(next, activeNode.id, (noteboard) => ({
+            ...noteboard,
+            cards,
+            view: { ...getViewForNode(next, activeNode.id) },
+          }));
         });
         setUiState((prev) => ({
           ...prev,
@@ -194,26 +186,24 @@ export const useNoteboardKeyboardShortcuts = ({
         event.preventDefault();
         return;
       }
-    };
+    }, [
+      clipboardRef,
+      documentQuickUndoNodeIdRef,
+      drawPointQueueRef,
+      drawRafRef,
+      drawRef,
+      pushHistory,
+      redoHistory,
+      setState,
+      setUiState,
+      stateRef,
+      uiStateRef,
+      undoHistory,
+    ]);
 
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [
-    clipboardRef,
-    documentQuickUndoNodeIdRef,
-    drawPointQueueRef,
-    drawRafRef,
-    drawRef,
-    pushHistory,
-    redoHistory,
-    setState,
-    setUiState,
-    stateRef,
-    uiStateRef,
-    undoHistory,
-  ]);
+  useGlobalKeydown({
+    onKeyDown,
+  });
 };
 
 export const useNoteboardPasteShortcut = ({

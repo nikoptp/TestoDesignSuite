@@ -1,7 +1,12 @@
 import React from 'react';
 import type { MutableRefObject } from 'react';
 import type { NoteboardBrushType, PersistedTreeState, UserSettings } from '../../../shared/types';
-import { NOTEBOARD_WORLD_MIN_X, NOTEBOARD_WORLD_MIN_Y } from '../../../shared/noteboard-constants';
+import {
+  offsetFromWorldPointAtViewportPoint,
+  worldPointFromClientPoint,
+  worldPointFromViewportPoint,
+} from '../../../shared/noteboard-coordinate-utils';
+import { TESTO_IMAGE_ASSET_DRAG_MIME } from '../../../shared/drag-payloads';
 import {
   CARD_MIN_HEIGHT,
   CARD_MIN_WIDTH,
@@ -29,6 +34,10 @@ import {
   getStrokesForNode,
   getViewForNode,
 } from '../../app/app-model';
+import { updateNodeNoteboardData } from '../../app/workspace-node-updaters';
+import {
+  NOTEBOARD_CANVAS_POINTER_BLOCKED_SELECTORS,
+} from '../noteboard-dom-selectors';
 
 type UseNoteboardCanvasEventsOptions = {
   nodeId: string;
@@ -116,7 +125,7 @@ export const useNoteboardCanvasEvents = ({
       uiState.isDrawingMode &&
       event.button === 0 &&
       target.closest('.noteboard-canvas') &&
-      !target.closest('.noteboard-card, .noteboard-toolbar, .noteboard-draw-sidebar, .noteboard-template-sidebar, .canvas-context-menu, .color-quick-menu')
+      !target.closest(NOTEBOARD_CANVAS_POINTER_BLOCKED_SELECTORS)
     ) {
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -148,21 +157,12 @@ export const useNoteboardCanvasEvents = ({
           const stroke = createBrushStroke(world.x, world.y, activeBrush, color, size, opacity);
           drawRef.current = { pointerId: event.pointerId, nodeId, tool: activeTool, strokeId: stroke.id };
           document.body.classList.add('is-drawing-canvas');
-          return {
-            ...next,
-            nodeDataById: {
-              ...next.nodeDataById,
-              [nodeId]: {
-                ...(next.nodeDataById[nodeId] ?? {}),
-                noteboard: {
-                  ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
-                  cards: [...getCardsForNode(next, nodeId)],
-                  strokes: [...getStrokesForNode(next, nodeId), stroke],
-                  view: { ...view },
-                },
-              },
-            },
-          };
+          return updateNodeNoteboardData(next, nodeId, (noteboard) => ({
+            ...noteboard,
+            cards: [...getCardsForNode(next, nodeId)],
+            strokes: [...getStrokesForNode(next, nodeId), stroke],
+            view: { ...view },
+          }));
         });
       }
 
@@ -179,7 +179,7 @@ export const useNoteboardCanvasEvents = ({
     if (
       event.button === 0 &&
       target.closest('.noteboard-canvas') &&
-      !target.closest('.noteboard-card, .noteboard-toolbar, .noteboard-draw-sidebar, .noteboard-template-sidebar, .canvas-context-menu, .color-quick-menu')
+      !target.closest(NOTEBOARD_CANVAS_POINTER_BLOCKED_SELECTORS)
     ) {
       if (uiState.isDrawingMode) return;
       const canvas = canvasRef.current;
@@ -233,30 +233,25 @@ export const useNoteboardCanvasEvents = ({
     const layoutOffsetY = worldElement?.offsetTop ?? 0;
     const pointerX = event.clientX - rect.left - layoutOffsetX;
     const pointerY = event.clientY - rect.top - layoutOffsetY;
-    const worldX = (pointerX - selectedView.offsetX) / selectedView.zoom + NOTEBOARD_WORLD_MIN_X;
-    const worldY = (pointerY - selectedView.offsetY) / selectedView.zoom + NOTEBOARD_WORLD_MIN_Y;
+    const worldPoint = worldPointFromViewportPoint(selectedView, pointerX, pointerY);
 
     setState((prev) => {
       const next = ensureNoteboardData(prev, nodeId);
       const nextView = { ...getViewForNode(next, nodeId) };
       nextView.zoom = nextZoom;
-      nextView.offsetX = pointerX - (worldX - NOTEBOARD_WORLD_MIN_X) * nextZoom;
-      nextView.offsetY = pointerY - (worldY - NOTEBOARD_WORLD_MIN_Y) * nextZoom;
+      const offset = offsetFromWorldPointAtViewportPoint(
+        worldPoint,
+        { x: pointerX, y: pointerY },
+        nextZoom,
+      );
+      nextView.offsetX = offset.x;
+      nextView.offsetY = offset.y;
       clampViewOffsets(canvas, nextView);
-      return {
-        ...next,
-        nodeDataById: {
-          ...next.nodeDataById,
-          [nodeId]: {
-            ...(next.nodeDataById[nodeId] ?? {}),
-            noteboard: {
-              ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
-              cards: [...getCardsForNode(next, nodeId)],
-              view: nextView,
-            },
-          },
-        },
-      };
+      return updateNodeNoteboardData(next, nodeId, (noteboard) => ({
+        ...noteboard,
+        cards: [...getCardsForNode(next, nodeId)],
+        view: nextView,
+      }));
     });
     event.preventDefault();
   }, [canvasRef, nodeId, selectedView, setSettings, setState, uiState.isDrawingMode]);
@@ -271,14 +266,12 @@ export const useNoteboardCanvasEvents = ({
     if (target.closest('.card-textarea, .noteboard-card, .noteboard-template-sidebar')) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const worldX = (event.clientX - rect.left - selectedView.offsetX) / selectedView.zoom + NOTEBOARD_WORLD_MIN_X;
-    const worldY = (event.clientY - rect.top - selectedView.offsetY) / selectedView.zoom + NOTEBOARD_WORLD_MIN_Y;
+    const worldPoint = worldPointFromClientPoint(canvas, selectedView, event.clientX, event.clientY);
     const screenX = Math.min(window.innerWidth - CONTEXT_MENU_WIDTH - 8, Math.max(8, event.clientX));
     const screenY = Math.min(window.innerHeight - CONTEXT_MENU_HEIGHT - 8, Math.max(8, event.clientY));
     setUiState((prev) => ({
       ...prev,
-      contextMenu: { nodeId, screenX, screenY, worldX, worldY },
+      contextMenu: { nodeId, screenX, screenY, worldX: worldPoint.x, worldY: worldPoint.y },
     }));
     event.preventDefault();
   }, [canvasRef, nodeId, selectedView, setUiState, uiState.isDrawingMode]);
@@ -293,7 +286,7 @@ export const useNoteboardCanvasEvents = ({
       textPlain: event.dataTransfer.getData('text/plain') ?? '',
       textUriList: event.dataTransfer.getData('text/uri-list') ?? '',
       textHtml: event.dataTransfer.getData('text/html') ?? '',
-      testoImageAsset: event.dataTransfer.getData('application/x-testo-image-asset') ?? '',
+      testoImageAsset: event.dataTransfer.getData(TESTO_IMAGE_ASSET_DRAG_MIME) ?? '',
     };
     const world = getWorldPoint(canvas, selectedView, event.clientX, event.clientY);
     void handleCanvasDrop(nodeId, world.x, world.y, payload);

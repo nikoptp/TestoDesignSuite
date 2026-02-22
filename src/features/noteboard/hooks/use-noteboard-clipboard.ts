@@ -8,7 +8,7 @@ import {
   clampCardToWorld,
   createNoteboardCard,
 } from '../../../renderer/noteboard-utils';
-import { NOTEBOARD_WORLD_MIN_X, NOTEBOARD_WORLD_MIN_Y } from '../../../shared/noteboard-constants';
+import { worldPointAtCanvasCenter } from '../../../shared/noteboard-coordinate-utils';
 import {
   type AppClipboard,
   type DroppedCanvasPayload,
@@ -27,6 +27,7 @@ import {
   normalizeClipboardText,
   parseDroppedTestoImageAsset,
 } from '../../app/app-model';
+import { updateNodeNoteboardData } from '../../app/workspace-node-updaters';
 
 type UseNoteboardClipboardOptions = {
   canvasRef: React.RefObject<HTMLDivElement>;
@@ -82,10 +83,7 @@ export const useNoteboardClipboard = ({
         return null;
       }
       const view = getViewForNode(stateRef.current, nodeId);
-      return {
-        x: (canvas.clientWidth / 2 - view.offsetX) / view.zoom + NOTEBOARD_WORLD_MIN_X,
-        y: (canvas.clientHeight / 2 - view.offsetY) / view.zoom + NOTEBOARD_WORLD_MIN_Y,
-      };
+      return worldPointAtCanvasCenter(canvas, view);
     },
     [canvasRef, stateRef],
   );
@@ -237,20 +235,11 @@ export const useNoteboardClipboard = ({
       setState((prev) => {
         const next = ensureNoteboardData(prev, nodeId);
         const cards = [created, ...getCardsForNode(next, nodeId)];
-        return {
-          ...next,
-          nodeDataById: {
-            ...next.nodeDataById,
-            [nodeId]: {
-              ...(next.nodeDataById[nodeId] ?? {}),
-              noteboard: {
-                ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
-                cards,
-                view: { ...getViewForNode(next, nodeId) },
-              },
-            },
-          },
-        };
+        return updateNodeNoteboardData(next, nodeId, (noteboard) => ({
+          ...noteboard,
+          cards,
+          view: { ...getViewForNode(next, nodeId) },
+        }));
       });
 
       setUiState((prev) => ({
@@ -352,8 +341,9 @@ export const useNoteboardClipboard = ({
         let anchorY = 0;
 
         if (canvas) {
-          anchorX = (canvas.clientWidth / 2 - view.offsetX) / view.zoom + NOTEBOARD_WORLD_MIN_X;
-          anchorY = (canvas.clientHeight / 2 - view.offsetY) / view.zoom + NOTEBOARD_WORLD_MIN_Y;
+          const anchor = worldPointAtCanvasCenter(canvas, view);
+          anchorX = anchor.x;
+          anchorY = anchor.y;
         }
 
         const newIds: string[] = [];
@@ -377,18 +367,11 @@ export const useNoteboardClipboard = ({
         }));
 
         return {
-          ...next,
-          nodeDataById: {
-            ...next.nodeDataById,
-            [nodeId]: {
-              ...(next.nodeDataById[nodeId] ?? {}),
-              noteboard: {
-                ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
-                cards,
-                view: { ...view },
-              },
-            },
-          },
+          ...updateNodeNoteboardData(next, nodeId, (noteboard) => ({
+            ...noteboard,
+            cards,
+            view: { ...view },
+          })),
         };
       });
 

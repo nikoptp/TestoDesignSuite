@@ -16,6 +16,7 @@ import {
 } from '../../app/app-model';
 import { NOTEBOARD_WORLD_MAX_X, NOTEBOARD_WORLD_MAX_Y, NOTEBOARD_WORLD_MIN_X, NOTEBOARD_WORLD_MIN_Y } from '../../../shared/noteboard-constants';
 import { CANVAS_PADDING, CARD_MIN_HEIGHT, CARD_WIDTH, clampViewOffsets, getWorldPoint } from '../../../renderer/noteboard-utils';
+import { updateNodeNoteboardData } from '../../app/workspace-node-updaters';
 
 type UseNoteboardPointerEventsOptions = {
   canvasRef: React.RefObject<HTMLDivElement>;
@@ -115,20 +116,11 @@ export const useNoteboardPointerEvents = ({
           view.offsetY = pan.startOffsetY + (event.clientY - pan.startClientY);
           clampViewOffsets(canvas, view);
 
-          return {
-            ...next,
-            nodeDataById: {
-              ...next.nodeDataById,
-              [pan.nodeId]: {
-                ...(next.nodeDataById[pan.nodeId] ?? {}),
-                noteboard: {
-                  ...(next.nodeDataById[pan.nodeId]?.noteboard ?? { cards: [] }),
-                  cards: [...getCardsForNode(next, pan.nodeId)],
-                  view,
-                },
-              },
-            },
-          };
+          return updateNodeNoteboardData(next, pan.nodeId, (noteboard) => ({
+            ...noteboard,
+            cards: [...getCardsForNode(next, pan.nodeId)],
+            view,
+          }));
         });
         event.preventDefault();
         return;
@@ -223,20 +215,11 @@ export const useNoteboardPointerEvents = ({
               : card,
           );
 
-          return {
-            ...prev,
-            nodeDataById: {
-              ...prev.nodeDataById,
-              [resize.nodeId]: {
-                ...(prev.nodeDataById[resize.nodeId] ?? {}),
-                noteboard: {
-                  ...(prev.nodeDataById[resize.nodeId]?.noteboard ?? { cards: [] }),
-                  cards: updatedCards,
-                  view: { ...getViewForNode(prev, resize.nodeId) },
-                },
-              },
-            },
-          };
+          return updateNodeNoteboardData(prev, resize.nodeId, (noteboard) => ({
+            ...noteboard,
+            cards: updatedCards,
+            view: { ...getViewForNode(prev, resize.nodeId) },
+          }));
         });
         event.preventDefault();
         return;
@@ -296,20 +279,11 @@ export const useNoteboardPointerEvents = ({
           };
         });
 
-        return {
-          ...next,
-          nodeDataById: {
-            ...next.nodeDataById,
-            [drag.nodeId]: {
-              ...(next.nodeDataById[drag.nodeId] ?? {}),
-              noteboard: {
-                ...(next.nodeDataById[drag.nodeId]?.noteboard ?? { cards: [] }),
-                cards,
-                view: { ...view },
-              },
-            },
-          },
-        };
+        return updateNodeNoteboardData(next, drag.nodeId, (noteboard) => ({
+          ...noteboard,
+          cards,
+          view: { ...view },
+        }));
       });
     };
 

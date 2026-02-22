@@ -17,6 +17,8 @@ import {
   findNodeById,
   moveNodeById,
 } from './shared/tree-utils';
+import { useOutsidePointerDismiss } from './shared/hooks/use-outside-pointer-dismiss';
+import { startWindowPointerSession } from './shared/pointer-session';
 import {
 } from './renderer/noteboard-utils';
 import { appendPointWithPressure } from './renderer/noteboard-drawing';
@@ -91,6 +93,7 @@ import {
   renameKanbanColumn,
   updateKanbanCard,
 } from './features/app/kanban-state';
+import { updateNodeNoteboardData } from './features/app/workspace-node-updaters';
 
 const SKIP_SPLASH_ONCE_KEY = 'testo.splash.skipOnce';
 const SKIP_SPLASH_QUERY_PARAM = 'skipSplashOnce';
@@ -245,21 +248,12 @@ export const App = (): React.ReactElement => {
         return prev;
       }
 
-      return {
-        ...next,
-        nodeDataById: {
-          ...next.nodeDataById,
-          [nodeId]: {
-            ...(next.nodeDataById[nodeId] ?? {}),
-            noteboard: {
-              ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
-              cards: [...getCardsForNode(next, nodeId)],
-              strokes: kept,
-              view: { ...getViewForNode(next, nodeId) },
-            },
-          },
-        },
-      };
+      return updateNodeNoteboardData(next, nodeId, (noteboard) => ({
+        ...noteboard,
+        cards: [...getCardsForNode(next, nodeId)],
+        strokes: kept,
+        view: { ...getViewForNode(next, nodeId) },
+      }));
     },
     [],
   );
@@ -334,21 +328,12 @@ export const App = (): React.ReactElement => {
       }
 
       const view = getViewForNode(next, draw.nodeId);
-      return {
-        ...next,
-        nodeDataById: {
-          ...next.nodeDataById,
-          [draw.nodeId]: {
-            ...(next.nodeDataById[draw.nodeId] ?? {}),
-            noteboard: {
-              ...(next.nodeDataById[draw.nodeId]?.noteboard ?? { cards: [] }),
-              cards: [...getCardsForNode(next, draw.nodeId)],
-              strokes,
-              view: { ...view },
-            },
-          },
-        },
-      };
+      return updateNodeNoteboardData(next, draw.nodeId, (noteboard) => ({
+        ...noteboard,
+        cards: [...getCardsForNode(next, draw.nodeId)],
+        strokes,
+        view: { ...view },
+      }));
     });
   }, [eraseStrokesAtPoint]);
 
@@ -435,6 +420,7 @@ export const App = (): React.ReactElement => {
       return;
     }
 
+    let cleanupSession: (() => void) | null = null;
     const onPointerMove = (event: PointerEvent): void => {
       const shell = shellRef.current;
       if (!shell) {
@@ -452,16 +438,15 @@ export const App = (): React.ReactElement => {
       setIsResizing(false);
     };
 
-    document.body.classList.add('is-resizing-sidebar');
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-    window.addEventListener('pointercancel', onPointerUp);
+    cleanupSession = startWindowPointerSession({
+      onMove: onPointerMove,
+      onEnd: onPointerUp,
+      bodyClassName: 'is-resizing-sidebar',
+    });
 
     return () => {
-      document.body.classList.remove('is-resizing-sidebar');
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      window.removeEventListener('pointercancel', onPointerUp);
+      cleanupSession?.();
+      cleanupSession = null;
     };
   }, [isResizing]);
 
@@ -525,26 +510,18 @@ export const App = (): React.ReactElement => {
     pasteCopiedCardsAtCanvasCenter,
   });
 
-  React.useEffect(() => {
-    const onGlobalPointerDown = (event: PointerEvent): void => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
+  useOutsidePointerDismiss({
+    ignoredSelectors: '.canvas-context-menu',
+    onDismiss: () => {
+      if (!uiStateRef.current.contextMenu) {
         return;
       }
-
-      if (uiStateRef.current.contextMenu && !target.closest('.canvas-context-menu')) {
-        setUiState((prev) => ({
-          ...prev,
-          contextMenu: null,
-        }));
-      }
-    };
-
-    window.addEventListener('pointerdown', onGlobalPointerDown, true);
-    return () => {
-      window.removeEventListener('pointerdown', onGlobalPointerDown, true);
-    };
-  }, []);
+      setUiState((prev) => ({
+        ...prev,
+        contextMenu: null,
+      }));
+    },
+  });
 
   const selectedNode = React.useMemo(
     () => findNodeById(state.nodes, state.selectedNodeId),

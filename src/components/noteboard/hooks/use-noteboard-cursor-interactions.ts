@@ -1,5 +1,9 @@
 import React from 'react';
 import { getWorldPoint, type NoteboardView } from '../../../renderer/noteboard-utils';
+import {
+  NOTEBOARD_CARD_BLOCKED_SELECTORS,
+  NOTEBOARD_OVERLAY_BLOCKED_SELECTORS,
+} from '../../../features/noteboard/noteboard-dom-selectors';
 
 type QuickColorMenuState = {
   x: number;
@@ -44,16 +48,8 @@ type NoteboardCursorInteractions = {
   onCanvasDoubleClickEvent: (event: React.MouseEvent<HTMLElement>) => void;
 };
 
-const BLOCKED_TARGETS = [
-  '.noteboard-toolbar',
-  '.noteboard-draw-sidebar',
-  '.noteboard-template-sidebar',
-  '.canvas-context-menu',
-  '.card-context-menu',
-  '.color-quick-menu',
-].join(', ');
-
-const CARD_BLOCKED_TARGETS = `${BLOCKED_TARGETS}, .noteboard-card, .card-textarea`;
+const BLOCKED_TARGETS = NOTEBOARD_OVERLAY_BLOCKED_SELECTORS;
+const CARD_BLOCKED_TARGETS = NOTEBOARD_CARD_BLOCKED_SELECTORS;
 
 export const useNoteboardCursorInteractions = ({
   canvasRef,
@@ -298,4 +294,3 @@ export const useNoteboardCursorInteractions = ({
     onCanvasDoubleClickEvent,
   };
 };
-

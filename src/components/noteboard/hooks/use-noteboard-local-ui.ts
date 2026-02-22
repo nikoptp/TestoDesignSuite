@@ -1,5 +1,8 @@
 import React from 'react';
 import type { NoteboardCard } from '../../../shared/types';
+import { useOutsidePointerDismiss } from '../../../shared/hooks/use-outside-pointer-dismiss';
+import { startWindowPointerSession } from '../../../shared/pointer-session';
+import { NOTEBOARD_TEMPLATE_DROP_BLOCKED_SELECTORS } from '../../../features/noteboard/noteboard-dom-selectors';
 
 type TemplateDragState = {
   templateId: string;
@@ -129,30 +132,20 @@ export const useNoteboardLocalUi = ({
     };
   }, [cards, pendingEditorCardId]);
 
-  React.useEffect(() => {
-    if (!cardContextMenu) {
-      return;
-    }
-
-    const onPointerDown = (event: PointerEvent): void => {
-      const target = event.target;
-      if (target instanceof Element && target.closest('.card-context-menu')) {
-        return;
-      }
+  useOutsidePointerDismiss({
+    enabled: Boolean(cardContextMenu),
+    ignoredSelectors: '.card-context-menu',
+    onDismiss: () => {
       setCardContextMenu(null);
-    };
-
-    window.addEventListener('pointerdown', onPointerDown, true);
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown, true);
-    };
-  }, [cardContextMenu]);
+    },
+  });
 
   React.useEffect(() => {
     if (!templateDrag) {
       return;
     }
 
+    let cleanupSession: (() => void) | null = null;
     const onPointerMove = (event: PointerEvent): void => {
       setTemplateDrag((prev) =>
         prev
@@ -171,27 +164,26 @@ export const useNoteboardLocalUi = ({
       if (
         dropTarget instanceof Element &&
         dropTarget.closest('.noteboard-canvas') &&
-        !dropTarget.closest(
-          '.noteboard-toolbar, .noteboard-draw-sidebar, .noteboard-template-sidebar, .canvas-context-menu, .noteboard-card, .card-textarea',
-        )
+        !dropTarget.closest(NOTEBOARD_TEMPLATE_DROP_BLOCKED_SELECTORS)
       ) {
         onAddCardFromTemplateAt(templateDrag.templateId, event.clientX, event.clientY);
       }
       setTemplateDrag(null);
-      document.body.classList.remove('is-dragging-template');
+      cleanupSession?.();
+      cleanupSession = null;
       event.preventDefault();
     };
 
-    document.body.classList.add('is-dragging-template');
-    window.addEventListener('pointermove', onPointerMove, { passive: false });
-    window.addEventListener('pointerup', onPointerUp, { passive: false });
-    window.addEventListener('pointercancel', onPointerUp, { passive: false });
+    cleanupSession = startWindowPointerSession({
+      onMove: onPointerMove,
+      onEnd: onPointerUp,
+      passive: false,
+      bodyClassName: 'is-dragging-template',
+    });
 
     return () => {
-      document.body.classList.remove('is-dragging-template');
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      window.removeEventListener('pointercancel', onPointerUp);
+      cleanupSession?.();
+      cleanupSession = null;
     };
   }, [onAddCardFromTemplateAt, templateDrag]);
 
@@ -247,4 +239,3 @@ export const useNoteboardLocalUi = ({
     onOpenCardContextMenu,
   };
 };
-

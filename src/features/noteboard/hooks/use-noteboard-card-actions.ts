@@ -23,6 +23,7 @@ import {
   sanitizeCardTemplates,
   sanitizeDrawingPresetColors,
 } from '../../app/app-model';
+import { updateNodeNoteboardData } from '../../app/workspace-node-updaters';
 
 type TemplateOption = {
   id: string;
@@ -125,20 +126,11 @@ export const useNoteboardCardActions = ({
           },
         }));
 
-        return {
-          ...next,
-          nodeDataById: {
-            ...next.nodeDataById,
-            [nodeId]: {
-              ...(next.nodeDataById[nodeId] ?? {}),
-              noteboard: {
-                ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
-                cards,
-                view: { ...getViewForNode(next, nodeId) },
-              },
-            },
-          },
-        };
+        return updateNodeNoteboardData(next, nodeId, (noteboard) => ({
+          ...noteboard,
+          cards,
+          view: { ...getViewForNode(next, nodeId) },
+        }));
       });
     },
     [availableCardTemplates, canvasRef, nodeId, pushHistory, selectedView, setState, setUiState, themeCardColor],
@@ -293,21 +285,12 @@ export const useNoteboardCardActions = ({
         return prev;
       }
 
-      return {
-        ...next,
-        nodeDataById: {
-          ...next.nodeDataById,
-          [nodeId]: {
-            ...(next.nodeDataById[nodeId] ?? {}),
-            noteboard: {
-              ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
-              cards: [...getCardsForNode(next, nodeId)],
-              strokes: [],
-              view: { ...getViewForNode(next, nodeId) },
-            },
-          },
-        },
-      };
+      return updateNodeNoteboardData(next, nodeId, (noteboard) => ({
+        ...noteboard,
+        cards: [...getCardsForNode(next, nodeId)],
+        strokes: [],
+        view: { ...getViewForNode(next, nodeId) },
+      }));
     });
   }, [nodeId, pushHistory, setState]);
 
@@ -342,20 +325,11 @@ export const useNoteboardCardActions = ({
         },
       }));
 
-      return {
-        ...next,
-        nodeDataById: {
-          ...next.nodeDataById,
-          [nodeId]: {
-            ...(next.nodeDataById[nodeId] ?? {}),
-            noteboard: {
-              ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
-              cards,
-              view: { ...getViewForNode(next, nodeId) },
-            },
-          },
-        },
-      };
+      return updateNodeNoteboardData(next, nodeId, (noteboard) => ({
+        ...noteboard,
+        cards,
+        view: { ...getViewForNode(next, nodeId) },
+      }));
     });
   }, [nodeId, pushHistory, selectedCardIds, setState, setUiState]);
 
@@ -397,20 +371,11 @@ export const useNoteboardCardActions = ({
         }
 
         cards.splice(index, 1);
-        return {
-          ...next,
-          nodeDataById: {
-            ...next.nodeDataById,
-            [nodeId]: {
-              ...(next.nodeDataById[nodeId] ?? {}),
-              noteboard: {
-                ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
-                cards,
-                view: { ...getViewForNode(next, nodeId) },
-              },
-            },
-          },
-        };
+        return updateNodeNoteboardData(next, nodeId, (noteboard) => ({
+          ...noteboard,
+          cards,
+          view: { ...getViewForNode(next, nodeId) },
+        }));
       });
 
       setUiState((prev) => ({
@@ -451,20 +416,11 @@ export const useNoteboardCardActions = ({
             y: clampedPos.y,
           };
         });
-        return {
-          ...next,
-          nodeDataById: {
-            ...next.nodeDataById,
-            [nodeId]: {
-              ...(next.nodeDataById[nodeId] ?? {}),
-              noteboard: {
-                ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
-                cards,
-                view: { ...getViewForNode(next, nodeId) },
-              },
-            },
-          },
-        };
+        return updateNodeNoteboardData(next, nodeId, (noteboard) => ({
+          ...noteboard,
+          cards,
+          view: { ...getViewForNode(next, nodeId) },
+        }));
       });
     },
     [nodeId, pushHistory, setState, textEditSessionsRef],
@@ -481,20 +437,11 @@ export const useNoteboardCardActions = ({
         const cards = getCardsForNode(next, nodeId).map((card) =>
           card.id === cardId ? { ...card, color } : card,
         );
-        return {
-          ...next,
-          nodeDataById: {
-            ...next.nodeDataById,
-            [nodeId]: {
-              ...(next.nodeDataById[nodeId] ?? {}),
-              noteboard: {
-                ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
-                cards,
-                view: { ...getViewForNode(next, nodeId) },
-              },
-            },
-          },
-        };
+        return updateNodeNoteboardData(next, nodeId, (noteboard) => ({
+          ...noteboard,
+          cards,
+          view: { ...getViewForNode(next, nodeId) },
+        }));
       });
     },
     [nodeId, pushHistory, setState],
@@ -528,20 +475,11 @@ export const useNoteboardCardActions = ({
       const created = createNoteboardCard(pos.x, pos.y);
       created.color = themeCardColor;
       cards.unshift(created);
-      return {
-        ...next,
-        nodeDataById: {
-          ...next.nodeDataById,
-          [nodeId]: {
-            ...(next.nodeDataById[nodeId] ?? {}),
-            noteboard: {
-              ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
-              cards,
-              view: { ...getViewForNode(next, nodeId) },
-            },
-          },
-        },
-      };
+      return updateNodeNoteboardData(next, nodeId, (noteboard) => ({
+        ...noteboard,
+        cards,
+        view: { ...getViewForNode(next, nodeId) },
+      }));
     });
 
     setUiState((prev) => ({
@@ -580,20 +518,11 @@ export const useNoteboardCardActions = ({
       setState((prev) => {
         const next = ensureNoteboardData(prev, nodeId);
         const cards = [created, ...getCardsForNode(next, nodeId)];
-        return {
-          ...next,
-          nodeDataById: {
-            ...next.nodeDataById,
-            [nodeId]: {
-              ...(next.nodeDataById[nodeId] ?? {}),
-              noteboard: {
-                ...(next.nodeDataById[nodeId]?.noteboard ?? { cards: [] }),
-                cards,
-                view: { ...getViewForNode(next, nodeId) },
-              },
-            },
-          },
-        };
+        return updateNodeNoteboardData(next, nodeId, (noteboard) => ({
+          ...noteboard,
+          cards,
+          view: { ...getViewForNode(next, nodeId) },
+        }));
       });
 
       setUiState((prev) => ({

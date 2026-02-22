@@ -3,6 +3,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AnimatePresence, motion } from 'motion/react';
 import type { KanbanCard, KanbanColumn, KanbanPriority } from '../shared/types';
+import { useGlobalKeydown } from '../shared/hooks/use-global-keydown';
+import { useOutsidePointerDismiss } from '../shared/hooks/use-outside-pointer-dismiss';
+import { isTextEntryTargetElement } from '../features/app/app-model';
 
 type MigrateTarget = {
   nodeId: string;
@@ -94,11 +97,6 @@ const cardsForColumn = (
     .map((card) => ({ card, fromSharedBacklog: false }));
 };
 
-const isTextEntryTarget = (target: EventTarget | null): boolean =>
-  target instanceof HTMLInputElement ||
-  target instanceof HTMLTextAreaElement ||
-  (target instanceof HTMLElement && target.isContentEditable);
-
 export const KanbanBoard = ({
   columns,
   boardCards,
@@ -152,54 +150,22 @@ export const KanbanBoard = ({
     }
   }, [selectedCard, selectedCardRef]);
 
-  React.useEffect(() => {
-    if (!selectedCardRef) {
-      return;
-    }
-
-    const onGlobalPointerDown = (event: PointerEvent): void => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
-        return;
-      }
-
-      if (sidebarRef.current?.contains(target)) {
-        return;
-      }
-
-      if (target.closest('.kanban-context-menu')) {
-        return;
-      }
-
-      if (target.closest('.kanban-card')) {
-        return;
-      }
-
+  useOutsidePointerDismiss({
+    enabled: Boolean(selectedCardRef),
+    ignoredRefs: [sidebarRef],
+    ignoredSelectors: '.kanban-context-menu, .kanban-card',
+    onDismiss: () => {
       setSelectedCardRef(null);
-    };
+    },
+  });
 
-    window.addEventListener('pointerdown', onGlobalPointerDown, true);
-    return () => {
-      window.removeEventListener('pointerdown', onGlobalPointerDown, true);
-    };
-  }, [selectedCardRef]);
-
-  React.useEffect(() => {
-    const onGlobalPointerDown = (event: PointerEvent): void => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
-        return;
-      }
-      if (!target.closest('.kanban-context-menu')) {
-        setContextMenu(null);
-      }
-    };
-
-    window.addEventListener('pointerdown', onGlobalPointerDown, true);
-    return () => {
-      window.removeEventListener('pointerdown', onGlobalPointerDown, true);
-    };
-  }, []);
+  useOutsidePointerDismiss({
+    enabled: Boolean(contextMenu),
+    ignoredSelectors: '.kanban-context-menu',
+    onDismiss: () => {
+      setContextMenu(null);
+    },
+  });
 
   const copyCard = React.useCallback(
     (card: KanbanCard): void => {
@@ -257,48 +223,45 @@ export const KanbanBoard = ({
     [clipboardDraft, onPasteCard],
   );
 
-  React.useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (!selectedCard || isTextEntryTarget(event.target)) {
-        return;
-      }
+  const onGlobalKeyDown = React.useCallback((event: KeyboardEvent): void => {
+    if (!selectedCard || isTextEntryTargetElement(event.target)) {
+      return;
+    }
 
-      const key = event.key.toLowerCase();
-      const hasMod = event.ctrlKey || event.metaKey;
+    const key = event.key.toLowerCase();
+    const hasMod = event.ctrlKey || event.metaKey;
 
-      if ((event.key === 'Delete' || event.key === 'Backspace') && !hasMod) {
-        event.preventDefault();
-        requestDeleteCard(selectedCard.card, selectedCard.fromSharedBacklog);
-        return;
-      }
+    if ((event.key === 'Delete' || event.key === 'Backspace') && !hasMod) {
+      event.preventDefault();
+      requestDeleteCard(selectedCard.card, selectedCard.fromSharedBacklog);
+      return;
+    }
 
-      if (!hasMod) {
-        return;
-      }
+    if (!hasMod) {
+      return;
+    }
 
-      if (key === 'c') {
-        event.preventDefault();
-        copyCard(selectedCard.card);
-        return;
-      }
+    if (key === 'c') {
+      event.preventDefault();
+      copyCard(selectedCard.card);
+      return;
+    }
 
-      if (key === 'x') {
-        event.preventDefault();
-        cutCard(selectedCard.card, selectedCard.fromSharedBacklog);
-        return;
-      }
+    if (key === 'x') {
+      event.preventDefault();
+      cutCard(selectedCard.card, selectedCard.fromSharedBacklog);
+      return;
+    }
 
-      if (key === 'v' && clipboardDraft) {
-        event.preventDefault();
-        pasteCard(selectedCard.card.columnId);
-      }
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-    };
+    if (key === 'v' && clipboardDraft) {
+      event.preventDefault();
+      pasteCard(selectedCard.card.columnId);
+    }
   }, [clipboardDraft, copyCard, cutCard, pasteCard, requestDeleteCard, selectedCard]);
+
+  useGlobalKeydown({
+    onKeyDown: onGlobalKeyDown,
+  });
 
   const handleCardDrop = React.useCallback(
     (toColumnId: string, toIndex: number): void => {

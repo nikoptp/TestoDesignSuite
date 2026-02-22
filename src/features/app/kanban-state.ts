@@ -3,6 +3,7 @@ import {
   ensureKanbanData,
   getKanbanBoardForNode,
 } from './app-model';
+import { updateNodeKanbanData } from './workspace-node-updaters';
 
 type MoveKanbanCardInput = {
   cardId: string;
@@ -26,9 +27,8 @@ const COLUMN_COLOR_PALETTE = ['#5f6f8a', '#4e6d91', '#d4b63a', '#5b9a5b', '#7458
 
 const withBoard = (state: PersistedTreeState, nodeId: string) => {
   const next = ensureKanbanData(state, nodeId);
-  const workspace = next.nodeDataById[nodeId] ?? {};
   const board = getKanbanBoardForNode(next, nodeId);
-  return { next, workspace, board };
+  return { next, board };
 };
 
 const resolveValidColumnId = (board: ReturnType<typeof getKanbanBoardForNode>, columnId: string): string => {
@@ -77,7 +77,7 @@ export const createKanbanCard = (
   nodeId: string,
   columnId: string,
 ): PersistedTreeState => {
-  const { next, workspace, board } = withBoard(state, nodeId);
+  const { next, board } = withBoard(state, nodeId);
   const targetColumnId = resolveValidColumnId(board, columnId);
   const taskNumber = board.nextTaskNumber;
   const now = Date.now();
@@ -99,18 +99,11 @@ export const createKanbanCard = (
     : [...(next.sharedKanbanBacklogCards ?? [])];
 
   return {
-    ...next,
-    nodeDataById: {
-      ...next.nodeDataById,
-      [nodeId]: {
-        ...workspace,
-        kanban: {
-          ...board,
-          cards: boardCards,
-          nextTaskNumber: taskNumber + 1,
-        },
-      },
-    },
+    ...updateNodeKanbanData(next, nodeId, () => ({
+      ...board,
+      cards: boardCards,
+      nextTaskNumber: taskNumber + 1,
+    })),
     sharedKanbanBacklogCards: sharedBacklogCards,
   };
 };
@@ -120,7 +113,7 @@ export const moveKanbanCard = (
   nodeId: string,
   input: MoveKanbanCardInput,
 ): PersistedTreeState => {
-  const { next, workspace, board } = withBoard(state, nodeId);
+  const { next, board } = withBoard(state, nodeId);
   const targetColumnId = resolveValidColumnId(board, input.toColumnId);
 
   const sharedBacklogCards = [...(next.sharedKanbanBacklogCards ?? [])];
@@ -153,17 +146,10 @@ export const moveKanbanCard = (
   }
 
   return {
-    ...next,
-    nodeDataById: {
-      ...next.nodeDataById,
-      [nodeId]: {
-        ...workspace,
-        kanban: {
-          ...board,
-          cards: nextBoardCards,
-        },
-      },
-    },
+    ...updateNodeKanbanData(next, nodeId, () => ({
+      ...board,
+      cards: nextBoardCards,
+    })),
     sharedKanbanBacklogCards: nextBacklog,
   };
 };
@@ -173,7 +159,7 @@ export const updateKanbanCard = (
   nodeId: string,
   input: UpdateKanbanCardInput,
 ): PersistedTreeState => {
-  const { next, workspace, board } = withBoard(state, nodeId);
+  const { next, board } = withBoard(state, nodeId);
 
   if (input.fromSharedBacklog) {
     return {
@@ -190,27 +176,18 @@ export const updateKanbanCard = (
     };
   }
 
-  return {
-    ...next,
-    nodeDataById: {
-      ...next.nodeDataById,
-      [nodeId]: {
-        ...workspace,
-        kanban: {
-          ...board,
-          cards: board.cards.map((card) =>
-            card.id === input.cardId
-              ? {
-                  ...card,
-                  ...input.patch,
-                  updatedAt: Date.now(),
-                }
-              : card,
-          ),
-        },
-      },
-    },
-  };
+  return updateNodeKanbanData(next, nodeId, () => ({
+    ...board,
+    cards: board.cards.map((card) =>
+      card.id === input.cardId
+        ? {
+            ...card,
+            ...input.patch,
+            updatedAt: Date.now(),
+          }
+        : card,
+    ),
+  }));
 };
 
 export const deleteKanbanCard = (
@@ -219,7 +196,7 @@ export const deleteKanbanCard = (
   cardId: string,
   fromSharedBacklog: boolean,
 ): PersistedTreeState => {
-  const { next, workspace, board } = withBoard(state, nodeId);
+  const { next, board } = withBoard(state, nodeId);
 
   if (fromSharedBacklog) {
     return {
@@ -230,19 +207,10 @@ export const deleteKanbanCard = (
     };
   }
 
-  return {
-    ...next,
-    nodeDataById: {
-      ...next.nodeDataById,
-      [nodeId]: {
-        ...workspace,
-        kanban: {
-          ...board,
-          cards: board.cards.filter((card) => card.id !== cardId),
-        },
-      },
-    },
-  };
+  return updateNodeKanbanData(next, nodeId, () => ({
+    ...board,
+    cards: board.cards.filter((card) => card.id !== cardId),
+  }));
 };
 
 export const pasteKanbanCard = (
@@ -250,7 +218,7 @@ export const pasteKanbanCard = (
   nodeId: string,
   input: PasteKanbanCardInput,
 ): PersistedTreeState => {
-  const { next, workspace, board } = withBoard(state, nodeId);
+  const { next, board } = withBoard(state, nodeId);
   const taskNumber = board.nextTaskNumber;
   const now = Date.now();
   const normalizedColumnId = resolveValidColumnId(board, input.targetColumnId);
@@ -273,41 +241,25 @@ export const pasteKanbanCard = (
     : [...(next.sharedKanbanBacklogCards ?? [])];
 
   return {
-    ...next,
-    nodeDataById: {
-      ...next.nodeDataById,
-      [nodeId]: {
-        ...workspace,
-        kanban: {
-          ...board,
-          cards: nextBoardCards,
-          nextTaskNumber: taskNumber + 1,
-        },
-      },
-    },
+    ...updateNodeKanbanData(next, nodeId, () => ({
+      ...board,
+      cards: nextBoardCards,
+      nextTaskNumber: taskNumber + 1,
+    })),
     sharedKanbanBacklogCards: nextSharedBacklog,
   };
 };
 
 export const addKanbanColumn = (state: PersistedTreeState, nodeId: string): PersistedTreeState => {
-  const { next, workspace, board } = withBoard(state, nodeId);
+  const { next, board } = withBoard(state, nodeId);
   const nextIndex = board.columns.length + 1;
   const idBase = `col-${Date.now().toString(36)}`;
   const color = COLUMN_COLOR_PALETTE[nextIndex % COLUMN_COLOR_PALETTE.length];
 
-  return {
-    ...next,
-    nodeDataById: {
-      ...next.nodeDataById,
-      [nodeId]: {
-        ...workspace,
-        kanban: {
-          ...board,
-          columns: [...board.columns, { id: idBase, name: `Column ${nextIndex}`, color }],
-        },
-      },
-    },
-  };
+  return updateNodeKanbanData(next, nodeId, () => ({
+    ...board,
+    columns: [...board.columns, { id: idBase, name: `Column ${nextIndex}`, color }],
+  }));
 };
 
 export const renameKanbanColumn = (
@@ -316,23 +268,14 @@ export const renameKanbanColumn = (
   columnId: string,
   name: string,
 ): PersistedTreeState => {
-  const { next, workspace, board } = withBoard(state, nodeId);
+  const { next, board } = withBoard(state, nodeId);
 
-  return {
-    ...next,
-    nodeDataById: {
-      ...next.nodeDataById,
-      [nodeId]: {
-        ...workspace,
-        kanban: {
-          ...board,
-          columns: board.columns.map((column) =>
-            column.id === columnId ? { ...column, name: name.trim() || column.name } : column,
-          ),
-        },
-      },
-    },
-  };
+  return updateNodeKanbanData(next, nodeId, () => ({
+    ...board,
+    columns: board.columns.map((column) =>
+      column.id === columnId ? { ...column, name: name.trim() || column.name } : column,
+    ),
+  }));
 };
 
 export const recolorKanbanColumn = (
@@ -341,23 +284,14 @@ export const recolorKanbanColumn = (
   columnId: string,
   color: string,
 ): PersistedTreeState => {
-  const { next, workspace, board } = withBoard(state, nodeId);
+  const { next, board } = withBoard(state, nodeId);
 
-  return {
-    ...next,
-    nodeDataById: {
-      ...next.nodeDataById,
-      [nodeId]: {
-        ...workspace,
-        kanban: {
-          ...board,
-          columns: board.columns.map((column) =>
-            column.id === columnId ? { ...column, color } : column,
-          ),
-        },
-      },
-    },
-  };
+  return updateNodeKanbanData(next, nodeId, () => ({
+    ...board,
+    columns: board.columns.map((column) =>
+      column.id === columnId ? { ...column, color } : column,
+    ),
+  }));
 };
 
 export const deleteKanbanColumn = (
@@ -365,7 +299,7 @@ export const deleteKanbanColumn = (
   nodeId: string,
   columnId: string,
 ): PersistedTreeState => {
-  const { next, workspace, board } = withBoard(state, nodeId);
+  const { next, board } = withBoard(state, nodeId);
   const remainingColumns = board.columns.filter((column) => column.id !== columnId);
   const fallbackColumnId =
     remainingColumns.find((column) => column.name === 'To Do')?.id ??
@@ -376,21 +310,12 @@ export const deleteKanbanColumn = (
     card.columnId === columnId ? { ...card, columnId: fallbackColumnId, updatedAt: Date.now() } : card,
   );
 
-  return {
-    ...next,
-    nodeDataById: {
-      ...next.nodeDataById,
-      [nodeId]: {
-        ...workspace,
-        kanban: {
-          ...board,
-          columns: remainingColumns,
-          cards: nextCards,
-          collapsedColumnIds: (board.collapsedColumnIds ?? []).filter((id) => id !== columnId),
-        },
-      },
-    },
-  };
+  return updateNodeKanbanData(next, nodeId, () => ({
+    ...board,
+    columns: remainingColumns,
+    cards: nextCards,
+    collapsedColumnIds: (board.collapsedColumnIds ?? []).filter((id) => id !== columnId),
+  }));
 };
 
 export const migrateKanbanCards = (
