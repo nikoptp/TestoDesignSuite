@@ -30,6 +30,7 @@ type UseHistoryControllerOptions = {
   drawRafRef: MutableRefObject<number | null>;
   textEditSessionsRef: MutableRefObject<Set<string>>;
   documentEditSessionsRef: MutableRefObject<Set<string>>;
+  spreadsheetEditSessionsRef: MutableRefObject<Set<string>>;
 };
 
 type HistoryController = {
@@ -55,6 +56,7 @@ export const useHistoryController = ({
   drawRafRef,
   textEditSessionsRef,
   documentEditSessionsRef,
+  spreadsheetEditSessionsRef,
 }: UseHistoryControllerOptions): HistoryController => {
   const historyStackRef = React.useRef(createHistoryStack<HistorySnapshot>(maxEntries));
 
@@ -94,6 +96,7 @@ export const useHistoryController = ({
       }
       textEditSessionsRef.current.clear();
       documentEditSessionsRef.current.clear();
+      spreadsheetEditSessionsRef.current.clear();
       document.body.classList.remove('is-dragging-card');
       document.body.classList.remove('is-resizing-card');
       document.body.classList.remove('is-panning-canvas');
@@ -109,6 +112,7 @@ export const useHistoryController = ({
       resizeRef,
       setState,
       setUiState,
+      spreadsheetEditSessionsRef,
       textEditSessionsRef,
     ],
   );
@@ -139,4 +143,3 @@ export const useHistoryController = ({
     redoHistory,
   };
 };
-

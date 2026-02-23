@@ -153,6 +153,7 @@
 - 2026-02-22: Added `src/features/app/workspace-node-updaters.ts` and refactored kanban + noteboard state writes to reduce duplicated `nodeDataById` immutable update boilerplate.
 - 2026-02-22: Added `src/features/noteboard/noteboard-dom-selectors.ts` and refactored noteboard hooks to consume centralized blocked-target selector constants.
 - 2026-02-22: Expanded AGENTS governance with refactor playbook, shared primitive index, state/DnD/selector rules, extraction testing requirements, performance guardrails, and definition-of-done checklist.
+- 2026-02-23: Added spreadsheet editor phase-1 foundation: new `spreadsheet` node type, persisted spreadsheet workspace data, formula/addressing utilities, React spreadsheet grid editor with selection/editing/formula bar/copy-paste, and unit coverage for spreadsheet helpers.
 
 ## Open Questions
 - Single-window only for MVP, or multi-window support early?

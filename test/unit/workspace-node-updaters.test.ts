@@ -3,6 +3,7 @@ import type { PersistedTreeState } from '../../src/shared/types';
 import {
   updateNodeKanbanData,
   updateNodeNoteboardData,
+  updateNodeSpreadsheetData,
   updateNodeWorkspaceData,
 } from '../../src/features/app/workspace-node-updaters';
 
@@ -42,5 +43,27 @@ describe('workspace-node-updaters', () => {
 
     expect(next.nodeDataById['node-k']?.kanban?.nextTaskNumber).toBe(2);
     expect(next.nodeDataById['node-k']?.kanban?.columns[0]?.id).toBe('todo');
+  });
+
+  it('updates spreadsheet slice with defaults when missing', () => {
+    const next = updateNodeSpreadsheetData(baseState(), 'node-s', (spreadsheet) => ({
+      ...spreadsheet,
+      sheets: [
+        {
+          id: 'sheet-1',
+          name: 'Sheet 1',
+          cells: {
+            A1: { raw: '42' },
+          },
+        },
+      ],
+      activeSheetId: 'sheet-1',
+      activeCellKey: 'A1',
+      rowCount: 50,
+      columnCount: 26,
+    }));
+
+    expect(next.nodeDataById['node-s']?.spreadsheet?.activeSheetId).toBe('sheet-1');
+    expect(next.nodeDataById['node-s']?.spreadsheet?.sheets[0]?.cells.A1?.raw).toBe('42');
   });
 });

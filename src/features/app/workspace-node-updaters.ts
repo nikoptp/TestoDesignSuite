@@ -2,6 +2,7 @@ import type { NodeWorkspaceData, PersistedTreeState } from '../../shared/types';
 
 type NoteboardData = NonNullable<NodeWorkspaceData['noteboard']>;
 type KanbanData = NonNullable<NodeWorkspaceData['kanban']>;
+type SpreadsheetData = NonNullable<NodeWorkspaceData['spreadsheet']>;
 
 const EMPTY_NOTEBOARD: NoteboardData = {
   cards: [],
@@ -11,6 +12,16 @@ const EMPTY_KANBAN: KanbanData = {
   columns: [],
   cards: [],
   nextTaskNumber: 1,
+};
+
+const EMPTY_SPREADSHEET: SpreadsheetData = {
+  sheets: [],
+  activeSheetId: '',
+  activeCellKey: 'A1',
+  rowCount: 50,
+  columnCount: 26,
+  rowHeights: {},
+  columnWidths: {},
 };
 
 export const updateNodeWorkspaceData = (
@@ -63,5 +74,22 @@ export const updateNodeKanbanData = (
     return {
       ...workspace,
       kanban: next,
+    };
+  });
+
+export const updateNodeSpreadsheetData = (
+  state: PersistedTreeState,
+  nodeId: string,
+  updater: (spreadsheet: SpreadsheetData, workspace: NodeWorkspaceData) => SpreadsheetData,
+): PersistedTreeState =>
+  updateNodeWorkspaceData(state, nodeId, (workspace) => {
+    const current = workspace.spreadsheet ?? EMPTY_SPREADSHEET;
+    const next = updater(current, workspace);
+    if (next === current) {
+      return workspace;
+    }
+    return {
+      ...workspace,
+      spreadsheet: next,
     };
   });

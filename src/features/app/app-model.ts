@@ -10,6 +10,8 @@ import type {
   NoteboardStroke,
   PersistedTreeState,
   ProjectStatusPayload,
+  SpreadsheetData,
+  SpreadsheetSheet,
   UserSettings,
 } from '../../shared/types';
 import {
@@ -24,6 +26,15 @@ import {
   clampCardToWorld,
   type NoteboardView,
 } from '../../renderer/noteboard-utils';
+import {
+  DEFAULT_SPREADSHEET_COLUMN_COUNT,
+  DEFAULT_SPREADSHEET_ROW_COUNT,
+  MAX_SPREADSHEET_COLUMN_COUNT,
+  MAX_SPREADSHEET_ROW_COUNT,
+  MIN_SPREADSHEET_COLUMN_COUNT,
+  MIN_SPREADSHEET_ROW_COUNT,
+  isSpreadsheetCellKey,
+} from '../spreadsheet/spreadsheet-addressing';
 
 export type UiState = {
   editingNodeId: string | null;
@@ -691,6 +702,22 @@ export const KANBAN_DEFAULT_COLUMNS: KanbanColumn[] = [
 
 export const KANBAN_PRIORITY_ORDER: KanbanPriority[] = ['none', 'low', 'medium', 'high'];
 
+const DEFAULT_SPREADSHEET_SHEET: SpreadsheetSheet = {
+  id: 'sheet-1',
+  name: 'Sheet 1',
+  cells: {},
+};
+
+const DEFAULT_SPREADSHEET_DATA: SpreadsheetData = {
+  sheets: [DEFAULT_SPREADSHEET_SHEET],
+  activeSheetId: DEFAULT_SPREADSHEET_SHEET.id,
+  activeCellKey: 'A1',
+  rowCount: DEFAULT_SPREADSHEET_ROW_COUNT,
+  columnCount: DEFAULT_SPREADSHEET_COLUMN_COUNT,
+  rowHeights: {},
+  columnWidths: {},
+};
+
 export const getKanbanBoardForNode = (
   state: PersistedTreeState,
   nodeId: string,
@@ -711,6 +738,18 @@ export const getKanbanBoardForNode = (
 
 export const getSharedKanbanBacklogCards = (state: PersistedTreeState): KanbanCard[] =>
   state.sharedKanbanBacklogCards ?? [];
+
+export const getSpreadsheetForNode = (
+  state: PersistedTreeState,
+  nodeId: string,
+): SpreadsheetData => {
+  const spreadsheet = state.nodeDataById[nodeId]?.spreadsheet;
+  if (!spreadsheet || !Array.isArray(spreadsheet.sheets) || spreadsheet.sheets.length === 0) {
+    return DEFAULT_SPREADSHEET_DATA;
+  }
+
+  return spreadsheet;
+};
 
 export const ensureKanbanData = (
   state: PersistedTreeState,
@@ -1057,6 +1096,175 @@ export const ensureNoteboardData = (
           strokes: strokesChanged ? nextStrokes : strokes,
           view: nextView,
         },
+      },
+    },
+  };
+};
+
+export const ensureSpreadsheetData = (
+  state: PersistedTreeState,
+  nodeId: string,
+): PersistedTreeState => {
+  const workspace = state.nodeDataById[nodeId];
+  const spreadsheet = workspace?.spreadsheet;
+
+  const sourceSheets = Array.isArray(spreadsheet?.sheets) ? spreadsheet.sheets : [];
+  const nextSheets = sourceSheets
+    .filter((sheet) => typeof sheet?.id === 'string' && typeof sheet?.name === 'string')
+    .map((sheet, index) => {
+      const trimmedId = sheet.id.trim();
+      const sheetId = trimmedId || `sheet-${index + 1}`;
+      const sheetName = sheet.name.trim() || `Sheet ${index + 1}`;
+      const sourceCells =
+        typeof sheet.cells === 'object' && sheet.cells !== null && !Array.isArray(sheet.cells)
+          ? sheet.cells
+          : {};
+      const nextCells = Object.entries(sourceCells as Record<string, { raw?: unknown }>).reduce<
+        Record<string, { raw: string }>
+      >((acc, [cellKey, cell]) => {
+        const normalizedKey = cellKey.trim().toUpperCase();
+        if (!isSpreadsheetCellKey(normalizedKey)) {
+          return acc;
+        }
+        if (!cell || typeof cell.raw !== 'string') {
+          return acc;
+        }
+        acc[normalizedKey] = { raw: cell.raw };
+        return acc;
+      }, {});
+
+      return {
+        id: sheetId,
+        name: sheetName,
+        cells: nextCells,
+      };
+    });
+
+  if (nextSheets.length === 0) {
+    nextSheets.push({ ...DEFAULT_SPREADSHEET_SHEET, cells: {} });
+  }
+
+  const knownSheetIds = new Set(nextSheets.map((sheet) => sheet.id));
+  const activeSheetId =
+    typeof spreadsheet?.activeSheetId === 'string' && knownSheetIds.has(spreadsheet.activeSheetId)
+      ? spreadsheet.activeSheetId
+      : nextSheets[0].id;
+  const activeCellKey =
+    typeof spreadsheet?.activeCellKey === 'string' && isSpreadsheetCellKey(spreadsheet.activeCellKey)
+      ? spreadsheet.activeCellKey.trim().toUpperCase()
+      : 'A1';
+
+  const rowCountSource = typeof spreadsheet?.rowCount === 'number' ? spreadsheet.rowCount : DEFAULT_SPREADSHEET_ROW_COUNT;
+  const rowCount = Math.min(
+    MAX_SPREADSHEET_ROW_COUNT,
+    Math.max(MIN_SPREADSHEET_ROW_COUNT, Math.floor(rowCountSource)),
+  );
+  const columnCountSource =
+    typeof spreadsheet?.columnCount === 'number' ? spreadsheet.columnCount : DEFAULT_SPREADSHEET_COLUMN_COUNT;
+  const columnCount = Math.min(
+    MAX_SPREADSHEET_COLUMN_COUNT,
+    Math.max(MIN_SPREADSHEET_COLUMN_COUNT, Math.floor(columnCountSource)),
+  );
+
+  const nextSpreadsheet: SpreadsheetData = {
+    sheets: nextSheets,
+    activeSheetId,
+    activeCellKey,
+    rowCount,
+    columnCount,
+    rowHeights:
+      typeof spreadsheet?.rowHeights === 'object' &&
+      spreadsheet.rowHeights !== null &&
+      !Array.isArray(spreadsheet.rowHeights)
+        ? Object.entries(spreadsheet.rowHeights as Record<string, unknown>).reduce<
+            Record<string, number>
+          >((acc, [key, value]) => {
+            const index = Number(key);
+            if (!Number.isInteger(index) || index < 0 || index >= rowCount) {
+              return acc;
+            }
+            if (typeof value !== 'number' || !Number.isFinite(value)) {
+              return acc;
+            }
+            acc[String(index)] = Math.min(120, Math.max(22, Math.round(value)));
+            return acc;
+          }, {})
+        : {},
+    columnWidths:
+      typeof spreadsheet?.columnWidths === 'object' &&
+      spreadsheet.columnWidths !== null &&
+      !Array.isArray(spreadsheet.columnWidths)
+        ? Object.entries(spreadsheet.columnWidths as Record<string, unknown>).reduce<
+            Record<string, number>
+          >((acc, [key, value]) => {
+            const index = Number(key);
+            if (!Number.isInteger(index) || index < 0 || index >= columnCount) {
+              return acc;
+            }
+            if (typeof value !== 'number' || !Number.isFinite(value)) {
+              return acc;
+            }
+            acc[String(index)] = Math.min(320, Math.max(72, Math.round(value)));
+            return acc;
+          }, {})
+        : {},
+  };
+
+  const spreadsheetUnchanged =
+    spreadsheet &&
+    spreadsheet.sheets === nextSpreadsheet.sheets &&
+    spreadsheet.activeSheetId === nextSpreadsheet.activeSheetId &&
+    spreadsheet.activeCellKey === nextSpreadsheet.activeCellKey &&
+    spreadsheet.rowCount === nextSpreadsheet.rowCount &&
+    spreadsheet.columnCount === nextSpreadsheet.columnCount;
+  if (workspace && spreadsheetUnchanged) {
+    return state;
+  }
+
+  const hasEffectiveChange =
+    !spreadsheet ||
+    spreadsheet.activeSheetId !== nextSpreadsheet.activeSheetId ||
+    spreadsheet.activeCellKey !== nextSpreadsheet.activeCellKey ||
+    spreadsheet.rowCount !== nextSpreadsheet.rowCount ||
+    spreadsheet.columnCount !== nextSpreadsheet.columnCount ||
+    Object.keys(spreadsheet.rowHeights ?? {}).length !==
+      Object.keys(nextSpreadsheet.rowHeights ?? {}).length ||
+    Object.keys(spreadsheet.columnWidths ?? {}).length !==
+      Object.keys(nextSpreadsheet.columnWidths ?? {}).length ||
+    Object.entries(nextSpreadsheet.rowHeights ?? {}).some(
+      ([key, value]) => (spreadsheet.rowHeights ?? {})[key] !== value,
+    ) ||
+    Object.entries(nextSpreadsheet.columnWidths ?? {}).some(
+      ([key, value]) => (spreadsheet.columnWidths ?? {})[key] !== value,
+    ) ||
+    spreadsheet.sheets.length !== nextSpreadsheet.sheets.length ||
+    spreadsheet.sheets.some((sheet, index) => {
+      const nextSheet = nextSpreadsheet.sheets[index];
+      if (!nextSheet) {
+        return true;
+      }
+      if (sheet.id !== nextSheet.id || sheet.name !== nextSheet.name) {
+        return true;
+      }
+      const keys = Object.keys(sheet.cells ?? {});
+      const nextKeys = Object.keys(nextSheet.cells);
+      if (keys.length !== nextKeys.length) {
+        return true;
+      }
+      return nextKeys.some((key) => (sheet.cells as Record<string, { raw?: string }>)[key]?.raw !== nextSheet.cells[key]?.raw);
+    });
+
+  if (!hasEffectiveChange && workspace) {
+    return state;
+  }
+
+  return {
+    ...state,
+    nodeDataById: {
+      ...state.nodeDataById,
+      [nodeId]: {
+        ...(workspace ?? {}),
+        spreadsheet: nextSpreadsheet,
       },
     },
   };

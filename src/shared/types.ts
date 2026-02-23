@@ -1,6 +1,7 @@
 export type EditorType =
   | 'noteboard'
   | 'kanban-board'
+  | 'spreadsheet'
   | 'story-document'
   | 'story-presentation'
   | 'lore-document'
@@ -93,6 +94,26 @@ export type KanbanCard = {
   updatedAt: number;
 };
 
+export type SpreadsheetCell = {
+  raw: string;
+};
+
+export type SpreadsheetSheet = {
+  id: string;
+  name: string;
+  cells: Record<string, SpreadsheetCell>;
+};
+
+export type SpreadsheetData = {
+  sheets: SpreadsheetSheet[];
+  activeSheetId: string;
+  activeCellKey: string;
+  rowCount: number;
+  columnCount: number;
+  rowHeights?: Record<string, number>;
+  columnWidths?: Record<string, number>;
+};
+
 export type NodeWorkspaceData = {
   noteboard?: {
     cards: NoteboardCard[];
@@ -112,6 +133,7 @@ export type NodeWorkspaceData = {
     nextTaskNumber: number;
     collapsedColumnIds?: string[];
   };
+  spreadsheet?: SpreadsheetData;
 };
 
 export type CardTemplate = {

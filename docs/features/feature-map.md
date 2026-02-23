@@ -17,6 +17,11 @@
 - toolbar quick formatting actions
 - template insertion (GDD, quest, lore, level brief)
 - generated table of contents
+- Spreadsheet editor (phase 1):
+- 50x26 grid with cell selection and keyboard navigation
+- formula bar and cell edit mode
+- formula evaluation (`+ - * /`, refs, `SUM/AVG/MIN/MAX`, cycle/error states)
+- single-cell copy and range paste (TSV/plain text)
 - Theme system:
 - built-in themes
 - custom theme overrides (token-based Theme Studio)
@@ -32,6 +37,7 @@
 ## Planned / Partial Features
 - Dedicated story-presentation runtime module (node type exists, dedicated UI not yet shipped).
 - Dedicated map/level sketch runtime modules (node types exist, shared document editor used currently).
+- Spreadsheet editor phase 2 (multi-sheet workflows, structural row/column ops, import/export).
 - Expanded behavior-test coverage for controllers/hooks (current tests are mostly style/theme guards).
 
 ## Deferred Features
