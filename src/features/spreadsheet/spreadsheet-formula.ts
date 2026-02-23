@@ -30,14 +30,18 @@ type AstNode =
   | { kind: 'call'; name: string; args: AstNode[] }
   | { kind: 'range'; from: string; to: string };
 
-type EvalErrorCode = '#ERROR!' | '#DIV/0!' | '#REF!' | '#VALUE!' | '#CYCLE!';
+type EvalErrorCode = '#ERROR!' | '#DIV/0!' | '#REF!' | '#VALUE!' | '#CYCLE!' | '#NAME?' | '#N/A';
 
 type EvalResult =
   | { ok: true; value: number }
   | { ok: false; code: EvalErrorCode };
 
+const CELL_REFERENCE_REGEX = /^\$?[A-Z]+\$?[1-9]\d*$/;
+
 const isDigit = (char: string): boolean => char >= '0' && char <= '9';
 const isLetter = (char: string): boolean => char.toLowerCase() !== char.toUpperCase();
+
+const normalizeFormulaCellReference = (value: string): string => value.replace(/\$/g, '').toUpperCase();
 
 const tokenize = (expression: string): Token[] | null => {
   const tokens: Token[] = [];
@@ -105,20 +109,32 @@ const tokenize = (expression: string): Token[] | null => {
       continue;
     }
 
-    if (isLetter(char)) {
+    if (char === '$' || isLetter(char)) {
+      const remaining = expression.slice(index);
+      const cellMatch = remaining.match(/^\$?[A-Za-z]+\$?[1-9]\d*/);
+      if (cellMatch && CELL_REFERENCE_REGEX.test(cellMatch[0].toUpperCase())) {
+        tokens.push({
+          kind: 'cell',
+          value: normalizeFormulaCellReference(cellMatch[0]),
+        });
+        index += cellMatch[0].length;
+        continue;
+      }
+      if (char === '$') {
+        return null;
+      }
+
       let end = index + 1;
-      while (end < expression.length && isLetter(expression[end])) {
+      while (
+        end < expression.length &&
+        (isLetter(expression[end]) || isDigit(expression[end]) || expression[end] === '_')
+      ) {
         end += 1;
       }
-      while (end < expression.length && isDigit(expression[end])) {
-        end += 1;
-      }
-      const value = expression.slice(index, end).toUpperCase();
-      if (isSpreadsheetCellKey(value)) {
-        tokens.push({ kind: 'cell', value });
-      } else {
-        tokens.push({ kind: 'identifier', value });
-      }
+      tokens.push({
+        kind: 'identifier',
+        value: expression.slice(index, end).toUpperCase(),
+      });
       index = end;
       continue;
     }
@@ -281,13 +297,16 @@ const toNumericCellValue = (display: string): EvalResult => {
     return { ok: true, value: 0 };
   }
   if (trimmed.startsWith('#')) {
-    if (trimmed === '#DIV/0!') {
-      return { ok: false, code: '#DIV/0!' };
+    if (
+      trimmed === '#DIV/0!' ||
+      trimmed === '#CYCLE!' ||
+      trimmed === '#N/A' ||
+      trimmed === '#NAME?' ||
+      trimmed === '#REF!'
+    ) {
+      return { ok: false, code: trimmed as EvalErrorCode };
     }
-    if (trimmed === '#CYCLE!') {
-      return { ok: false, code: '#CYCLE!' };
-    }
-    return { ok: false, code: '#REF!' };
+    return { ok: false, code: '#ERROR!' };
   }
 
   const value = Number(trimmed);
@@ -311,6 +330,7 @@ const evaluateAst = (
   ast: AstNode,
   cells: SpreadsheetCellMap,
   evaluateCellNumeric: (cellKey: string) => EvalResult,
+  evaluateCellDisplay: (cellKey: string) => string,
 ): EvalResult => {
   if (ast.kind === 'number') {
     return { ok: true, value: ast.value };
@@ -322,7 +342,7 @@ const evaluateAst = (
     return { ok: false, code: '#ERROR!' };
   }
   if (ast.kind === 'unary') {
-    const inner = evaluateAst(ast.value, cells, evaluateCellNumeric);
+    const inner = evaluateAst(ast.value, cells, evaluateCellNumeric, evaluateCellDisplay);
     if (!inner.ok) {
       return inner;
     }
@@ -332,11 +352,11 @@ const evaluateAst = (
     };
   }
   if (ast.kind === 'binary') {
-    const left = evaluateAst(ast.left, cells, evaluateCellNumeric);
+    const left = evaluateAst(ast.left, cells, evaluateCellNumeric, evaluateCellDisplay);
     if (!left.ok) {
       return left;
     }
-    const right = evaluateAst(ast.right, cells, evaluateCellNumeric);
+    const right = evaluateAst(ast.right, cells, evaluateCellNumeric, evaluateCellDisplay);
     if (!right.ok) {
       return right;
     }
@@ -357,52 +377,134 @@ const evaluateAst = (
   }
   if (ast.kind === 'call') {
     const normalizedName = ast.name.toUpperCase();
-    if (
-      normalizedName !== 'SUM' &&
-      normalizedName !== 'AVG' &&
-      normalizedName !== 'MIN' &&
-      normalizedName !== 'MAX'
-    ) {
-      return { ok: false, code: '#ERROR!' };
+    const supportedFunctions = new Set(['SUM', 'AVG', 'MIN', 'MAX', 'COUNT', 'COUNTA', 'ROUND', 'ABS', 'IF']);
+    if (!supportedFunctions.has(normalizedName)) {
+      return { ok: false, code: '#NAME?' };
     }
 
-    const values: number[] = [];
-    for (const arg of ast.args) {
-      if (arg.kind === 'range') {
-        const keys = expandCellRange(arg.from, arg.to);
-        if (keys.length === 0) {
-          return { ok: false, code: '#REF!' };
-        }
-        for (const key of keys) {
-          const evaluated = evaluateCellNumeric(key);
-          if (!evaluated.ok) {
-            return evaluated;
-          }
-          values.push(evaluated.value);
-        }
-        continue;
+    const evaluateNodeAsDisplay = (node: AstNode): { ok: true; display: string } | { ok: false; code: EvalErrorCode } => {
+      if (node.kind === 'range') {
+        return { ok: false, code: '#ERROR!' };
       }
-      const evaluated = evaluateAst(arg, cells, evaluateCellNumeric);
+      if (node.kind === 'cell') {
+        return { ok: true, display: evaluateCellDisplay(node.key) };
+      }
+      const evaluated = evaluateAst(node, cells, evaluateCellNumeric, evaluateCellDisplay);
       if (!evaluated.ok) {
         return evaluated;
       }
-      values.push(evaluated.value);
+      return { ok: true, display: numberToDisplay(evaluated.value) };
+    };
+
+    const collectArgumentDisplays = (node: AstNode): { ok: true; values: string[] } | { ok: false; code: EvalErrorCode } => {
+      if (node.kind === 'range') {
+        const keys = expandCellRange(node.from, node.to);
+        if (keys.length === 0) {
+          return { ok: false, code: '#REF!' };
+        }
+        return {
+          ok: true,
+          values: keys.map((key) => evaluateCellDisplay(key)),
+        };
+      }
+
+      const display = evaluateNodeAsDisplay(node);
+      if (!display.ok) {
+        return display;
+      }
+      return { ok: true, values: [display.display] };
+    };
+
+    if (normalizedName === 'IF') {
+      if (ast.args.length < 2 || ast.args.length > 3) {
+        return { ok: false, code: '#N/A' };
+      }
+      const condition = evaluateAst(ast.args[0], cells, evaluateCellNumeric, evaluateCellDisplay);
+      if (!condition.ok) {
+        return condition;
+      }
+      const branch = condition.value !== 0 ? ast.args[1] : ast.args[2];
+      if (!branch) {
+        return { ok: false, code: '#N/A' };
+      }
+      return evaluateAst(branch, cells, evaluateCellNumeric, evaluateCellDisplay);
     }
 
-    if (values.length === 0) {
-      return { ok: false, code: '#ERROR!' };
+    const displays: string[] = [];
+    for (const arg of ast.args) {
+      const evaluated = collectArgumentDisplays(arg);
+      if (!evaluated.ok) {
+        return evaluated;
+      }
+      displays.push(...evaluated.values);
+    }
+
+    if (normalizedName === 'COUNTA') {
+      const count = displays.filter((display) => display.trim().length > 0).length;
+      return { ok: true, value: count };
+    }
+
+    if (normalizedName === 'COUNT') {
+      const count = displays.reduce((sum, display) => {
+        if (!display.trim()) {
+          return sum;
+        }
+        const numeric = toNumericCellValue(display);
+        return numeric.ok ? sum + 1 : sum;
+      }, 0);
+      return { ok: true, value: count };
+    }
+
+    const numericValues: number[] = [];
+    for (const display of displays) {
+      const numeric = toNumericCellValue(display);
+      if (!numeric.ok) {
+        return numeric;
+      }
+      numericValues.push(numeric.value);
     }
 
     if (normalizedName === 'SUM') {
-      return { ok: true, value: values.reduce((sum, value) => sum + value, 0) };
+      return { ok: true, value: numericValues.reduce((sum, value) => sum + value, 0) };
     }
     if (normalizedName === 'AVG') {
-      return { ok: true, value: values.reduce((sum, value) => sum + value, 0) / values.length };
+      if (numericValues.length === 0) {
+        return { ok: false, code: '#DIV/0!' };
+      }
+      return {
+        ok: true,
+        value: numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length,
+      };
     }
     if (normalizedName === 'MIN') {
-      return { ok: true, value: Math.min(...values) };
+      if (numericValues.length === 0) {
+        return { ok: false, code: '#N/A' };
+      }
+      return { ok: true, value: Math.min(...numericValues) };
     }
-    return { ok: true, value: Math.max(...values) };
+    if (normalizedName === 'MAX') {
+      if (numericValues.length === 0) {
+        return { ok: false, code: '#N/A' };
+      }
+      return { ok: true, value: Math.max(...numericValues) };
+    }
+    if (normalizedName === 'ABS') {
+      if (numericValues.length !== 1) {
+        return { ok: false, code: '#N/A' };
+      }
+      return { ok: true, value: Math.abs(numericValues[0]) };
+    }
+    if (normalizedName === 'ROUND') {
+      if (numericValues.length < 1 || numericValues.length > 2) {
+        return { ok: false, code: '#N/A' };
+      }
+      const decimals = numericValues.length === 1 ? 0 : Math.trunc(numericValues[1]);
+      const factor = 10 ** Math.abs(decimals);
+      if (decimals >= 0) {
+        return { ok: true, value: Math.round(numericValues[0] * factor) / factor };
+      }
+      return { ok: true, value: Math.round(numericValues[0] / factor) * factor };
+    }
   }
 
   return { ok: false, code: '#ERROR!' };
@@ -422,7 +524,7 @@ export const evaluateSpreadsheetCell = (
   cache: Map<string, string> = new Map<string, string>(),
   stack: Set<string> = new Set<string>(),
 ): string => {
-  const normalizedKey = cellKey.trim().toUpperCase();
+  const normalizedKey = normalizeFormulaCellReference(cellKey.trim());
   const cached = cache.get(normalizedKey);
   if (cached !== undefined) {
     return cached;
@@ -456,14 +558,17 @@ export const evaluateSpreadsheetCell = (
   }
 
   stack.add(normalizedKey);
+  const evaluateCellDisplay = (targetKey: string): string =>
+    evaluateSpreadsheetCell(targetKey, cells, cache, stack);
+
   const evaluateCellNumeric = (targetKey: string): EvalResult => {
     if (!isSpreadsheetCellKey(targetKey)) {
       return { ok: false, code: '#REF!' };
     }
-    const display = evaluateSpreadsheetCell(targetKey, cells, cache, stack);
+    const display = evaluateCellDisplay(targetKey);
     return toNumericCellValue(display);
   };
-  const result = evaluateAst(ast, cells, evaluateCellNumeric);
+  const result = evaluateAst(ast, cells, evaluateCellNumeric, evaluateCellDisplay);
   stack.delete(normalizedKey);
 
   const display = result.ok ? numberToDisplay(result.value) : result.code;
