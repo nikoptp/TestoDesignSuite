@@ -64,6 +64,7 @@ export const SpreadsheetEditor = ({
   const [draftValue, setDraftValue] = React.useState('');
   const [rangeAnchorKey, setRangeAnchorKey] = React.useState<string | null>(null);
   const [rangeFocusKey, setRangeFocusKey] = React.useState<string | null>(null);
+  const [isMouseSelectingRange, setIsMouseSelectingRange] = React.useState(false);
   const selectedCellKey = spreadsheet.activeCellKey;
   const gridRef = React.useRef<HTMLDivElement | null>(null);
   const editStartRawRef = React.useRef('');
@@ -73,7 +74,23 @@ export const SpreadsheetEditor = ({
     setEditSource(null);
     setRangeAnchorKey(null);
     setRangeFocusKey(null);
+    setIsMouseSelectingRange(false);
   }, [node.id]);
+
+  React.useEffect(() => {
+    if (!isMouseSelectingRange) {
+      return;
+    }
+
+    const onWindowMouseUp = (): void => {
+      setIsMouseSelectingRange(false);
+    };
+
+    window.addEventListener('mouseup', onWindowMouseUp);
+    return () => {
+      window.removeEventListener('mouseup', onWindowMouseUp);
+    };
+  }, [isMouseSelectingRange]);
 
   React.useEffect(() => {
     if (!activeSheet) {
@@ -429,6 +446,7 @@ export const SpreadsheetEditor = ({
         onKeyDown={onGridKeyDown}
         onCopy={onGridCopy}
         onPaste={onGridPaste}
+        onMouseUp={() => setIsMouseSelectingRange(false)}
       >
         {activeSheet ? (
           <table className="spreadsheet-grid" role="grid" aria-label="Spreadsheet grid">
@@ -494,7 +512,9 @@ export const SpreadsheetEditor = ({
                             spreadsheet.rowHeights?.[String(rowIndex)] ??
                             DEFAULT_SPREADSHEET_ROW_HEIGHT,
                         }}
-                        onClick={(event) => {
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          setIsMouseSelectingRange(true);
                           if (isSelected) {
                             return;
                           }
@@ -508,6 +528,13 @@ export const SpreadsheetEditor = ({
                           }
                           setIsEditingCell(false);
                           onEditEnd();
+                        }}
+                        onMouseEnter={() => {
+                          if (!isMouseSelectingRange) {
+                            return;
+                          }
+                          onActiveCellChange(cellKey);
+                          setRangeFocusKey(cellKey);
                         }}
                         onDoubleClick={() => {
                           onActiveCellChange(cellKey);
