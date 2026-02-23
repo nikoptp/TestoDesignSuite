@@ -27,8 +27,10 @@ import { CreateNodeDialog, DeleteNodeDialog, SettingsDialog } from './components
 import { EditorPanel } from './components/editor-panel';
 import { NoteboardCanvas } from './components/noteboard-canvas';
 import { DocumentEditor } from './components/document-editor';
+import { DesignLabEditor } from './components/design-lab-editor';
 import { KanbanBoard } from './components/kanban-board';
 import { StartupSplash } from './components/startup-splash';
+import { getDesignLabKindForEditorType, isDesignLabEditorType } from './shared/editor-types';
 import {
   useProjectBootstrap,
   useProjectSnapshotResponder,
@@ -48,6 +50,7 @@ import {
   useNoteboardPasteShortcut,
 } from './features/noteboard/hooks/use-noteboard-global-events';
 import { useDocumentEditorActions } from './features/document/hooks/use-document-editor-actions';
+import { useDesignLabActions } from './features/design-lab/hooks/use-design-lab-actions';
 import { useThemeRuntime } from './features/theme/hooks/use-theme-runtime';
 import { useThemeStudioController } from './features/theme/hooks/use-theme-studio-controller';
 
@@ -67,7 +70,9 @@ import {
   defaultState,
   ensureNoteboardData,
   ensureKanbanData,
+  ensureDesignLabData,
   getCardsForNode,
+  getDesignLabForNode,
   getKanbanBoardForNode,
   getSharedKanbanBacklogCards,
   getDocumentMarkdownForNode,
@@ -544,6 +549,14 @@ export const App = (): React.ReactElement => {
     setState((prev) => ensureKanbanData(prev, selectedNode.id));
   }, [selectedNode]);
 
+  React.useEffect(() => {
+    if (!selectedNode || !isDesignLabEditorType(selectedNode.editorType)) {
+      return;
+    }
+
+    setState((prev) => ensureDesignLabData(prev, selectedNode.id, selectedNode.editorType));
+  }, [selectedNode]);
+
   const pendingDeleteNode = React.useMemo(
     () => findNodeById(state.nodes, uiState.pendingDeleteNodeId),
     [state.nodes, uiState.pendingDeleteNodeId],
@@ -581,7 +594,8 @@ export const App = (): React.ReactElement => {
   const selectedDocumentMarkdown =
     selectedNode &&
     selectedNode.editorType !== 'noteboard' &&
-    selectedNode.editorType !== 'kanban-board'
+    selectedNode.editorType !== 'kanban-board' &&
+    !isDesignLabEditorType(selectedNode.editorType)
       ? getDocumentMarkdownForNode(state, selectedNode.id)
       : '';
   const selectedKanban =
@@ -589,6 +603,10 @@ export const App = (): React.ReactElement => {
       ? getKanbanBoardForNode(state, selectedNode.id)
       : null;
   const sharedKanbanBacklogCards = getSharedKanbanBacklogCards(state);
+  const selectedDesignLab =
+    selectedNode && isDesignLabEditorType(selectedNode.editorType)
+      ? getDesignLabForNode(state, selectedNode.id)
+      : null;
 
   const collectKanbanNodes = React.useCallback((nodes: typeof state.nodes): Array<{ nodeId: string; name: string }> => {
     const result: Array<{ nodeId: string; name: string }> = [];
@@ -1132,6 +1150,26 @@ export const App = (): React.ReactElement => {
     [pushHistory, selectedNode],
   );
 
+  const designLabNodeId = selectedNode?.id ?? '';
+  const designLabKind =
+    selectedNode ? getDesignLabKindForEditorType(selectedNode.editorType) : null;
+  const {
+    onCreateVariable,
+    onVariableValueChange,
+    onDeleteVariable,
+    onCreateScenario,
+    onRenameScenario,
+    onDeleteScenario,
+    onSetActiveScenario,
+    onScenarioOverrideChange,
+    onRunCalculator,
+  } = useDesignLabActions({
+    nodeId: designLabNodeId,
+    editorType: designLabKind ?? 'core-loop-simulator',
+    setState,
+    pushHistory,
+  });
+
   return (
     <motion.div
       ref={shellRef}
@@ -1330,6 +1368,29 @@ export const App = (): React.ReactElement => {
                 onDeleteColumn={onKanbanDeleteColumn}
                 onMigrate={onKanbanMigrate}
                 onToggleColumnCollapsed={onKanbanToggleColumnCollapsed}
+              />
+            </motion.div>
+          ) : selectedNode && isDesignLabEditorType(selectedNode.editorType) ? (
+            <motion.div
+              key={`designlab-${selectedNode.id}`}
+              className="main-view"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+            >
+              <DesignLabEditor
+                node={selectedNode}
+                designLab={selectedDesignLab}
+                onCreateVariable={onCreateVariable}
+                onVariableValueChange={onVariableValueChange}
+                onDeleteVariable={onDeleteVariable}
+                onCreateScenario={onCreateScenario}
+                onRenameScenario={onRenameScenario}
+                onDeleteScenario={onDeleteScenario}
+                onSetActiveScenario={onSetActiveScenario}
+                onScenarioOverrideChange={onScenarioOverrideChange}
+                onRunCalculator={onRunCalculator}
               />
             </motion.div>
           ) : selectedNode ? (

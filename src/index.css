@@ -2966,3 +2966,219 @@ body.is-dragging-template * {
     width: min(420px, calc(100% - 12px));
   }
 }
+
+.design-lab-layout {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 10px;
+}
+
+.design-lab-main,
+.design-lab-sidebar {
+  min-height: 0;
+  border: 1px solid var(--dialog-border);
+  border-radius: 10px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--dialog-bg) 94%, transparent) 0%,
+      color-mix(in srgb, var(--surface-soft) 90%, transparent) 100%
+    );
+  padding: 10px;
+}
+
+.design-lab-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.design-lab-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.design-lab-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.design-lab-inline-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.design-lab-inline-controls > input {
+  width: 100%;
+}
+
+.design-lab-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.design-lab-preset-button {
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  text-align: left;
+}
+
+.design-lab-preset-button strong {
+  font-size: 12px;
+}
+
+.design-lab-preset-button span {
+  font-size: 11px;
+  color: var(--muted-text);
+  line-height: 1.25;
+}
+
+.design-lab-flow {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(180px, 1fr));
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.design-lab-guide {
+  border: 1px solid color-mix(in srgb, var(--dialog-border) 84%, transparent);
+  border-radius: 8px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+}
+
+.design-lab-guide h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+
+.design-lab-guide p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.design-lab-guide ul {
+  margin: 8px 0 0;
+  padding: 0 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.design-lab-guide li {
+  font-size: 11px;
+  color: var(--muted-text);
+}
+
+.design-lab-guide li strong {
+  display: block;
+  color: var(--app-text);
+  font-size: 11px;
+}
+
+.design-lab-guide li span {
+  display: block;
+  line-height: 1.3;
+}
+
+.design-lab-stage {
+  border: 1px solid color-mix(in srgb, var(--active-item-border) 42%, var(--dialog-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-soft) 74%, transparent);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.design-lab-stage h3 {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.design-lab-stage p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--muted-text);
+  min-height: 30px;
+}
+
+.design-lab-stage-value {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--app-text);
+}
+
+.design-lab-stage input[type='range'] {
+  width: 100%;
+}
+
+.design-lab-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.design-lab-metrics-grid p {
+  margin: 0;
+  border: 1px solid var(--dialog-border);
+  border-radius: 8px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: color-mix(in srgb, var(--surface-soft) 78%, transparent);
+}
+
+.design-lab-metrics-grid span {
+  font-size: 11px;
+  color: var(--muted-text);
+}
+
+.design-lab-metrics-grid strong {
+  font-size: 15px;
+  color: var(--app-text);
+}
+
+.design-lab-metrics-grid em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--link-color);
+}
+
+@media (max-width: 1200px) {
+  .design-lab-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .design-lab-sidebar {
+    max-height: 360px;
+  }
+}
+
+@media (max-width: 900px) {
+  .design-lab-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .design-lab-presets {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

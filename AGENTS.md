@@ -109,6 +109,7 @@
 - Architecture notes: `docs/architecture/system-notes.md`
 - MVP spec: `docs/architecture/mvp-spec-v1.md`
 - Feature map: `docs/features/feature-map.md`
+- Experimental fun editors roadmap: `docs/features/experimental-fun-editors-roadmap.md`
 - Agent architecture reference: `docs/architecture/agent-architecture-reference.md`
 - Agent change checklist: `docs/architecture/agent-change-checklist.md`
 - Testing strategy: `docs/architecture/testing-plan-v1.md`
@@ -146,6 +147,7 @@
 - 2026-02-11: Added React noteboard marquee selection rectangle and app-level undo/redo history shortcuts (`Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z`, `Ctrl/Cmd+Y`).
 - 2026-02-11: Promoted React renderer files to `src` root (`src/app.tsx`, `src/mount.tsx`, `src/components/*`) and removed legacy renderer module.
 - 2026-02-17: Documentation refreshed after repository scan; README and architecture/feature docs now reflect implemented project file workflows, theme studio, image assets, and current editor/runtime behavior.
+- 2026-02-22: Redesigned Core Loop Simulator UX in React design-lab editor with stage-oriented flow controls, quick tuning presets, scenario-focused tuning surface, and run insight deltas while preserving existing design-lab data contracts.
 - 2026-02-22: Extracted shared pointer session helper (`src/shared/pointer-session.ts`) and refactored sidebar resize, document splitter resize, and noteboard template drag to use it.
 - 2026-02-22: Added shared interaction hooks (`use-outside-pointer-dismiss`, `use-global-keydown`) and applied them to app/noteboard/kanban outside-click and keyboard shortcut flows.
 - 2026-02-22: Added shared noteboard coordinate utilities (`src/shared/noteboard-coordinate-utils.ts`) and refactored wheel/context/clipboard center calculations to use shared conversions.
@@ -153,6 +155,9 @@
 - 2026-02-22: Added `src/features/app/workspace-node-updaters.ts` and refactored kanban + noteboard state writes to reduce duplicated `nodeDataById` immutable update boilerplate.
 - 2026-02-22: Added `src/features/noteboard/noteboard-dom-selectors.ts` and refactored noteboard hooks to consume centralized blocked-target selector constants.
 - 2026-02-22: Expanded AGENTS governance with refactor playbook, shared primitive index, state/DnD/selector rules, extraction testing requirements, performance guardrails, and definition-of-done checklist.
+- 2026-02-22: Created experimental branch planning doc for three fun-focused editors (`core loop simulator`, `hypothesis playground`, `economy and balance tuner`) at `docs/features/experimental-fun-editors-roadmap.md`.
+- 2026-02-22: Added base scaffolding for new experimental editor types (`core-loop-simulator`, `hypothesis-playground`, `economy-balance-tuner`) including editor metadata/options, design-lab type contracts, persistence guard support, and a placeholder `DesignLabEditor` view.
+- 2026-02-22: Implemented design-lab phase-1 foundation runtime: `ensureDesignLabData` initialization/sanitization, shared design-lab CRUD/run hooks, and first functional `core-loop-simulator` shell with calculator-backed run logs.
 
 ## Open Questions
 - Single-window only for MVP, or multi-window support early?

@@ -80,6 +80,7 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
     noteboard?: unknown;
     document?: unknown;
     kanban?: unknown;
+    designLab?: unknown;
   };
 
   if (typeof obj.noteboard !== 'undefined') {
@@ -197,6 +198,117 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
       typeof kanban.collapsedColumnIds !== 'undefined' &&
       (!Array.isArray(kanban.collapsedColumnIds) ||
         !kanban.collapsedColumnIds.every((id) => typeof id === 'string'))
+    ) {
+      return false;
+    }
+  }
+
+  if (typeof obj.designLab !== 'undefined') {
+    if (typeof obj.designLab !== 'object' || obj.designLab === null) {
+      return false;
+    }
+    const designLab = obj.designLab as {
+      kind?: unknown;
+      variables?: unknown;
+      scenarios?: unknown;
+      runs?: unknown;
+      activeScenarioId?: unknown;
+    };
+    if (
+      (designLab.kind !== 'core-loop-simulator' &&
+        designLab.kind !== 'hypothesis-playground' &&
+        designLab.kind !== 'economy-balance-tuner') ||
+      !Array.isArray(designLab.variables) ||
+      !Array.isArray(designLab.scenarios) ||
+      !Array.isArray(designLab.runs)
+    ) {
+      return false;
+    }
+
+    const variablesValid = designLab.variables.every((item) => {
+      if (typeof item !== 'object' || item === null) {
+        return false;
+      }
+      const variable = item as {
+        id?: unknown;
+        name?: unknown;
+        value?: unknown;
+        defaultValue?: unknown;
+        min?: unknown;
+        max?: unknown;
+        unit?: unknown;
+      };
+      return (
+        typeof variable.id === 'string' &&
+        typeof variable.name === 'string' &&
+        typeof variable.value === 'number' &&
+        typeof variable.defaultValue === 'number' &&
+        (typeof variable.min === 'undefined' || typeof variable.min === 'number') &&
+        (typeof variable.max === 'undefined' || typeof variable.max === 'number') &&
+        (typeof variable.unit === 'undefined' || typeof variable.unit === 'string')
+      );
+    });
+    if (!variablesValid) {
+      return false;
+    }
+
+    const scenariosValid = designLab.scenarios.every((item) => {
+      if (typeof item !== 'object' || item === null) {
+        return false;
+      }
+      const scenario = item as {
+        id?: unknown;
+        name?: unknown;
+        overridesByVariableId?: unknown;
+        createdAt?: unknown;
+        updatedAt?: unknown;
+      };
+      return (
+        typeof scenario.id === 'string' &&
+        typeof scenario.name === 'string' &&
+        typeof scenario.overridesByVariableId === 'object' &&
+        scenario.overridesByVariableId !== null &&
+        Object.values(scenario.overridesByVariableId as Record<string, unknown>).every(
+          (value) => typeof value === 'number',
+        ) &&
+        typeof scenario.createdAt === 'number' &&
+        typeof scenario.updatedAt === 'number'
+      );
+    });
+    if (!scenariosValid) {
+      return false;
+    }
+
+    const runsValid = designLab.runs.every((item) => {
+      if (typeof item !== 'object' || item === null) {
+        return false;
+      }
+      const run = item as {
+        id?: unknown;
+        scenarioId?: unknown;
+        createdAt?: unknown;
+        summary?: unknown;
+        metricsByKey?: unknown;
+      };
+      return (
+        typeof run.id === 'string' &&
+        (typeof run.scenarioId === 'string' || run.scenarioId === null) &&
+        typeof run.createdAt === 'number' &&
+        typeof run.summary === 'string' &&
+        typeof run.metricsByKey === 'object' &&
+        run.metricsByKey !== null &&
+        Object.values(run.metricsByKey as Record<string, unknown>).every(
+          (value) => typeof value === 'number',
+        )
+      );
+    });
+    if (!runsValid) {
+      return false;
+    }
+
+    if (
+      typeof designLab.activeScenarioId !== 'undefined' &&
+      typeof designLab.activeScenarioId !== 'string'
     ) {
       return false;
     }

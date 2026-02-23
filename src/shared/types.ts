@@ -1,6 +1,9 @@
 export type EditorType =
   | 'noteboard'
   | 'kanban-board'
+  | 'core-loop-simulator'
+  | 'hypothesis-playground'
+  | 'economy-balance-tuner'
   | 'story-document'
   | 'story-presentation'
   | 'lore-document'
@@ -112,6 +115,44 @@ export type NodeWorkspaceData = {
     nextTaskNumber: number;
     collapsedColumnIds?: string[];
   };
+  designLab?: {
+    kind: DesignLabKind;
+    variables: DesignLabVariable[];
+    scenarios: DesignLabScenario[];
+    runs: DesignLabRun[];
+    activeScenarioId?: string;
+  };
+};
+
+export type DesignLabKind =
+  | 'core-loop-simulator'
+  | 'hypothesis-playground'
+  | 'economy-balance-tuner';
+
+export type DesignLabVariable = {
+  id: string;
+  name: string;
+  value: number;
+  defaultValue: number;
+  min?: number;
+  max?: number;
+  unit?: string;
+};
+
+export type DesignLabScenario = {
+  id: string;
+  name: string;
+  overridesByVariableId: Record<string, number>;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type DesignLabRun = {
+  id: string;
+  scenarioId: string | null;
+  createdAt: number;
+  summary: string;
+  metricsByKey: Record<string, number>;
 };
 
 export type CardTemplate = {

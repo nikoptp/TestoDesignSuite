@@ -2,6 +2,11 @@ import type {
   AppTheme,
   CardTemplate,
   CategoryNode,
+  DesignLabKind,
+  DesignLabRun,
+  DesignLabScenario,
+  DesignLabVariable,
+  EditorType,
   KanbanCard,
   KanbanColumn,
   KanbanPriority,
@@ -12,6 +17,7 @@ import type {
   ProjectStatusPayload,
   UserSettings,
 } from '../../shared/types';
+import { getDesignLabKindForEditorType } from '../../shared/editor-types';
 import {
   NOTEBOARD_WORLD_MIN_X,
   NOTEBOARD_WORLD_MIN_Y,
@@ -711,6 +717,181 @@ export const getKanbanBoardForNode = (
 
 export const getSharedKanbanBacklogCards = (state: PersistedTreeState): KanbanCard[] =>
   state.sharedKanbanBacklogCards ?? [];
+
+const createDefaultDesignLabData = (kind: DesignLabKind): {
+  kind: DesignLabKind;
+  variables: DesignLabVariable[];
+  scenarios: DesignLabScenario[];
+  runs: DesignLabRun[];
+  activeScenarioId?: string;
+} => {
+  const now = Date.now();
+  if (kind === 'core-loop-simulator') {
+    return {
+      kind,
+      variables: [
+        { id: 'v-action-time', name: 'Action Time (sec)', value: 1.8, defaultValue: 1.8, min: 0.2, max: 10 },
+        { id: 'v-challenge-time', name: 'Challenge Time (sec)', value: 3.5, defaultValue: 3.5, min: 0.5, max: 20 },
+        { id: 'v-reward-time', name: 'Reward Time (sec)', value: 1.2, defaultValue: 1.2, min: 0.1, max: 10 },
+        { id: 'v-friction', name: 'Friction', value: 48, defaultValue: 48, min: 0, max: 100 },
+        { id: 'v-reward-intensity', name: 'Reward Intensity', value: 62, defaultValue: 62, min: 0, max: 100 },
+      ],
+      scenarios: [
+        {
+          id: 'scenario-base',
+          name: 'Baseline',
+          overridesByVariableId: {},
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+      runs: [],
+      activeScenarioId: 'scenario-base',
+    };
+  }
+
+  return {
+    kind,
+    variables: [],
+    scenarios: [],
+    runs: [],
+  };
+};
+
+export const getDesignLabForNode = (
+  state: PersistedTreeState,
+  nodeId: string,
+): PersistedTreeState['nodeDataById'][string]['designLab'] | null =>
+  state.nodeDataById[nodeId]?.designLab ?? null;
+
+export const ensureDesignLabData = (
+  state: PersistedTreeState,
+  nodeId: string,
+  editorType: EditorType,
+): PersistedTreeState => {
+  const kind = getDesignLabKindForEditorType(editorType);
+  if (!kind) {
+    return state;
+  }
+
+  const workspace = state.nodeDataById[nodeId];
+  const designLab = workspace?.designLab;
+  const fallback = createDefaultDesignLabData(kind);
+
+  const nextKind: DesignLabKind = designLab?.kind === kind ? designLab.kind : kind;
+  const variables = Array.isArray(designLab?.variables)
+    ? designLab.variables
+        .filter((variable): variable is DesignLabVariable => {
+          return (
+            Boolean(variable) &&
+            typeof variable.id === 'string' &&
+            variable.id.trim().length > 0 &&
+            typeof variable.name === 'string' &&
+            variable.name.trim().length > 0 &&
+            typeof variable.value === 'number' &&
+            Number.isFinite(variable.value) &&
+            typeof variable.defaultValue === 'number' &&
+            Number.isFinite(variable.defaultValue)
+          );
+        })
+        .map((variable) => ({
+          ...variable,
+          id: variable.id.trim(),
+          name: variable.name.trim(),
+        }))
+    : fallback.variables;
+
+  const scenarios = Array.isArray(designLab?.scenarios)
+    ? designLab.scenarios
+        .filter((scenario): scenario is DesignLabScenario => {
+          return (
+            Boolean(scenario) &&
+            typeof scenario.id === 'string' &&
+            scenario.id.trim().length > 0 &&
+            typeof scenario.name === 'string' &&
+            scenario.name.trim().length > 0 &&
+            typeof scenario.overridesByVariableId === 'object' &&
+            scenario.overridesByVariableId !== null &&
+            typeof scenario.createdAt === 'number' &&
+            Number.isFinite(scenario.createdAt) &&
+            typeof scenario.updatedAt === 'number' &&
+            Number.isFinite(scenario.updatedAt)
+          );
+        })
+        .map((scenario) => ({
+          ...scenario,
+          id: scenario.id.trim(),
+          name: scenario.name.trim(),
+          overridesByVariableId: Object.fromEntries(
+            Object.entries(scenario.overridesByVariableId).filter(
+              ([, value]) => typeof value === 'number' && Number.isFinite(value),
+            ),
+          ),
+        }))
+    : fallback.scenarios;
+
+  const runs = Array.isArray(designLab?.runs)
+    ? designLab.runs
+        .filter((run): run is DesignLabRun => {
+          return (
+            Boolean(run) &&
+            typeof run.id === 'string' &&
+            run.id.trim().length > 0 &&
+            (typeof run.scenarioId === 'string' || run.scenarioId === null) &&
+            typeof run.createdAt === 'number' &&
+            Number.isFinite(run.createdAt) &&
+            typeof run.summary === 'string' &&
+            typeof run.metricsByKey === 'object' &&
+            run.metricsByKey !== null
+          );
+        })
+        .map((run) => ({
+          ...run,
+          id: run.id.trim(),
+          metricsByKey: Object.fromEntries(
+            Object.entries(run.metricsByKey).filter(
+              ([, value]) => typeof value === 'number' && Number.isFinite(value),
+            ),
+          ),
+        }))
+    : fallback.runs;
+
+  const activeScenarioId =
+    typeof designLab?.activeScenarioId === 'string' &&
+    scenarios.some((scenario) => scenario.id === designLab.activeScenarioId)
+      ? designLab.activeScenarioId
+      : scenarios[0]?.id;
+
+  const hasEquivalent =
+    workspace &&
+    designLab &&
+    designLab.kind === nextKind &&
+    designLab.variables === variables &&
+    designLab.scenarios === scenarios &&
+    designLab.runs === runs &&
+    designLab.activeScenarioId === activeScenarioId;
+
+  if (hasEquivalent) {
+    return state;
+  }
+
+  return {
+    ...state,
+    nodeDataById: {
+      ...state.nodeDataById,
+      [nodeId]: {
+        ...(workspace ?? {}),
+        designLab: {
+          kind: nextKind,
+          variables,
+          scenarios,
+          runs,
+          activeScenarioId,
+        },
+      },
+    },
+  };
+};
 
 export const ensureKanbanData = (
   state: PersistedTreeState,
