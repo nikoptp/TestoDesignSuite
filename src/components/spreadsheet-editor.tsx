@@ -13,6 +13,7 @@ import {
   DEFAULT_SPREADSHEET_COLUMN_WIDTH,
   DEFAULT_SPREADSHEET_ROW_HEIGHT,
 } from '../features/spreadsheet/spreadsheet-grid-ops';
+import { useGlobalKeydown } from '../shared/hooks/use-global-keydown';
 
 type SpreadsheetEditorProps = {
   node: CategoryNode;
@@ -162,6 +163,59 @@ export const SpreadsheetEditor = ({
     [onActiveCellChange, selectedCellKey, selectedCoords, spreadsheet.columnCount, spreadsheet.rowCount],
   );
 
+  const clearSelectedCells = React.useCallback((): void => {
+    if (!activeRangeBounds) {
+      onCellChange(selectedCellKey, '', 'quick-action');
+      return;
+    }
+
+    const patches: Array<{ cellKey: string; raw: string }> = [];
+    for (
+      let rowIndex = activeRangeBounds.minRowIndex;
+      rowIndex <= activeRangeBounds.maxRowIndex;
+      rowIndex += 1
+    ) {
+      for (
+        let columnIndex = activeRangeBounds.minColumnIndex;
+        columnIndex <= activeRangeBounds.maxColumnIndex;
+        columnIndex += 1
+      ) {
+        patches.push({
+          cellKey: toCellKey(columnIndex, rowIndex),
+          raw: '',
+        });
+      }
+    }
+    onBatchChange(patches, 'quick-action');
+  }, [activeRangeBounds, onBatchChange, onCellChange, selectedCellKey]);
+
+  useGlobalKeydown({
+    enabled: true,
+    onKeyDown: React.useCallback(
+      (event: KeyboardEvent): void => {
+        if (event.defaultPrevented || isEditingCell) {
+          return;
+        }
+        if (event.key !== 'Delete' && event.key !== 'Backspace') {
+          return;
+        }
+
+        const target = event.target;
+        if (
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          (target instanceof HTMLElement && target.isContentEditable)
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        clearSelectedCells();
+      },
+      [clearSelectedCells, isEditingCell],
+    ),
+  });
+
   const onGridKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>): void => {
       if (!activeSheet) {
@@ -182,6 +236,11 @@ export const SpreadsheetEditor = ({
       if (event.key === 'Enter') {
         event.preventDefault();
         startCellEdit('grid');
+        return;
+      }
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        clearSelectedCells();
         return;
       }
 
@@ -220,11 +279,13 @@ export const SpreadsheetEditor = ({
     [
       activeSheet,
       cancelCellEdit,
+      clearSelectedCells,
       commitCellEdit,
       isEditingCell,
       moveSelection,
       onEditEnd,
       onEditStart,
+      activeRangeBounds,
       selectedCellKey,
       startCellEdit,
     ],
@@ -514,6 +575,7 @@ export const SpreadsheetEditor = ({
                         }}
                         onMouseDown={(event) => {
                           event.preventDefault();
+                          gridRef.current?.focus();
                           setIsMouseSelectingRange(true);
                           if (isSelected) {
                             return;
