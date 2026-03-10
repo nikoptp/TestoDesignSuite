@@ -390,8 +390,8 @@ const evaluateAst = (
         return { ok: true, display: evaluateCellDisplay(node.key) };
       }
       const evaluated = evaluateAst(node, cells, evaluateCellNumeric, evaluateCellDisplay);
-      if (!evaluated.ok) {
-        return evaluated;
+      if ('code' in evaluated) {
+        return { ok: false, code: evaluated.code };
       }
       return { ok: true, display: numberToDisplay(evaluated.value) };
     };
@@ -409,8 +409,8 @@ const evaluateAst = (
       }
 
       const display = evaluateNodeAsDisplay(node);
-      if (!display.ok) {
-        return display;
+      if ('code' in display) {
+        return { ok: false, code: display.code };
       }
       return { ok: true, values: [display.display] };
     };
@@ -433,8 +433,8 @@ const evaluateAst = (
     const displays: string[] = [];
     for (const arg of ast.args) {
       const evaluated = collectArgumentDisplays(arg);
-      if (!evaluated.ok) {
-        return evaluated;
+      if ('code' in evaluated) {
+        return { ok: false, code: evaluated.code };
       }
       displays.push(...evaluated.values);
     }
@@ -571,7 +571,7 @@ export const evaluateSpreadsheetCell = (
   const result = evaluateAst(ast, cells, evaluateCellNumeric, evaluateCellDisplay);
   stack.delete(normalizedKey);
 
-  const display = result.ok ? numberToDisplay(result.value) : result.code;
+  const display = 'code' in result ? result.code : numberToDisplay(result.value);
   cache.set(normalizedKey, display);
   return display;
 };

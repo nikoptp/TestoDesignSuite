@@ -35,8 +35,6 @@
 - project status messages in UI
 
 ## Planned / Partial Features
-- Dedicated story-presentation runtime module (node type exists, dedicated UI not yet shipped).
-- Dedicated map/level sketch runtime modules (node types exist, shared document editor used currently).
 - Spreadsheet editor phase 2 (multi-sheet workflows, structural row/column ops, import/export).
 - Expanded behavior-test coverage for controllers/hooks (current tests are mostly style/theme guards).
 
@@ -48,6 +46,5 @@
 - Map simulation/prototype mode (trigger logic/playthrough systems).
 
 ## Open Product Questions
-- Should story presentation and map editors be implemented as separate canvases or evolved from current document flows?
 - What minimum audio support is required for MVP+1 (formats, preview UX, storage limits)?
 - How far should template systems go (node templates, project templates, importable bundles)?

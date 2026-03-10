@@ -251,7 +251,7 @@ export const defaultState: PersistedTreeState = {
     {
       id: 'node-3',
       name: 'Untitled Node 3',
-      editorType: 'map-sketch',
+      editorType: 'story-document',
       children: [],
     },
   ],

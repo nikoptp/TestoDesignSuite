@@ -10,11 +10,7 @@ export const editorTypeOptions: EditorTypeOption[] = [
   { value: 'noteboard', label: 'Noteboard', iconClass: 'fa-regular fa-note-sticky' },
   { value: 'kanban-board', label: 'Kanban Board', iconClass: 'fa-solid fa-table-columns' },
   { value: 'spreadsheet', label: 'Spreadsheet', iconClass: 'fa-solid fa-table-cells' },
-  { value: 'story-document', label: 'Story Document', iconClass: 'fa-solid fa-file-lines' },
-  { value: 'story-presentation', label: 'Story Presentation', iconClass: 'fa-solid fa-clapperboard' },
-  { value: 'lore-document', label: 'Lore Document', iconClass: 'fa-solid fa-book-open' },
-  { value: 'map-sketch', label: 'Map Sketch', iconClass: 'fa-solid fa-map' },
-  { value: 'level-design', label: 'Level Design', iconClass: 'fa-solid fa-cubes' },
+  { value: 'story-document', label: 'Document', iconClass: 'fa-solid fa-file-lines' },
 ];
 
 export const editorTypeMeta = (

@@ -2,11 +2,7 @@ export type EditorType =
   | 'noteboard'
   | 'kanban-board'
   | 'spreadsheet'
-  | 'story-document'
-  | 'story-presentation'
-  | 'lore-document'
-  | 'map-sketch'
-  | 'level-design';
+  | 'story-document';
 
 export type CategoryNode = {
   id: string;

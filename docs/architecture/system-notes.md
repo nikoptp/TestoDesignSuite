@@ -25,8 +25,9 @@
 
 ## Implemented Editor Behavior
 - `noteboard` nodes render the canvas editor.
-- All non-noteboard node types currently render the markdown `DocumentEditor`.
-- This means dedicated story-presentation/map-specific editors are not yet separate runtime modules.
+- `story-document` nodes render the markdown `DocumentEditor`.
+- `kanban-board` nodes render the Kanban board editor.
+- `spreadsheet` nodes render the spreadsheet editor.
 
 ## Design Constraints
 - Desktop-first UX.

@@ -18,6 +18,9 @@ export const createMainWindow = ({
     icon: windowIcon.isEmpty() ? undefined : windowIcon,
     webPreferences: {
       preload: preloadEntry,
+      sandbox: false,
+      nodeIntegration: false,
+      contextIsolation: true,
       devTools: !app.isPackaged,
     },
   });

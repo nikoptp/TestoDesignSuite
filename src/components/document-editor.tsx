@@ -2,7 +2,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AnimatePresence, motion } from 'motion/react';
-import type { CategoryNode, EditorType } from '../shared/types';
+import type { CategoryNode } from '../shared/types';
 import { editorTypeMeta } from '../shared/editor-types';
 import { startWindowPointerSession } from '../shared/pointer-session';
 
@@ -10,7 +10,6 @@ type DocTemplate = {
   id: string;
   label: string;
   markdown: string;
-  editorTypes?: EditorType[];
 };
 
 const DOC_TEMPLATES: DocTemplate[] = [
@@ -19,28 +18,24 @@ const DOC_TEMPLATES: DocTemplate[] = [
     label: 'GDD Starter',
     markdown:
       '# Game Design Document\n\nUse this template to capture a production-ready game concept. Fill each field with concrete details and examples.\n\n## Table of Contents\n- [Project Overview](#project-overview)\n- [Vision and Pillars](#vision-and-pillars)\n- [Player Experience](#player-experience)\n- [Gameplay Systems](#gameplay-systems)\n- [Content and Progression](#content-and-progression)\n- [World and Narrative](#world-and-narrative)\n- [Audio and Visual Direction](#audio-and-visual-direction)\n- [Technical Plan](#technical-plan)\n- [Production Plan](#production-plan)\n- [Go To Market](#go-to-market)\n- [Open Questions and Risks](#open-questions-and-risks)\n\n---\n\n## Project Overview\n### Working Title\nDescription: Current project name used internally.\n- Value:\n\n### Elevator Pitch\nDescription: One or two sentences describing the fantasy, genre, and hook.\n- Value:\n\n### Genre and Format\nDescription: Define genre, camera, player count, and session style.\n- Genre:\n- Camera:\n- Mode:\n- Typical session length:\n\n### Target Platforms\nDescription: List launch and post-launch platforms.\n- Primary:\n- Secondary:\n\n### Target Release Window\nDescription: Planned release quarter/year and confidence.\n- Window:\n- Confidence (High/Medium/Low):\n\n---\n\n## Vision and Pillars\n### Product Vision\nDescription: What the game should become for players and the market.\n- Value:\n\n### Core Pillars\nDescription: 3-5 non-negotiable design truths used for feature decisions.\n- Pillar 1:\n- Pillar 2:\n- Pillar 3:\n\n### Success Metrics\nDescription: How success is measured (business + player outcomes).\n- Retention target:\n- Review target:\n- Revenue target:\n\n---\n\n## Player Experience\n### Target Audience\nDescription: Primary and secondary player segments.\n- Primary segment:\n- Secondary segment:\n\n### Player Fantasy\nDescription: What players should feel, do, and become in the game.\n- Value:\n\n### Experience Goals\nDescription: Desired emotional beats across onboarding, mid-game, and end-game.\n- First 30 minutes:\n- Mid-game:\n- End-game:\n\n---\n\n## Gameplay Systems\n### Core Gameplay Loop\nDescription: Repeatable minute-to-minute loop.\n1. Trigger:\n2. Player action:\n3. Reward:\n4. Upgrade/decision:\n\n### Meta Progression Loop\nDescription: Long-term progression and replay motivation.\n1. Short-term goal:\n2. Mid-term goal:\n3. Long-term goal:\n\n### Controls and Input\nDescription: Core actions and platform-specific control notes.\n- Move:\n- Interact:\n- Combat/primary action:\n- Special actions:\n\n### Systems Breakdown\nDescription: Explain each major system and dependencies.\n#### Combat or Interaction System\n- Purpose:\n- Inputs:\n- Tuning levers:\n- Failure states:\n\n#### Economy and Resources\n- Currencies/resources:\n- Sources/sinks:\n- Anti-inflation controls:\n\n#### AI or Encounter Design\n- Enemy/NPC archetypes:\n- Encounter pacing:\n- Difficulty scaling approach:\n\n---\n\n## Content and Progression\n### Content Structure\nDescription: How content is packaged (levels, regions, missions, acts).\n- Structure:\n\n### Progression Model\nDescription: Player power, unlock paths, and gating rules.\n- Player level/power model:\n- Unlock conditions:\n- Hard gates:\n\n### Difficulty and Balancing\nDescription: Tuning philosophy and balancing process.\n- Difficulty modes:\n- Dynamic difficulty rules:\n- Telemetry used for balance:\n\n---\n\n## World and Narrative\n### Setting Summary\nDescription: Time, place, tone, and thematic identity.\n- Value:\n\n### Narrative Structure\nDescription: Story format and delivery method.\n- Structure (linear/branching/hybrid):\n- Story delivery (cutscenes, dialogue, logs, etc.):\n\n### Key Characters or Factions\nDescription: Main cast and conflict roles.\n- Character/Faction A:\n- Character/Faction B:\n- Character/Faction C:\n\n---\n\n## Audio and Visual Direction\n### Art Direction\nDescription: Style, references, and readability rules.\n- Style keywords:\n- Reference titles:\n- Readability constraints:\n\n### UI and UX Principles\nDescription: Information hierarchy and interaction principles.\n- HUD principles:\n- Menu principles:\n- Accessibility defaults:\n\n### Audio Direction\nDescription: Music and sound goals per gameplay state.\n- Music pillars:\n- SFX pillars:\n- Voice/dialogue approach:\n\n---\n\n## Technical Plan\n### Engine and Tools\nDescription: Main technologies, pipeline tools, and key plugins.\n- Engine:\n- Toolchain:\n- Key dependencies:\n\n### Performance Targets\nDescription: Minimum acceptable performance by platform.\n- FPS target:\n- Resolution target:\n- Memory budget:\n- Load time budget:\n\n### Architecture Notes\nDescription: Technical constraints affecting design decisions.\n- Networking:\n- Save system:\n- Content pipeline:\n\n---\n\n## Production Plan\n### Team Composition\nDescription: Required disciplines and rough staffing plan.\n- Design:\n- Engineering:\n- Art:\n- Audio:\n- Production/QA:\n\n### Milestones\nDescription: Deliverables and decision gates.\n- Prototype milestone:\n- Vertical slice milestone:\n- Alpha milestone:\n- Beta milestone:\n\n### Scope Definition\nDescription: Must/should/could scope boundaries.\n- Must Have:\n- Should Have:\n- Could Have:\n- Wont Have (for this release):\n\n---\n\n## Go To Market\n### Positioning\nDescription: Competitive space and unique differentiation.\n- Comparable titles:\n- Unique selling points:\n\n### Business Model\nDescription: Pricing and monetization structure.\n- Price:\n- Monetization:\n- Post-launch content approach:\n\n### Launch Plan\nDescription: Marketing beats and publishing dependencies.\n- Announcement plan:\n- Community plan:\n- Platform/store requirements:\n\n---\n\n## Open Questions and Risks\n### Open Questions\nDescription: Unknowns requiring validation.\n- Question 1:\n- Question 2:\n- Question 3:\n\n### Risks and Mitigations\nDescription: Top production, technical, and market risks.\n| Risk | Impact | Likelihood | Mitigation |\n|---|---|---|---|\n|  |  |  |  |\n|  |  |  |  |\n\n### Assumptions to Validate\nDescription: Critical assumptions that can fail.\n- Assumption 1:\n- Assumption 2:\n- Assumption 3:\n',
-    editorTypes: ['story-document', 'level-design'],
   },
   {
     id: 'quest-spec',
     label: 'Quest Spec',
     markdown:
       '# Quest Spec\n\n## Summary\n\n## Prerequisites\n- \n\n## Objectives\n- [ ] \n\n## NPCs\n| Name | Role |\n|---|---|\n|  |  |\n\n## Rewards\n- XP:\n- Items:\n',
-    editorTypes: ['story-document', 'lore-document'],
   },
   {
     id: 'lore-entry',
     label: 'Lore Entry',
     markdown:
       '# Lore Entry\n\n## Name\n\n## Origin\n\n## Factions / Connections\n- \n\n## Known Facts\n- \n\n## Open Questions\n- \n',
-    editorTypes: ['lore-document', 'story-document'],
   },
   {
     id: 'level-brief',
     label: 'Level Brief',
     markdown:
       '# Level Brief\n\n## Intent\n\n## Player Experience Goals\n- \n\n## Key Spaces\n- \n\n## Encounter Beats\n1. \n2. \n3. \n\n## Metrics\n- Target completion:\n- Fail states:\n',
-    editorTypes: ['level-design', 'map-sketch'],
   },
 ];
 
@@ -75,12 +70,8 @@ export const DocumentEditor = ({
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
 
   const availableTemplates = React.useMemo(
-    () =>
-      DOC_TEMPLATES.filter(
-        (template) =>
-          !template.editorTypes || template.editorTypes.length === 0 || template.editorTypes.includes(node.editorType),
-      ),
-    [node.editorType],
+    () => DOC_TEMPLATES,
+    [],
   );
 
   React.useEffect(() => {

@@ -35,10 +35,6 @@ Desktop-only, single-user game design workspace with:
 - Template insertion (GDD, quest spec, lore entry, level brief).
 - Generated table-of-contents for markdown headings.
 
-### 3) Dedicated Story Presentation + Map Modules (Planned)
-- Node types exist (`story-presentation`, `map-sketch`, `level-design`).
-- Dedicated runtime modules for these modes are not implemented yet.
-
 ## Attachments and Embedded Content
 - Implemented:
 - image assets (project asset library + drag/drop)
