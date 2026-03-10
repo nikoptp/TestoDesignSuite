@@ -159,6 +159,7 @@
 - 2026-03-10: Added persisted tree-state migration primitive (`src/shared/project-file-migrations.ts`) with schema version stamping and legacy editor-type normalization for backward compatibility.
 - 2026-03-10: Added compatibility regression coverage (`test/unit/project-file-migrations.test.ts`) to guard older project files from breaking on updates.
 - 2026-03-10: Added GitHub tag-based release workflow (`.github/workflows/release.yml`) and release playbook (`docs/release/github-release-v0.1.0.md`).
+- 2026-03-10: Release workflow now publishes both Forge/Squirrel artifacts (`out/make`) and custom NSIS installer artifacts (`out/custom-installer`); packaged app auto-updates are wired via `update-electron-app`.
 
 ## Open Questions
 - Single-window only for MVP, or multi-window support early?
