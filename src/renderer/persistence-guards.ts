@@ -1,5 +1,5 @@
 import type { CategoryNode, NodeWorkspaceData, PersistedTreeState } from '../shared/types';
-import { isValidEditorType } from '../shared/editor-types';
+import { coercePersistedEditorType } from '../shared/editor-types';
 
 const isNode = (value: unknown): value is CategoryNode => {
   if (typeof value !== 'object' || value === null) {
@@ -16,7 +16,7 @@ const isNode = (value: unknown): value is CategoryNode => {
   return (
     typeof obj.id === 'string' &&
     typeof obj.name === 'string' &&
-    isValidEditorType(obj.editorType) &&
+    coercePersistedEditorType(obj.editorType) !== null &&
     Array.isArray(obj.children) &&
     obj.children.every((child) => isNode(child))
   );
@@ -218,6 +218,7 @@ export const isPersistedTreeState = (value: unknown): value is PersistedTreeStat
     sharedKanbanBacklogCards?: unknown;
     sidebarWidth?: unknown;
     collapsedNodeIds?: unknown;
+    schemaVersion?: unknown;
   };
 
   const nodeDataValid =
@@ -241,6 +242,11 @@ export const isPersistedTreeState = (value: unknown): value is PersistedTreeStat
     typeof obj.sharedKanbanBacklogCards === 'undefined' ||
     (Array.isArray(obj.sharedKanbanBacklogCards) &&
       obj.sharedKanbanBacklogCards.every((card) => isKanbanCard(card)));
+  const schemaVersionValid =
+    typeof obj.schemaVersion === 'undefined' ||
+    (typeof obj.schemaVersion === 'number' &&
+      Number.isInteger(obj.schemaVersion) &&
+      obj.schemaVersion >= 1);
 
   return (
     Array.isArray(obj.nodes) &&
@@ -252,6 +258,7 @@ export const isPersistedTreeState = (value: unknown): value is PersistedTreeStat
     nodeDataValid &&
     sharedKanbanBacklogCardsValid &&
     sidebarWidthValid &&
-    collapsedNodeIdsValid
+    collapsedNodeIdsValid &&
+    schemaVersionValid
   );
 };

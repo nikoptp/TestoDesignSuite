@@ -14,7 +14,7 @@
 - React components: `src/components/*`
 - Feature hooks/controllers: `src/features/*`
 - Renderer markup/styles: `src/index.html`, `src/index.css`
-- Shared reusable modules: `src/shared/types.ts`, `src/shared/editor-types.ts`, `src/shared/tree-utils.ts`, `src/shared/noteboard-constants.ts`, `src/shared/pointer-session.ts`, `src/shared/noteboard-coordinate-utils.ts`, `src/shared/drag-payloads.ts`, `src/features/app/workspace-node-updaters.ts`, `src/features/noteboard/noteboard-dom-selectors.ts`
+- Shared reusable modules: `src/shared/types.ts`, `src/shared/editor-types.ts`, `src/shared/tree-utils.ts`, `src/shared/noteboard-constants.ts`, `src/shared/pointer-session.ts`, `src/shared/noteboard-coordinate-utils.ts`, `src/shared/drag-payloads.ts`, `src/shared/project-file-migrations.ts`, `src/features/app/workspace-node-updaters.ts`, `src/features/noteboard/noteboard-dom-selectors.ts`
 - Shared reusable hooks: `src/shared/hooks/use-outside-pointer-dismiss.ts`, `src/shared/hooks/use-global-keydown.ts`
 - Legacy renderer modules: removed
 - Build/config: `forge.config.ts`, `webpack.*.ts`, `tsconfig.json`, `.eslintrc.json`
@@ -62,6 +62,7 @@
 - Global keydown hook: `src/shared/hooks/use-global-keydown.ts`
 - Noteboard coordinates: `src/shared/noteboard-coordinate-utils.ts`
 - Drag payloads/contracts: `src/shared/drag-payloads.ts`
+- Project-file migrations: `src/shared/project-file-migrations.ts`
 - Workspace node-data updaters: `src/features/app/workspace-node-updaters.ts`
 - Noteboard interaction selectors: `src/features/noteboard/noteboard-dom-selectors.ts`
 
@@ -154,6 +155,10 @@
 - 2026-02-22: Added `src/features/noteboard/noteboard-dom-selectors.ts` and refactored noteboard hooks to consume centralized blocked-target selector constants.
 - 2026-02-22: Expanded AGENTS governance with refactor playbook, shared primitive index, state/DnD/selector rules, extraction testing requirements, performance guardrails, and definition-of-done checklist.
 - 2026-02-23: Added spreadsheet editor phase-1 foundation: new `spreadsheet` node type, persisted spreadsheet workspace data, formula/addressing utilities, React spreadsheet grid editor with selection/editing/formula bar/copy-paste, and unit coverage for spreadsheet helpers.
+- 2026-03-10: Reduced active editor types to `noteboard`, `kanban-board`, `spreadsheet`, and `story-document`; removed legacy unimplemented editor type references.
+- 2026-03-10: Added persisted tree-state migration primitive (`src/shared/project-file-migrations.ts`) with schema version stamping and legacy editor-type normalization for backward compatibility.
+- 2026-03-10: Added compatibility regression coverage (`test/unit/project-file-migrations.test.ts`) to guard older project files from breaking on updates.
+- 2026-03-10: Added GitHub tag-based release workflow (`.github/workflows/release.yml`) and release playbook (`docs/release/github-release-v0.1.0.md`).
 
 ## Open Questions
 - Single-window only for MVP, or multi-window support early?

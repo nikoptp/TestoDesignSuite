@@ -6,6 +6,13 @@ export type EditorTypeOption = {
   iconClass: string;
 };
 
+const LEGACY_EDITOR_TYPE_ALIASES = new Map<string, EditorType>([
+  ['story-presentation', 'story-document'],
+  ['lore-document', 'story-document'],
+  ['map-sketch', 'story-document'],
+  ['level-design', 'story-document'],
+]);
+
 export const editorTypeOptions: EditorTypeOption[] = [
   { value: 'noteboard', label: 'Noteboard', iconClass: 'fa-regular fa-note-sticky' },
   { value: 'kanban-board', label: 'Kanban Board', iconClass: 'fa-solid fa-table-columns' },
@@ -24,3 +31,14 @@ export const editorTypeMeta = (
 
 export const isValidEditorType = (value: unknown): value is EditorType =>
   editorTypeOptions.some((option) => option.value === value);
+
+export const coercePersistedEditorType = (value: unknown): EditorType | null => {
+  if (isValidEditorType(value)) {
+    return value;
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  return LEGACY_EDITOR_TYPE_ALIASES.get(value) ?? null;
+};

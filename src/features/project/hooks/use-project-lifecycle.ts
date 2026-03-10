@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import type { PersistedTreeState, ProjectImageAsset, ProjectSnapshot, UserSettings } from '../../../shared/types';
+import { migratePersistedTreeState } from '../../../shared/project-file-migrations';
 import { isPersistedTreeState } from '../../../renderer/persistence-guards';
 import { type ProjectStatusUi } from '../../app/app-model';
 
@@ -84,18 +85,20 @@ export const useProjectBootstrap = ({
         ]);
 
         if (!cancelled && loadedState && isPersistedTreeState(loadedState)) {
-          const collapsedNodeIds = Array.isArray(loadedState.collapsedNodeIds)
-            ? [...new Set(loadedState.collapsedNodeIds.filter((id) => typeof id === 'string'))]
+          const migratedState = migratePersistedTreeState(loadedState);
+          const collapsedNodeIds = Array.isArray(migratedState.collapsedNodeIds)
+            ? [...new Set(migratedState.collapsedNodeIds.filter((id) => typeof id === 'string'))]
             : [];
           setState({
-            nodes: loadedState.nodes,
-            selectedNodeId: loadedState.selectedNodeId,
-            nextNodeNumber: loadedState.nextNodeNumber,
-            nodeDataById: loadedState.nodeDataById ?? {},
-            sharedKanbanBacklogCards: loadedState.sharedKanbanBacklogCards ?? [],
+            schemaVersion: migratedState.schemaVersion,
+            nodes: migratedState.nodes,
+            selectedNodeId: migratedState.selectedNodeId,
+            nextNodeNumber: migratedState.nextNodeNumber,
+            nodeDataById: migratedState.nodeDataById ?? {},
+            sharedKanbanBacklogCards: migratedState.sharedKanbanBacklogCards ?? [],
             sidebarWidth: clampSidebarWidth(
-              typeof loadedState.sidebarWidth === 'number'
-                ? loadedState.sidebarWidth
+              typeof migratedState.sidebarWidth === 'number'
+                ? migratedState.sidebarWidth
                 : defaultSidebarWidth,
             ),
             collapsedNodeIds,

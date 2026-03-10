@@ -35,6 +35,7 @@ import {
   MIN_SPREADSHEET_ROW_COUNT,
   isSpreadsheetCellKey,
 } from '../spreadsheet/spreadsheet-addressing';
+import { CURRENT_TREE_STATE_SCHEMA_VERSION } from '../../shared/project-file-migrations';
 
 export type UiState = {
   editingNodeId: string | null;
@@ -234,6 +235,7 @@ export const CARD_TEMPLATES: Array<{ id: CardTemplateId; label: string; markdown
 ];
 
 export const defaultState: PersistedTreeState = {
+  schemaVersion: CURRENT_TREE_STATE_SCHEMA_VERSION,
   nodes: [
     {
       id: 'node-1',

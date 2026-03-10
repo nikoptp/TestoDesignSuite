@@ -12,6 +12,7 @@ export type CategoryNode = {
 };
 
 export type PersistedTreeState = {
+  schemaVersion?: number;
   nodes: CategoryNode[];
   selectedNodeId: string | null;
   nextNodeNumber: number;
