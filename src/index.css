@@ -293,6 +293,33 @@ html {
   padding: 6px 8px;
   font-size: 12px;
   line-height: 1.35;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.project-status-message {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-status-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.project-status-update-button,
+.project-status-dismiss-button {
+  padding: 2px 7px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.project-status-dismiss-button {
+  min-width: 22px;
+  padding: 2px 0;
 }
 
 .project-status-success {

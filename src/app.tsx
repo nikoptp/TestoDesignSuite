@@ -184,7 +184,7 @@ export const App = (): React.ReactElement => {
   useProjectSnapshotResponder(stateRef, settingsRef);
 
   useThemeRuntime(settings);
-  const { projectStatus, showTransientProjectStatus } = useProjectStatusController();
+  const { projectStatus, showTransientProjectStatus, dismissProjectStatus } = useProjectStatusController();
 
   const getBrushColor = React.useCallback((): string => {
     const resolved = getComputedStyle(document.documentElement)
@@ -419,6 +419,10 @@ export const App = (): React.ReactElement => {
 
   const onBeginResize = React.useCallback(() => {
     setIsResizing(true);
+  }, []);
+
+  const onRunUpdateFromStatus = React.useCallback((): void => {
+    void window.testoApi?.checkForUpdates?.();
   }, []);
 
   React.useEffect(() => {
@@ -1192,7 +1196,27 @@ export const App = (): React.ReactElement => {
             role="status"
             aria-live="polite"
           >
-            {projectStatus.message}
+            <span className="project-status-message">{projectStatus.message}</span>
+            {projectStatus.persistent && projectStatus.action === 'update' ? (
+              <span className="project-status-actions">
+                <button
+                  type="button"
+                  className="project-status-update-button"
+                  onClick={onRunUpdateFromStatus}
+                >
+                  Update
+                </button>
+                <button
+                  type="button"
+                  className="project-status-dismiss-button"
+                  onClick={dismissProjectStatus}
+                  aria-label="Dismiss update notification"
+                  title="Dismiss"
+                >
+                  X
+                </button>
+              </span>
+            ) : null}
           </div>
         ) : null}
 

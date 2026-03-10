@@ -70,28 +70,23 @@ export const verifyDownloadedInstallerChecksum = async (
   }
 };
 
-export const launchSilentWindowsInstaller = (installerPath: string): void => {
-  const escapedPath = installerPath.replace(/'/g, "''");
-  const command =
-    `Start-Sleep -Seconds 2; ` +
-    `Start-Process -FilePath '${escapedPath}' -ArgumentList '/S'`;
+export const launchSilentWindowsInstaller = async (installerPath: string): Promise<void> => {
+  const installerPathForCmd = installerPath.replace(/"/g, '""');
+  const launcherPath = path.join(path.dirname(installerPath), 'run-installer-update.cmd');
+  const launcherScript = [
+    '@echo off',
+    'setlocal',
+    'timeout /t 2 /nobreak >nul',
+    `start "" "${installerPathForCmd}" /S`,
+  ].join('\r\n');
 
-  const runner = spawn(
-    'powershell',
-    [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-WindowStyle',
-      'Hidden',
-      '-Command',
-      command,
-    ],
-    {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    },
-  );
+  await writeFile(launcherPath, launcherScript, 'utf8');
+
+  const commandShell = process.env.ComSpec ?? 'cmd.exe';
+  const runner = spawn(commandShell, ['/c', launcherPath], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  });
   runner.unref();
 };

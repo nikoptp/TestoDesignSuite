@@ -5,6 +5,7 @@ import { useProjectStatusListener } from './use-project-lifecycle';
 type ProjectStatusController = {
   projectStatus: ProjectStatusUi | null;
   showTransientProjectStatus: (status: ProjectStatusUi['status'], message: string) => void;
+  dismissProjectStatus: () => void;
 };
 
 export const useProjectStatusController = (): ProjectStatusController => {
@@ -23,6 +24,7 @@ export const useProjectStatusController = (): ProjectStatusController => {
         status,
         message,
         at,
+        persistent: false,
       });
 
       if (timerRef.current) {
@@ -41,9 +43,17 @@ export const useProjectStatusController = (): ProjectStatusController => {
     [],
   );
 
+  const dismissProjectStatus = React.useCallback((): void => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setProjectStatus(null);
+  }, []);
+
   return {
     projectStatus,
     showTransientProjectStatus,
+    dismissProjectStatus,
   };
 };
-

@@ -220,14 +220,25 @@ export const useProjectStatusListener = ({
 }: ProjectStatusListenerOptions): void => {
   React.useEffect(() => {
     const unsubscribe = window.testoApi?.onProjectStatus((payload) => {
+      const isPersistentUpdateNotice =
+        payload.action === 'update' &&
+        payload.status === 'info' &&
+        /^update available:/i.test(payload.message.trim());
+
       setProjectStatus({
         status: payload.status,
         message: payload.message,
         at: payload.at,
+        action: payload.action,
+        persistent: isPersistentUpdateNotice,
       });
 
       if (timerRef.current) {
         clearTimeout(timerRef.current);
+      }
+
+      if (isPersistentUpdateNotice) {
+        return;
       }
 
       const dismissDelay = payload.status === 'error' ? 9000 : 4500;

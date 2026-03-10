@@ -77,6 +77,8 @@ export type ProjectStatusUi = {
   status: ProjectStatusPayload['status'];
   message: string;
   at: number;
+  action?: ProjectStatusPayload['action'];
+  persistent?: boolean;
 };
 
 export type HistorySnapshot = {

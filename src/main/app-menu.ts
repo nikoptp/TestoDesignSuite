@@ -55,6 +55,10 @@ export const buildAppMenu = (actions: AppMenuActions): void => {
           accelerator: 'CmdOrCtrl+Shift+S',
           click: actions.onSaveProjectFileAs,
         },
+        {
+          label: 'Check for Updates...',
+          click: actions.onCheckForUpdates,
+        },
         { type: 'separator' },
         {
           label: 'Settings',
@@ -73,12 +77,6 @@ export const buildAppMenu = (actions: AppMenuActions): void => {
     { role: 'windowMenu' },
     {
       role: 'help',
-      submenu: [
-        {
-          label: 'Check for Updates...',
-          click: actions.onCheckForUpdates,
-        },
-      ],
     },
   ];
 
