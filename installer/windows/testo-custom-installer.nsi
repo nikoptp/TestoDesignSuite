@@ -31,7 +31,6 @@ OutFile "..\..\out\custom-installer\testo-design-suite-${APP_VERSION}.exe"
 InstallDir "$LOCALAPPDATA\Programs\${APP_DIR_NAME}"
 InstallDirRegKey HKCU "Software\${APP_ID}" "InstallDir"
 RequestExecutionLevel user
-SetShellVarContext current
 Unicode true
 SetCompressor /SOLID lzma
 ShowInstDetails show
@@ -107,6 +106,10 @@ Function .onInstSuccess
   IfSilent done
   Exec '"$INSTDIR\${APP_EXE}"'
   done:
+FunctionEnd
+
+Function .onInit
+  SetShellVarContext current
 FunctionEnd
 
 Function ProjectDirPageCreate
@@ -221,6 +224,10 @@ Function un.UnregisterFileAssociations
   DeleteRegKey HKCU "Software\Classes\Testo.Project.PRJT"
   DeleteRegKey HKCU "Software\Classes\Testo.Project.TESTO"
   System::Call 'shell32::SHChangeNotify(i, i, p, p) v (0x08000000, 0, 0, 0)'
+FunctionEnd
+
+Function un.onInit
+  SetShellVarContext current
 FunctionEnd
 
 LangString DESC_SecCore ${LANG_ENGLISH} "Install required app files and enforce .prjt file association."
