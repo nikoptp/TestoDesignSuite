@@ -30,19 +30,27 @@ jobs:
       - name: Verify unit tests
         run: npm run test:unit
 
+      - name: Verify tag matches package version
+        run: >
+          node -e "const fs=require('node:fs');const v=JSON.parse(fs.readFileSync('package.json','utf8')).version;const t=process.env.GITHUB_REF_NAME||'';if(t!==('v'+v)){console.error('Tag/version mismatch: tag='+t+' package='+v);process.exit(1);}console.log('Tag/version check passed for '+t);"
+
       - name: Install NSIS
         run: choco install nsis -y --no-progress
 
-      - name: Build Forge distributables (includes Squirrel)
-        run: npm run make
-
       - name: Build custom Windows installer (NSIS)
         run: npm run build:windows:custom-installer
+
+      - name: Generate installer checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path out/custom-installer -Filter *.exe -File | ForEach-Object {
+            $hash = (Get-FileHash -Algorithm SHA256 -Path $_.FullName).Hash.ToLowerInvariant()
+            Set-Content -Path "$($_.FullName).sha256" -Value "$hash  $($_.Name)" -NoNewline
+          }
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            out/make/**/*
             out/custom-installer/**/*

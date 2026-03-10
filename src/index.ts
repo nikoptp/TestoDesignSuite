@@ -29,7 +29,18 @@ import {
   normalizeProjectFilePathCandidate,
   PRIMARY_PROJECT_EXTENSION,
 } from './main/project-file-args';
-import { compareVersions, fetchLatestGithubRelease, normalizeVersionTag } from './main/update-utils';
+import {
+  compareVersions,
+  fetchLatestGithubRelease,
+  normalizeVersionTag,
+  pickChecksumAssetForInstaller,
+  pickWindowsInstallerAsset,
+} from './main/update-utils';
+import {
+  downloadReleaseAsset,
+  launchSilentWindowsInstaller,
+  verifyDownloadedInstallerChecksum,
+} from './main/windows-nsis-updater';
 import { buildAppMenu } from './main/app-menu';
 import { applyMacDockIcon, createMainWindow } from './main/window-factory';
 import { registerIpcHandlers, type PendingSnapshotRequest } from './main/ipc-handlers';
@@ -205,6 +216,9 @@ const configureAutoUpdates = (): void => {
   if (!app.isPackaged) {
     return;
   }
+  if (process.platform === 'win32') {
+    return;
+  }
   if (!UPDATE_REPO_SLUG) {
     return;
   }
@@ -259,18 +273,90 @@ const checkForGithubUpdates = async (manual: boolean): Promise<void> => {
       });
 
       if (manual && focusedWindow) {
-        const result = await dialog.showMessageBox(focusedWindow, {
-          type: 'info',
-          buttons: ['Open Download Page', 'Later'],
-          defaultId: 0,
-          cancelId: 1,
-          title: 'Update Available',
-          message: `Version ${latest.latestTag} is available.`,
-          detail: `Current version: v${currentVersion}\nLatest version: v${latest.latestVersion}`,
-        });
+        const canRunWindowsInstallerUpdate = process.platform === 'win32' && app.isPackaged;
+        const installerAsset = canRunWindowsInstallerUpdate
+          ? pickWindowsInstallerAsset(latest.assets)
+          : null;
 
-        if (result.response === 0) {
-          await shell.openExternal(latest.downloadUrl);
+        if (canRunWindowsInstallerUpdate && installerAsset) {
+          const checksumAsset = pickChecksumAssetForInstaller(latest.assets, installerAsset);
+          const result = await dialog.showMessageBox(focusedWindow, {
+            type: 'info',
+            buttons: ['Install Update', 'Open Download Page', 'Later'],
+            defaultId: 0,
+            cancelId: 2,
+            title: 'Update Available',
+            message: `Version ${latest.latestTag} is available.`,
+            detail:
+              `Current version: v${currentVersion}\n` +
+              `Latest version: v${latest.latestVersion}\n` +
+              `${checksumAsset ? 'Checksum verification: available' : 'Checksum verification: unavailable'}`,
+          });
+
+          if (result.response === 0) {
+            try {
+              emitProjectStatus(focusedWindow, {
+                status: 'info',
+                action: 'update',
+                filePath: null,
+                message: `Downloading installer (${installerAsset.name})...`,
+              });
+
+              const updaterDir = path.join(app.getPath('userData'), 'updater');
+              const downloadedInstaller = await downloadReleaseAsset({
+                asset: installerAsset,
+                userAgent: `${app.getName()}/${app.getVersion()}`,
+                destinationDir: updaterDir,
+              });
+
+              if (checksumAsset) {
+                const downloadedChecksum = await downloadReleaseAsset({
+                  asset: checksumAsset,
+                  userAgent: `${app.getName()}/${app.getVersion()}`,
+                  destinationDir: updaterDir,
+                });
+                await verifyDownloadedInstallerChecksum(
+                  downloadedInstaller.localPath,
+                  downloadedChecksum.localPath,
+                );
+              }
+
+              emitProjectStatus(focusedWindow, {
+                status: 'info',
+                action: 'update',
+                filePath: null,
+                message: 'Installing update and restarting...',
+              });
+
+              launchSilentWindowsInstaller(downloadedInstaller.localPath);
+              app.quit();
+            } catch (error: unknown) {
+              emitProjectStatus(focusedWindow, {
+                status: 'error',
+                action: 'update',
+                filePath: null,
+                message:
+                  `Automatic install failed: ` +
+                  `${error instanceof Error ? error.message : 'Unknown error'}`,
+              });
+            }
+          } else if (result.response === 1) {
+            await shell.openExternal(latest.downloadUrl);
+          }
+        } else {
+          const result = await dialog.showMessageBox(focusedWindow, {
+            type: 'info',
+            buttons: ['Open Download Page', 'Later'],
+            defaultId: 0,
+            cancelId: 1,
+            title: 'Update Available',
+            message: `Version ${latest.latestTag} is available.`,
+            detail: `Current version: v${currentVersion}\nLatest version: v${latest.latestVersion}`,
+          });
+
+          if (result.response === 0) {
+            await shell.openExternal(latest.downloadUrl);
+          }
         }
       }
       return;

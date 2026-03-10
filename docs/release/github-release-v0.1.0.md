@@ -11,31 +11,32 @@
 1. Ensure local branch is clean and up to date.
 2. Run `npm run lint`.
 3. Run `npm run test:unit`.
-4. (Recommended) Run local packaging smoke check:
-   - `npm run make`
+4. Ensure `package.json` `version` matches intended tag (`vX.Y.Z`).
+5. (Recommended) Run local packaging smoke check:
    - `npm run build:windows:custom-installer`
-5. Commit any pending release changes.
-6. Create and push tag:
+6. Commit any pending release changes.
+7. Create and push tag:
    - `git tag vX.Y.Z`
    - `git push origin vX.Y.Z`
-7. Verify GitHub Actions `Release` workflow completes and publishes both artifact sets.
-8. Open the GitHub release page and review generated notes + attached files.
+8. Verify GitHub Actions `Release` workflow completes and publishes installer + checksum assets.
+9. Open the GitHub release page and review generated notes + attached files.
 
 ## CI workflow behavior
 On tag push (`v*`), `.github/workflows/release.yml` does:
 1. `npm ci`
 2. `npm run lint`
 3. `npm run test:unit`
-4. Install NSIS via Chocolatey
-5. `npm run make` (Electron Forge distributables, including Squirrel artifacts)
+4. Verify tag/version alignment (`GITHUB_REF_NAME === v${package.json version}`)
+5. Install NSIS via Chocolatey
 6. `npm run build:windows:custom-installer` (custom NSIS installer)
-7. Upload release assets from:
-   - `out/make/**/*`
+7. Generate SHA-256 checksum file(s) for installer artifacts
+8. Upload release assets from:
    - `out/custom-installer/**/*`
 
 ## Update channels
-- Automatic in-app updates (packaged app) use `update-electron-app` with GitHub release feed and depend on Forge/Squirrel release artifacts (`out/make`).
-- Custom NSIS installer is a manual installer channel and is published in parallel for users who prefer explicit install/upgrade flows.
+- Windows releases use the custom NSIS installer channel (`out/custom-installer`) only.
+- `update-electron-app` is disabled on Windows and can be used for packaged non-Windows targets.
+- Manual update checks on Windows can run an in-app silent installer flow when a release installer asset is available.
 - Manual update check UI remains available from app menu (`Check for updates`) and links to release download page.
 
 ## Project-file compatibility policy

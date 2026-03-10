@@ -160,6 +160,8 @@
 - 2026-03-10: Added compatibility regression coverage (`test/unit/project-file-migrations.test.ts`) to guard older project files from breaking on updates.
 - 2026-03-10: Added GitHub tag-based release workflow (`.github/workflows/release.yml`) and release playbook (`docs/release/github-release-v0.1.0.md`).
 - 2026-03-10: Release workflow now publishes both Forge/Squirrel artifacts (`out/make`) and custom NSIS installer artifacts (`out/custom-installer`); packaged app auto-updates are wired via `update-electron-app`.
+- 2026-03-11: Windows release channel now uses custom NSIS installer artifacts only (`out/custom-installer`); Windows packaged auto-updates via `update-electron-app` are disabled and manual update flow remains via release page.
+- 2026-03-11: Added Windows custom-installer in-app update path (download installer asset, optional SHA-256 verification, silent `/S` launch) and release CI guardrails for tag/version match plus checksum artifact generation.
 
 ## Open Questions
 - Single-window only for MVP, or multi-window support early?
