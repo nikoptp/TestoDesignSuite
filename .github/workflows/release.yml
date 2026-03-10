@@ -30,8 +30,14 @@ jobs:
       - name: Verify unit tests
         run: npm run test:unit
 
-      - name: Build distributables
+      - name: Install NSIS
+        run: choco install nsis -y --no-progress
+
+      - name: Build Forge distributables (includes Squirrel)
         run: npm run make
+
+      - name: Build custom Windows installer (NSIS)
+        run: npm run build:windows:custom-installer
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
@@ -39,3 +45,4 @@ jobs:
           generate_release_notes: true
           files: |
             out/make/**/*
+            out/custom-installer/**/*

@@ -4,6 +4,7 @@ import {
   dialog,
   shell,
 } from 'electron';
+import { UpdateSourceType, updateElectronApp } from 'update-electron-app';
 import path from 'node:path';
 import type {
   LaunchState,
@@ -196,7 +197,34 @@ const applyImportedProjectBundle = async (bundle: ProjectBundleV1): Promise<void
 let activeProjectFilePath: string | null = null;
 let mainWindowRef: BrowserWindow | null = null;
 
-const UPDATE_REPO_SLUG = (process.env.TESTO_UPDATE_REPO ?? '').trim();
+const FALLBACK_UPDATE_REPO_SLUG = 'nikoptp/TestoDesignSuite';
+const UPDATE_REPO_SLUG = (process.env.TESTO_UPDATE_REPO ?? FALLBACK_UPDATE_REPO_SLUG).trim();
+const DEFAULT_UPDATE_INTERVAL = '30 minutes';
+
+const configureAutoUpdates = (): void => {
+  if (!app.isPackaged) {
+    return;
+  }
+  if (!UPDATE_REPO_SLUG) {
+    return;
+  }
+
+  try {
+    updateElectronApp({
+      updateSource: {
+        type: UpdateSourceType.ElectronPublicUpdateService,
+        repo: UPDATE_REPO_SLUG,
+      },
+      updateInterval: DEFAULT_UPDATE_INTERVAL,
+      notifyUser: true,
+      logger: console,
+    });
+  } catch (error) {
+    console.error(
+      `Failed to configure automatic updates: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+};
 
 const checkForGithubUpdates = async (manual: boolean): Promise<void> => {
   const currentVersion = normalizeVersionTag(app.getVersion());
@@ -582,6 +610,7 @@ const createWindow = (): BrowserWindow => {
 // Some APIs can only be used after this event occurs.
 app.on('ready', () => {
   applyMacDockIcon(getWindowIconPath());
+  configureAutoUpdates();
 
   void (async () => {
     try {
