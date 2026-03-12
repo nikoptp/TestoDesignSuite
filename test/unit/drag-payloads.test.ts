@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getImageAssetDragPayload,
   getTreeNodeDragPayload,
   setImageAssetDragPayload,
   setTreeNodeDragPayload,
@@ -47,5 +48,8 @@ describe('drag payload helpers', () => {
     expect(dataTransfer.getData(TESTO_IMAGE_ASSET_DRAG_MIME)).toContain('images/hero.png');
     expect(dataTransfer.getData('text/uri-list')).toBe('asset://images/hero.png');
     expect(dataTransfer.getData('text/plain')).toBe('asset://images/hero.png');
+    expect(getImageAssetDragPayload(dataTransfer as unknown as DataTransfer)?.relativePath).toBe(
+      'images/hero.png',
+    );
   });
 });

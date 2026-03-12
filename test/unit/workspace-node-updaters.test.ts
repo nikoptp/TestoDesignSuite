@@ -4,8 +4,10 @@ import {
   updateNodeKanbanData,
   updateNodeNoteboardData,
   updateNodeSpreadsheetData,
+  updateNodeSteamAchievementArtData,
   updateNodeWorkspaceData,
 } from '../../src/features/app/workspace-node-updaters';
+import { createDefaultSteamAchievementBorderStyle } from '../../src/features/steam-achievement/steam-achievement-art';
 
 const baseState = (): PersistedTreeState => ({
   nodes: [],
@@ -65,5 +67,35 @@ describe('workspace-node-updaters', () => {
 
     expect(next.nodeDataById['node-s']?.spreadsheet?.activeSheetId).toBe('sheet-1');
     expect(next.nodeDataById['node-s']?.spreadsheet?.sheets[0]?.cells.A1?.raw).toBe('42');
+  });
+
+  it('updates steam achievement art slice with defaults when missing', () => {
+    const next = updateNodeSteamAchievementArtData(baseState(), 'node-steam', (steamAchievementArt) => ({
+      ...steamAchievementArt,
+      presetId: 'steam-achievement-256',
+      borderStyle: {
+        ...createDefaultSteamAchievementBorderStyle(),
+        enabled: true,
+      },
+      entries: [
+        {
+          id: 'entry-1',
+          name: 'first-achievement',
+          sourceImageRelativePath: 'project-assets/images/hero.png',
+          crop: {
+            zoom: 1,
+            offsetX: 0,
+            offsetY: 0,
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    }));
+
+    expect(next.nodeDataById['node-steam']?.steamAchievementArt?.entries[0]?.name).toBe(
+      'first-achievement',
+    );
+    expect(next.nodeDataById['node-steam']?.steamAchievementArt?.borderStyle.enabled).toBe(true);
   });
 });

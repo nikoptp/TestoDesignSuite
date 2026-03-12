@@ -2,7 +2,8 @@ export type EditorType =
   | 'noteboard'
   | 'kanban-board'
   | 'spreadsheet'
-  | 'story-document';
+  | 'story-document'
+  | 'steam-achievement-art';
 
 export type CategoryNode = {
   id: string;
@@ -111,6 +112,56 @@ export type SpreadsheetData = {
   columnWidths?: Record<string, number>;
 };
 
+export type SteamImagePreset = {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  exportColor: boolean;
+  exportGrayscale: boolean;
+  grayscaleSuffix: string;
+};
+
+export type SteamAchievementBorderStyle = {
+  enabled: boolean;
+  thickness: number;
+  opacity: number;
+  margin: number;
+  radius: number;
+  gradientAngle: number;
+  color: string;
+  midColor: string;
+  gradientColor: string;
+  backgroundMode: 'none' | 'gradient' | 'image';
+  backgroundOpacity: number;
+  backgroundAngle: number;
+  backgroundColor: string;
+  backgroundMidColor: string;
+  backgroundGradientColor: string;
+  backgroundImageRelativePath: string | null;
+};
+
+export type SteamAchievementTransform = {
+  zoom: number;
+  offsetX: number;
+  offsetY: number;
+};
+
+export type SteamAchievementEntry = {
+  id: string;
+  name: string;
+  sourceImageRelativePath: string | null;
+  crop: SteamAchievementTransform;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type SteamAchievementArtData = {
+  presetId: string;
+  borderStyle: SteamAchievementBorderStyle;
+  entries: SteamAchievementEntry[];
+};
+
 export type NodeWorkspaceData = {
   noteboard?: {
     cards: NoteboardCard[];
@@ -131,6 +182,7 @@ export type NodeWorkspaceData = {
     collapsedColumnIds?: string[];
   };
   spreadsheet?: SpreadsheetData;
+  steamAchievementArt?: SteamAchievementArtData;
 };
 
 export type CardTemplate = {
@@ -174,10 +226,23 @@ export type ProjectSnapshot = {
 
 export type ProjectStatusPayload = {
   status: 'success' | 'error' | 'info';
-  action: 'save' | 'save-as' | 'open' | 'new' | 'update';
+  action: 'save' | 'save-as' | 'open' | 'new' | 'update' | 'export';
   message: string;
   filePath?: string | null;
   at: number;
+};
+
+export type SteamAchievementExportRequest = {
+  nodeName: string;
+  data: SteamAchievementArtData;
+};
+
+export type SteamAchievementExportResult = {
+  canceled: boolean;
+  outputDir: string | null;
+  exportedEntryCount: number;
+  skippedEntryCount: number;
+  writtenFileCount: number;
 };
 
 export type RecentProjectEntry = {

@@ -18,6 +18,7 @@ export const editorTypeOptions: EditorTypeOption[] = [
   { value: 'kanban-board', label: 'Kanban Board', iconClass: 'fa-solid fa-table-columns' },
   { value: 'spreadsheet', label: 'Spreadsheet', iconClass: 'fa-solid fa-table-cells' },
   { value: 'story-document', label: 'Document', iconClass: 'fa-solid fa-file-lines' },
+  { value: 'steam-achievement-art', label: 'Steam Achievement Art', iconClass: 'fa-brands fa-steam-symbol' },
 ];
 
 export const editorTypeMeta = (

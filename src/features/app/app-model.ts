@@ -10,6 +10,7 @@ import type {
   NoteboardStroke,
   PersistedTreeState,
   ProjectStatusPayload,
+  SteamAchievementArtData,
   SpreadsheetData,
   SpreadsheetSheet,
   UserSettings,
@@ -36,6 +37,10 @@ import {
   isSpreadsheetCellKey,
 } from '../spreadsheet/spreadsheet-addressing';
 import { CURRENT_TREE_STATE_SCHEMA_VERSION } from '../../shared/project-file-migrations';
+import {
+  createDefaultSteamAchievementArtData,
+  normalizeSteamAchievementArtData,
+} from '../steam-achievement/steam-achievement-art';
 
 export type UiState = {
   editingNodeId: string | null;
@@ -721,6 +726,7 @@ const DEFAULT_SPREADSHEET_DATA: SpreadsheetData = {
   rowHeights: {},
   columnWidths: {},
 };
+const DEFAULT_STEAM_ACHIEVEMENT_ART_DATA: SteamAchievementArtData = createDefaultSteamAchievementArtData();
 
 export const getKanbanBoardForNode = (
   state: PersistedTreeState,
@@ -753,6 +759,18 @@ export const getSpreadsheetForNode = (
   }
 
   return spreadsheet;
+};
+
+export const getSteamAchievementArtForNode = (
+  state: PersistedTreeState,
+  nodeId: string,
+): SteamAchievementArtData => {
+  const steamAchievementArt = state.nodeDataById[nodeId]?.steamAchievementArt;
+  if (!steamAchievementArt) {
+    return DEFAULT_STEAM_ACHIEVEMENT_ART_DATA;
+  }
+
+  return normalizeSteamAchievementArtData(steamAchievementArt);
 };
 
 export const ensureKanbanData = (
@@ -1269,6 +1287,52 @@ export const ensureSpreadsheetData = (
       [nodeId]: {
         ...(workspace ?? {}),
         spreadsheet: nextSpreadsheet,
+      },
+    },
+  };
+};
+
+export const ensureSteamAchievementArtData = (
+  state: PersistedTreeState,
+  nodeId: string,
+): PersistedTreeState => {
+  const workspace = state.nodeDataById[nodeId];
+  const steamAchievementArt = workspace?.steamAchievementArt;
+  const nextSteamAchievementArt = normalizeSteamAchievementArtData(steamAchievementArt);
+
+  const hasEffectiveChange =
+    !steamAchievementArt ||
+    steamAchievementArt.presetId !== nextSteamAchievementArt.presetId ||
+    JSON.stringify(steamAchievementArt.borderStyle) !== JSON.stringify(nextSteamAchievementArt.borderStyle) ||
+    steamAchievementArt.entries.length !== nextSteamAchievementArt.entries.length ||
+    steamAchievementArt.entries.some((entry, index) => {
+      const nextEntry = nextSteamAchievementArt.entries[index];
+      if (!nextEntry) {
+        return true;
+      }
+      return (
+        entry.id !== nextEntry.id ||
+        entry.name !== nextEntry.name ||
+        entry.sourceImageRelativePath !== nextEntry.sourceImageRelativePath ||
+        entry.crop.zoom !== nextEntry.crop.zoom ||
+        entry.crop.offsetX !== nextEntry.crop.offsetX ||
+        entry.crop.offsetY !== nextEntry.crop.offsetY ||
+        entry.createdAt !== nextEntry.createdAt ||
+        entry.updatedAt !== nextEntry.updatedAt
+      );
+    });
+
+  if (!hasEffectiveChange && workspace) {
+    return state;
+  }
+
+  return {
+    ...state,
+    nodeDataById: {
+      ...state.nodeDataById,
+      [nodeId]: {
+        ...(workspace ?? {}),
+        steamAchievementArt: nextSteamAchievementArt,
       },
     },
   };

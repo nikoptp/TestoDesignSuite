@@ -6,6 +6,8 @@ import type {
   PersistedTreeState,
   ProjectImageAsset,
   RecentProjectEntry,
+  SteamAchievementBorderStyle,
+  SteamAchievementTransform,
   UserSettings,
 } from './shared/types';
 import {
@@ -19,8 +21,6 @@ import {
 } from './shared/tree-utils';
 import { useOutsidePointerDismiss } from './shared/hooks/use-outside-pointer-dismiss';
 import { startWindowPointerSession } from './shared/pointer-session';
-import {
-} from './renderer/noteboard-utils';
 import { appendPointWithPressure } from './renderer/noteboard-drawing';
 import { NodeTree, type NodeDropPosition } from './components/node-tree';
 import { CreateNodeDialog, DeleteNodeDialog, SettingsDialog } from './components/dialogs';
@@ -29,6 +29,7 @@ import { NoteboardCanvas } from './components/noteboard-canvas';
 import { DocumentEditor } from './components/document-editor';
 import { KanbanBoard } from './components/kanban-board';
 import { SpreadsheetEditor } from './components/spreadsheet-editor';
+import { SteamAchievementArtEditor } from './components/steam-achievement-art-editor';
 import { StartupSplash } from './components/startup-splash';
 import {
   useProjectBootstrap,
@@ -70,9 +71,11 @@ import {
   ensureNoteboardData,
   ensureKanbanData,
   ensureSpreadsheetData,
+  ensureSteamAchievementArtData,
   getCardsForNode,
   getKanbanBoardForNode,
   getSpreadsheetForNode,
+  getSteamAchievementArtForNode,
   getSharedKanbanBacklogCards,
   getDocumentMarkdownForNode,
   getStrokesForNode,
@@ -97,7 +100,20 @@ import {
   renameKanbanColumn,
   updateKanbanCard,
 } from './features/app/kanban-state';
-import { updateNodeNoteboardData } from './features/app/workspace-node-updaters';
+import {
+  updateNodeNoteboardData,
+  updateNodeSteamAchievementArtData,
+} from './features/app/workspace-node-updaters';
+import {
+  clampSteamAchievementTransform,
+  createDefaultSteamAchievementTransform,
+  createSteamAchievementEntry,
+  deriveSteamAchievementNameFromPath,
+  getSteamAchievementFrameRect,
+  getSteamImagePreset,
+  normalizeSteamAchievementArtData,
+  normalizeSteamAchievementEntryName,
+} from './features/steam-achievement/steam-achievement-art';
 
 const SKIP_SPLASH_ONCE_KEY = 'testo.splash.skipOnce';
 const SKIP_SPLASH_QUERY_PARAM = 'skipSplashOnce';
@@ -562,6 +578,14 @@ export const App = (): React.ReactElement => {
     setState((prev) => ensureSpreadsheetData(prev, selectedNode.id));
   }, [selectedNode]);
 
+  React.useEffect(() => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+      return;
+    }
+
+    setState((prev) => ensureSteamAchievementArtData(prev, selectedNode.id));
+  }, [selectedNode]);
+
   const pendingDeleteNode = React.useMemo(
     () => findNodeById(state.nodes, uiState.pendingDeleteNodeId),
     [state.nodes, uiState.pendingDeleteNodeId],
@@ -600,7 +624,8 @@ export const App = (): React.ReactElement => {
     selectedNode &&
     selectedNode.editorType !== 'noteboard' &&
     selectedNode.editorType !== 'kanban-board' &&
-    selectedNode.editorType !== 'spreadsheet'
+    selectedNode.editorType !== 'spreadsheet' &&
+    selectedNode.editorType !== 'steam-achievement-art'
       ? getDocumentMarkdownForNode(state, selectedNode.id)
       : '';
   const selectedKanban =
@@ -610,6 +635,10 @@ export const App = (): React.ReactElement => {
   const selectedSpreadsheet =
     selectedNode && selectedNode.editorType === 'spreadsheet'
       ? getSpreadsheetForNode(state, selectedNode.id)
+      : null;
+  const selectedSteamAchievementArt =
+    selectedNode && selectedNode.editorType === 'steam-achievement-art'
+      ? getSteamAchievementArtForNode(state, selectedNode.id)
       : null;
   const sharedKanbanBacklogCards = getSharedKanbanBacklogCards(state);
 
@@ -1174,6 +1203,350 @@ export const App = (): React.ReactElement => {
     [pushHistory, selectedNode],
   );
 
+  const onAddSteamAchievementEntry = React.useCallback((): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+      return;
+    }
+
+    pushHistory();
+    setState((prev) =>
+      updateNodeSteamAchievementArtData(
+        ensureSteamAchievementArtData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamAchievementArt) => ({
+          ...steamAchievementArt,
+          entries: [
+            ...steamAchievementArt.entries,
+            createSteamAchievementEntry(`achievement-${steamAchievementArt.entries.length + 1}`),
+          ],
+        }),
+      ),
+    );
+  }, [pushHistory, selectedNode]);
+
+  const onDeleteSteamAchievementEntry = React.useCallback(
+    (entryId: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+        return;
+      }
+
+      pushHistory();
+      setState((prev) =>
+        updateNodeSteamAchievementArtData(
+          ensureSteamAchievementArtData(prev, selectedNode.id),
+          selectedNode.id,
+          (steamAchievementArt) => ({
+            ...steamAchievementArt,
+            entries: steamAchievementArt.entries.filter((entry) => entry.id !== entryId),
+          }),
+        ),
+      );
+    },
+    [pushHistory, selectedNode],
+  );
+
+  const onRenameSteamAchievementEntry = React.useCallback(
+    (entryId: string, name: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+        return;
+      }
+
+      setState((prev) =>
+        updateNodeSteamAchievementArtData(
+          ensureSteamAchievementArtData(prev, selectedNode.id),
+          selectedNode.id,
+          (steamAchievementArt) => ({
+            ...steamAchievementArt,
+            entries: steamAchievementArt.entries.map((entry) =>
+              entry.id === entryId
+                ? {
+                    ...entry,
+                    name: normalizeSteamAchievementEntryName(name),
+                    updatedAt: Date.now(),
+                  }
+                : entry,
+            ),
+          }),
+        ),
+      );
+    },
+    [selectedNode],
+  );
+
+  const onAssignSteamAchievementAssetToEntry = React.useCallback(
+    (entryId: string, relativePath: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+        return;
+      }
+
+      pushHistory();
+      setState((prev) =>
+        updateNodeSteamAchievementArtData(
+          ensureSteamAchievementArtData(prev, selectedNode.id),
+          selectedNode.id,
+          (steamAchievementArt) => ({
+            ...steamAchievementArt,
+            entries: steamAchievementArt.entries.map((entry) =>
+              entry.id === entryId
+                ? {
+                    ...entry,
+                    name:
+                      entry.name.trim() && entry.name !== 'achievement'
+                        ? entry.name
+                        : deriveSteamAchievementNameFromPath(relativePath),
+                    sourceImageRelativePath: relativePath,
+                    crop: createDefaultSteamAchievementTransform(),
+                    updatedAt: Date.now(),
+                  }
+                : entry,
+            ),
+          }),
+        ),
+      );
+    },
+    [pushHistory, selectedNode],
+  );
+
+  const onCreateSteamAchievementEntryFromAsset = React.useCallback(
+    (relativePath: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+        return;
+      }
+
+      pushHistory();
+      setState((prev) =>
+        updateNodeSteamAchievementArtData(
+          ensureSteamAchievementArtData(prev, selectedNode.id),
+          selectedNode.id,
+          (steamAchievementArt) => ({
+            ...steamAchievementArt,
+            entries: [
+              ...steamAchievementArt.entries,
+              {
+                ...createSteamAchievementEntry(deriveSteamAchievementNameFromPath(relativePath)),
+                sourceImageRelativePath: relativePath,
+                crop: createDefaultSteamAchievementTransform(),
+                updatedAt: Date.now(),
+              },
+            ],
+          }),
+        ),
+      );
+    },
+    [pushHistory, selectedNode],
+  );
+
+  const onImportSteamAchievementFiles = React.useCallback(
+    async (files: File[], targetEntryId?: string): Promise<void> => {
+      if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+        return;
+      }
+      if (!window.testoApi?.saveImageAsset || files.length === 0) {
+        return;
+      }
+
+      const savedEntries: Array<{ relativePath: string; name: string }> = [];
+      for (const file of files) {
+        if (!(file instanceof File)) {
+          continue;
+        }
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const saved = await window.testoApi.saveImageAsset({
+            bytes,
+            mimeType: file.type || 'image/png',
+          });
+          savedEntries.push({
+            relativePath: saved.relativePath,
+            name: deriveSteamAchievementNameFromPath(file.name),
+          });
+        } catch {
+          // Ignore individual image import failures and keep processing the batch.
+        }
+      }
+
+      if (savedEntries.length === 0) {
+        showTransientProjectStatus('error', 'Unable to import any dropped images.');
+        return;
+      }
+
+      pushHistory();
+      setState((prev) =>
+        updateNodeSteamAchievementArtData(
+          ensureSteamAchievementArtData(prev, selectedNode.id),
+          selectedNode.id,
+          (steamAchievementArt) => {
+            const shouldReplaceTarget = Boolean(targetEntryId && savedEntries.length === 1);
+            const nextEntries = shouldReplaceTarget
+              ? steamAchievementArt.entries.map((entry) =>
+                  entry.id === targetEntryId
+                    ? {
+                        ...entry,
+                        name: entry.name.trim() ? entry.name : savedEntries[0].name,
+                        sourceImageRelativePath: savedEntries[0].relativePath,
+                        crop: createDefaultSteamAchievementTransform(),
+                        updatedAt: Date.now(),
+                      }
+                    : entry,
+                )
+              : [
+                  ...steamAchievementArt.entries,
+                  ...savedEntries.map((savedEntry) => ({
+                    ...createSteamAchievementEntry(savedEntry.name),
+                    name: savedEntry.name,
+                    sourceImageRelativePath: savedEntry.relativePath,
+                    crop: createDefaultSteamAchievementTransform(),
+                    updatedAt: Date.now(),
+                  })),
+                ];
+
+            return {
+              ...steamAchievementArt,
+              entries: nextEntries,
+            };
+          },
+        ),
+      );
+      await refreshImageAssets();
+      showTransientProjectStatus(
+        'success',
+        `Imported ${savedEntries.length} image${savedEntries.length === 1 ? '' : 's'} into the achievement set.`,
+      );
+    },
+    [pushHistory, refreshImageAssets, selectedNode, showTransientProjectStatus],
+  );
+
+  const onBeginSteamAchievementCropInteraction = React.useCallback((): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+      return;
+    }
+    pushHistory();
+  }, [pushHistory, selectedNode]);
+
+  const onChangeSteamAchievementCrop = React.useCallback(
+    (entryId: string, transform: SteamAchievementTransform): void => {
+      if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+        return;
+      }
+
+      const preset = getSteamImagePreset(selectedSteamAchievementArt?.presetId ?? '');
+      setState((prev) =>
+        updateNodeSteamAchievementArtData(
+          ensureSteamAchievementArtData(prev, selectedNode.id),
+          selectedNode.id,
+          (steamAchievementArt) => ({
+            ...steamAchievementArt,
+            entries: steamAchievementArt.entries.map((entry) => {
+              if (entry.id !== entryId) {
+                return entry;
+              }
+              const asset = imageAssets.find(
+                (candidate) => candidate.relativePath === entry.sourceImageRelativePath,
+              );
+              if (!asset) {
+                return {
+                  ...entry,
+                  crop: transform,
+                  updatedAt: Date.now(),
+                };
+              }
+              const frameRect = getSteamAchievementFrameRect(
+                preset.width,
+                preset.height,
+                steamAchievementArt.borderStyle,
+              );
+              return {
+                ...entry,
+                crop: clampSteamAchievementTransform(
+                  asset.width,
+                  asset.height,
+                  {
+                    ...preset,
+                    width: frameRect.width,
+                    height: frameRect.height,
+                  },
+                  transform,
+                ),
+                updatedAt: Date.now(),
+              };
+            }),
+          }),
+        ),
+      );
+    },
+    [imageAssets, selectedNode, selectedSteamAchievementArt],
+  );
+
+  const onResetSteamAchievementCrop = React.useCallback(
+    (entryId: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+        return;
+      }
+      pushHistory();
+      setState((prev) =>
+        updateNodeSteamAchievementArtData(
+          ensureSteamAchievementArtData(prev, selectedNode.id),
+          selectedNode.id,
+          (steamAchievementArt) => ({
+            ...steamAchievementArt,
+            entries: steamAchievementArt.entries.map((entry) =>
+              entry.id === entryId
+                ? {
+                    ...entry,
+                    crop: createDefaultSteamAchievementTransform(),
+                    updatedAt: Date.now(),
+                  }
+                : entry,
+            ),
+          }),
+        ),
+      );
+    },
+    [pushHistory, selectedNode],
+  );
+
+  const onChangeSteamAchievementBorderStyle = React.useCallback(
+    (patch: Partial<SteamAchievementBorderStyle>): void => {
+      if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+        return;
+      }
+
+      pushHistory();
+      setState((prev) =>
+        updateNodeSteamAchievementArtData(
+          ensureSteamAchievementArtData(prev, selectedNode.id),
+          selectedNode.id,
+          (steamAchievementArt) => ({
+            ...steamAchievementArt,
+            borderStyle: {
+              ...steamAchievementArt.borderStyle,
+              ...patch,
+            },
+          }),
+        ),
+      );
+    },
+    [pushHistory, selectedNode],
+  );
+
+  const onExportSteamAchievementSet = React.useCallback(async (): Promise<void> => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art' || !selectedSteamAchievementArt) {
+      return;
+    }
+    if (!window.testoApi?.exportSteamAchievementSet) {
+      showTransientProjectStatus('error', 'Steam achievement export is not available in this build.');
+      return;
+    }
+
+    const result = await window.testoApi.exportSteamAchievementSet({
+      nodeName: selectedNode.name,
+      data: normalizeSteamAchievementArtData(selectedSteamAchievementArt),
+    });
+    if (result.canceled) {
+      showTransientProjectStatus('info', 'Achievement export canceled.');
+    }
+  }, [selectedNode, selectedSteamAchievementArt, showTransientProjectStatus]);
+
   return (
     <motion.div
       ref={shellRef}
@@ -1417,6 +1790,35 @@ export const App = (): React.ReactElement => {
                 onDeleteColumn={onSpreadsheetDeleteColumn}
                 onResizeRow={onSpreadsheetResizeRow}
                 onResizeColumn={onSpreadsheetResizeColumn}
+              />
+            </motion.div>
+          ) : selectedNode &&
+            selectedNode.editorType === 'steam-achievement-art' &&
+            selectedSteamAchievementArt ? (
+            <motion.div
+              key={`steam-achievement-art-${selectedNode.id}`}
+              className="main-view"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+            >
+              <SteamAchievementArtEditor
+                node={selectedNode}
+                art={selectedSteamAchievementArt}
+                assets={imageAssets}
+                onAddEntry={onAddSteamAchievementEntry}
+                onDeleteEntry={onDeleteSteamAchievementEntry}
+                onRenameEntry={onRenameSteamAchievementEntry}
+                onAssignAssetToEntry={onAssignSteamAchievementAssetToEntry}
+                onCreateEntryFromAsset={onCreateSteamAchievementEntryFromAsset}
+                onImportFiles={onImportSteamAchievementFiles}
+                onBeginCropInteraction={onBeginSteamAchievementCropInteraction}
+                onCropChange={onChangeSteamAchievementCrop}
+                onResetCrop={onResetSteamAchievementCrop}
+                onBorderStyleChange={onChangeSteamAchievementBorderStyle}
+                onExport={onExportSteamAchievementSet}
+                onDeleteImageAsset={onDeleteImageAsset}
               />
             </motion.div>
           ) : selectedNode ? (

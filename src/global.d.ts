@@ -6,6 +6,8 @@ import type {
   ProjectSnapshot,
   ProjectImageAsset,
   SavedImageAsset,
+  SteamAchievementExportRequest,
+  SteamAchievementExportResult,
   UserSettings,
 } from './shared/types';
 
@@ -19,6 +21,9 @@ declare global {
       saveImageAsset: (input: { bytes: Uint8Array; mimeType: string }) => Promise<SavedImageAsset>;
       listImageAssets: () => Promise<ProjectImageAsset[]>;
       deleteImageAsset: (relativePath: string) => Promise<void>;
+      exportSteamAchievementSet: (
+        request: SteamAchievementExportRequest,
+      ) => Promise<SteamAchievementExportResult>;
       exportCustomTheme: (theme: CustomThemeDefinition) => Promise<boolean>;
       importCustomTheme: () => Promise<CustomThemeDefinition | null>;
       onRequestProjectSnapshot: (

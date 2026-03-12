@@ -7,6 +7,8 @@ import type {
   UserSettings,
   ProjectImageAsset,
   LaunchState,
+  SteamAchievementExportRequest,
+  SteamAchievementExportResult,
 } from '../shared/types';
 
 export type PendingSnapshotRequest = {
@@ -23,6 +25,9 @@ type RegisterIpcHandlersDeps = {
   saveImageAsset: (input: { bytes: Uint8Array; mimeType: string }) => Promise<SavedImageAsset>;
   listImageAssets: () => Promise<ProjectImageAsset[]>;
   deleteImageAsset: (relativePath: string) => Promise<void>;
+  exportSteamAchievementSet: (
+    request: SteamAchievementExportRequest,
+  ) => Promise<SteamAchievementExportResult>;
   exportCustomThemeToFile: (theme: CustomThemeDefinition) => Promise<boolean>;
   importCustomThemeFromFile: () => Promise<CustomThemeDefinition | null>;
   getLaunchState: () => Promise<LaunchState>;
@@ -41,6 +46,7 @@ export const registerIpcHandlers = ({
   saveImageAsset,
   listImageAssets,
   deleteImageAsset,
+  exportSteamAchievementSet,
   exportCustomThemeToFile,
   importCustomThemeFromFile,
   getLaunchState,
@@ -72,6 +78,10 @@ export const registerIpcHandlers = ({
   ipcMain.handle('assets:delete-image', async (_event, relativePath: string) => {
     await deleteImageAsset(relativePath);
   });
+  ipcMain.handle(
+    'steam-achievement:export-set',
+    async (_event, request: SteamAchievementExportRequest) => exportSteamAchievementSet(request),
+  );
   ipcMain.handle('themes:export-custom', async (_event, theme: CustomThemeDefinition) =>
     exportCustomThemeToFile(theme),
   );
