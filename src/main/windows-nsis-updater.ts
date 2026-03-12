@@ -70,15 +70,32 @@ export const verifyDownloadedInstallerChecksum = async (
   }
 };
 
-export const launchSilentWindowsInstaller = async (installerPath: string): Promise<void> => {
-  const installerPathForCmd = installerPath.replace(/"/g, '""');
-  const launcherPath = path.join(path.dirname(installerPath), 'run-installer-update.cmd');
-  const launcherScript = [
+const escapePathForBatch = (inputPath: string): string => inputPath.replace(/"/g, '""');
+
+export const buildSilentInstallerLauncherScript = (
+  installerPath: string,
+  relaunchExePath: string,
+): string => {
+  const installerPathForCmd = escapePathForBatch(installerPath);
+  const relaunchPathForCmd = escapePathForBatch(relaunchExePath);
+  return [
     '@echo off',
     'setlocal',
     'timeout /t 2 /nobreak >nul',
-    `start "" "${installerPathForCmd}" /S`,
+    `call "${installerPathForCmd}" /S`,
+    'set "exit_code=%errorlevel%"',
+    'if not "%exit_code%"=="0" exit /b %exit_code%',
+    'timeout /t 2 /nobreak >nul',
+    `if exist "${relaunchPathForCmd}" start "" "${relaunchPathForCmd}"`,
   ].join('\r\n');
+};
+
+export const launchSilentWindowsInstaller = async (
+  installerPath: string,
+  relaunchExePath: string,
+): Promise<void> => {
+  const launcherPath = path.join(path.dirname(installerPath), 'run-installer-update.cmd');
+  const launcherScript = buildSilentInstallerLauncherScript(installerPath, relaunchExePath);
 
   await writeFile(launcherPath, launcherScript, 'utf8');
 

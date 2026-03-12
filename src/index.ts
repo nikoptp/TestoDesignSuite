@@ -422,7 +422,10 @@ const checkForGithubUpdates = async (manual: boolean): Promise<void> => {
                 message: 'Installing update and restarting...',
               });
 
-              await launchSilentWindowsInstaller(downloadedInstaller.localPath);
+              await launchSilentWindowsInstaller(
+                downloadedInstaller.localPath,
+                app.getPath('exe'),
+              );
               app.quit();
             } catch (error: unknown) {
               emitProjectStatus(focusedWindow, {
