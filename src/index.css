@@ -3203,3 +3203,598 @@ body.is-dragging-template * {
     width: min(420px, calc(100% - 12px));
   }
 }
+
+.steam-achievement-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  height: 100%;
+  min-height: 0;
+}
+
+.steam-achievement-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.steam-achievement-toolbar {
+  display: flex;
+  gap: 10px;
+}
+
+.steam-achievement-layout {
+  display: grid;
+  grid-template-columns: minmax(250px, 290px) minmax(0, 1fr) minmax(240px, 300px);
+  grid-template-areas: 'list workbench assets';
+  gap: 18px;
+  min-height: 0;
+  flex: 1;
+}
+
+.steam-achievement-entry-list,
+.steam-achievement-workbench,
+.steam-achievement-assets {
+  min-height: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(9, 14, 22, 0.36);
+  backdrop-filter: blur(12px);
+}
+
+.steam-achievement-entry-list {
+  grid-area: list;
+}
+
+.steam-achievement-workbench {
+  grid-area: workbench;
+}
+
+.steam-achievement-assets {
+  grid-area: assets;
+}
+
+.steam-achievement-entry-list,
+.steam-achievement-assets {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--scrollbar-thumb) 84%, var(--active-item-border))
+    color-mix(in srgb, var(--app-bg) 72%, var(--surface-soft));
+}
+
+.steam-achievement-entry-list-header,
+.steam-achievement-crop-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 12px;
+}
+
+.steam-achievement-entry-list-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.steam-achievement-list-add {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 1.1rem;
+}
+
+.steam-achievement-entry-list-header h3,
+.steam-achievement-crop-header h3 {
+  margin: 0;
+}
+
+.steam-achievement-empty-list,
+.steam-achievement-empty-state {
+  margin: 16px;
+  padding: 24px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 16px;
+  color: rgba(255, 255, 255, 0.68);
+  text-align: center;
+}
+
+.steam-achievement-entry-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 12px 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+}
+
+.steam-achievement-entry-card.active {
+  border-color: rgba(120, 213, 255, 0.7);
+  box-shadow: 0 0 0 1px rgba(120, 213, 255, 0.24);
+}
+
+.steam-achievement-entry-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.steam-achievement-thumb {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  border-radius: 0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(120, 213, 255, 0.08)),
+    rgba(255, 255, 255, 0.04);
+}
+
+.steam-achievement-preview-shell,
+.steam-achievement-preview-frame,
+.steam-achievement-preview-background,
+.steam-achievement-preview-border,
+.steam-achievement-crop-border {
+  position: absolute;
+  inset: 0;
+}
+
+.steam-achievement-preview-shell {
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.steam-achievement-preview-shell.is-grayscale {
+  filter: grayscale(1);
+}
+
+.steam-achievement-preview-frame {
+  overflow: hidden;
+}
+
+.steam-achievement-preview-frame img,
+.steam-achievement-crop-image {
+  position: absolute;
+  max-width: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.steam-achievement-preview-frame span {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: 0.84rem;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.steam-achievement-preview-border,
+.steam-achievement-crop-border {
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.steam-achievement-thumb span {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: 0.84rem;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.steam-achievement-entry-name {
+  width: 100%;
+}
+
+.steam-achievement-entry-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.steam-achievement-entry-source {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.steam-achievement-workbench {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 16px 18px 18px;
+}
+
+.steam-achievement-crop-header {
+  padding: 0 0 14px;
+}
+
+.steam-achievement-crop-header p {
+  margin: 4px 0 0;
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.steam-achievement-crop-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.steam-achievement-style-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex: 0 0 auto;
+  max-height: 50%;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--scrollbar-thumb) 84%, var(--active-item-border))
+    color-mix(in srgb, var(--app-bg) 72%, var(--surface-soft));
+}
+
+.steam-achievement-style-sidebar .settings-field {
+  gap: 8px;
+}
+
+.steam-achievement-style-sidebar .settings-input,
+.steam-achievement-entry-name {
+  color-scheme: dark;
+  border: 1px solid var(--input-border);
+  background: color-mix(in srgb, var(--surface-soft) 88%, var(--textarea-bg));
+  color: var(--app-text);
+}
+
+.steam-achievement-style-sidebar .settings-input::placeholder,
+.steam-achievement-entry-name::placeholder {
+  color: color-mix(in srgb, var(--muted-text) 84%, transparent);
+}
+
+.steam-achievement-style-sidebar .settings-input:focus,
+.steam-achievement-style-sidebar .settings-input:focus-visible,
+.steam-achievement-entry-name:focus,
+.steam-achievement-entry-name:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--active-item-border) 44%, transparent);
+  outline-offset: 1px;
+  border-color: color-mix(in srgb, var(--active-item-border) 78%, var(--input-border));
+}
+
+.steam-achievement-style-sidebar .settings-input option {
+  background: var(--dialog-bg);
+  color: var(--app-text);
+}
+
+.steam-achievement-style-sidebar .settings-input[type='color'] {
+  width: 100%;
+  min-height: 38px;
+  padding: 4px;
+}
+
+.steam-achievement-style-sidebar .settings-input[type='range'],
+.steam-achievement-zoom-control input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--active-item-border) 88%, transparent) 0%,
+    color-mix(in srgb, var(--link-color) 72%, var(--active-item-border)) 100%
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dialog-border) 72%, transparent);
+}
+
+.steam-achievement-style-sidebar .settings-input[type='range']::-webkit-slider-thumb,
+.steam-achievement-zoom-control input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--active-item-border) 78%, var(--dialog-border));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--app-text) 92%, transparent) 0%,
+    color-mix(in srgb, var(--active-item-border) 65%, var(--surface-soft)) 100%
+  );
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--context-shadow) 56%, transparent);
+  cursor: pointer;
+}
+
+.steam-achievement-style-sidebar .settings-input[type='range']::-moz-range-track,
+.steam-achievement-zoom-control input[type='range']::-moz-range-track {
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--active-item-border) 88%, transparent) 0%,
+    color-mix(in srgb, var(--link-color) 72%, var(--active-item-border)) 100%
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dialog-border) 72%, transparent);
+}
+
+.steam-achievement-style-sidebar .settings-input[type='range']::-moz-range-thumb,
+.steam-achievement-zoom-control input[type='range']::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--active-item-border) 78%, var(--dialog-border));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--app-text) 92%, transparent) 0%,
+    color-mix(in srgb, var(--active-item-border) 65%, var(--surface-soft)) 100%
+  );
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--context-shadow) 56%, transparent);
+  cursor: pointer;
+}
+
+.steam-achievement-tab-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.steam-achievement-tab-grid .tool-style-option {
+  min-height: 44px;
+  padding: 4px;
+  gap: 2px;
+}
+
+.steam-achievement-tab-grid .tool-style-icon {
+  font-size: 12px;
+}
+
+.steam-achievement-tab-grid .tool-style-name {
+  font-size: 10px;
+}
+
+.steam-achievement-color-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.steam-achievement-toggle-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.steam-achievement-bgmode-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.steam-achievement-assets-scroll {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  flex-direction: column;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--scrollbar-thumb) 84%, var(--active-item-border))
+    color-mix(in srgb, var(--app-bg) 72%, var(--surface-soft));
+}
+
+.steam-achievement-sidebar-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--heading-muted);
+  line-height: 1.45;
+}
+
+.steam-achievement-entry-list::-webkit-scrollbar,
+.steam-achievement-assets::-webkit-scrollbar,
+.steam-achievement-assets-scroll::-webkit-scrollbar,
+.steam-achievement-style-sidebar::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+  background: color-mix(in srgb, var(--app-bg) 68%, var(--surface-soft));
+  border-radius: 999px;
+}
+
+.steam-achievement-entry-list::-webkit-scrollbar-thumb,
+.steam-achievement-assets::-webkit-scrollbar-thumb,
+.steam-achievement-assets-scroll::-webkit-scrollbar-thumb,
+.steam-achievement-style-sidebar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--scrollbar-thumb) 82%, var(--button-border));
+  border: 1px solid color-mix(in srgb, var(--dialog-border) 36%, transparent);
+  border-radius: 999px;
+}
+
+.steam-achievement-entry-list::-webkit-scrollbar-thumb:hover,
+.steam-achievement-assets::-webkit-scrollbar-thumb:hover,
+.steam-achievement-assets-scroll::-webkit-scrollbar-thumb:hover,
+.steam-achievement-style-sidebar::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--scrollbar-thumb) 92%, var(--active-item-border));
+}
+
+.steam-achievement-crop-stage {
+  position: relative;
+  width: min(100%, 620px);
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.steam-achievement-crop-stage-backdrop {
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(8, 12, 20, 0.18), rgba(14, 21, 34, 0.24));
+}
+
+.steam-achievement-crop-backdrop-image {
+  position: absolute;
+  max-width: none;
+  filter: brightness(0.42) saturate(0.78);
+  opacity: 1;
+}
+
+.steam-achievement-crop-surface {
+  position: relative;
+  overflow: hidden;
+  width: 76%;
+  aspect-ratio: 1 / 1;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
+    linear-gradient(45deg, rgba(255, 255, 255, 0.06) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.06) 75%),
+    rgba(11, 17, 27, 0.88);
+  background-size: 26px 26px, 26px 26px, auto;
+  background-position: 0 0, 13px 13px, 0 0;
+  cursor: grab;
+  z-index: 1;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.28);
+}
+
+.steam-achievement-crop-surface.has-image:active {
+  cursor: grabbing;
+}
+
+.steam-achievement-crop-guides {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.steam-achievement-guide-line {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+.steam-achievement-guide-line.vertical {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.steam-achievement-guide-line.horizontal {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.steam-achievement-guide-corner {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-color: rgba(120, 213, 255, 0.82);
+  border-style: solid;
+  filter: drop-shadow(0 0 8px rgba(120, 213, 255, 0.18));
+}
+
+.steam-achievement-guide-corner.top-left {
+  top: 14px;
+  left: 14px;
+  border-width: 2px 0 0 2px;
+}
+
+.steam-achievement-guide-corner.top-right {
+  top: 14px;
+  right: 14px;
+  border-width: 2px 2px 0 0;
+}
+
+.steam-achievement-guide-corner.bottom-left {
+  bottom: 14px;
+  left: 14px;
+  border-width: 0 0 2px 2px;
+}
+
+.steam-achievement-guide-corner.bottom-right {
+  right: 14px;
+  bottom: 14px;
+  border-width: 0 2px 2px 0;
+}
+
+.steam-achievement-safe-zone-label {
+  position: absolute;
+  left: 50%;
+  bottom: calc(50% - 38% - 18px);
+  transform: translateX(-50%);
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(8, 12, 20, 0.84);
+  border: 1px solid rgba(120, 213, 255, 0.28);
+  color: rgba(228, 243, 255, 0.88);
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.steam-achievement-drop-hint {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.steam-achievement-drop-hint span {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.steam-achievement-zoom-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.steam-achievement-assets .image-asset-sidebar-section {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.steam-achievement-assets .image-asset-list {
+  padding-bottom: 12px;
+}
+
+@media (max-width: 1260px) {
+  .steam-achievement-layout {
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+    grid-template-areas:
+      'list workbench'
+      'assets assets';
+  }
+
+  .steam-achievement-assets {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 860px) {
+  .steam-achievement-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .steam-achievement-layout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'assets'
+      'workbench'
+      'list';
+  }
+}

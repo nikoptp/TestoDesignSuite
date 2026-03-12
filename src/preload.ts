@@ -7,6 +7,8 @@ import type {
   ProjectSnapshot,
   ProjectImageAsset,
   SavedImageAsset,
+  SteamAchievementExportRequest,
+  SteamAchievementExportResult,
   UserSettings,
 } from './shared/types';
 
@@ -25,6 +27,10 @@ contextBridge.exposeInMainWorld('testoApi', {
     ipcRenderer.invoke('assets:list-images') as Promise<ProjectImageAsset[]>,
   deleteImageAsset: (relativePath: string): Promise<void> =>
     ipcRenderer.invoke('assets:delete-image', relativePath) as Promise<void>,
+  exportSteamAchievementSet: (
+    request: SteamAchievementExportRequest,
+  ): Promise<SteamAchievementExportResult> =>
+    ipcRenderer.invoke('steam-achievement:export-set', request) as Promise<SteamAchievementExportResult>,
   exportCustomTheme: (theme: CustomThemeDefinition): Promise<boolean> =>
     ipcRenderer.invoke('themes:export-custom', theme) as Promise<boolean>,
   importCustomTheme: (): Promise<CustomThemeDefinition | null> =>

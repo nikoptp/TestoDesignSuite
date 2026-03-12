@@ -80,6 +80,8 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
     noteboard?: unknown;
     document?: unknown;
     kanban?: unknown;
+    spreadsheet?: unknown;
+    steamAchievementArt?: unknown;
   };
 
   if (typeof obj.noteboard !== 'undefined') {
@@ -198,6 +200,118 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
       (!Array.isArray(kanban.collapsedColumnIds) ||
         !kanban.collapsedColumnIds.every((id) => typeof id === 'string'))
     ) {
+      return false;
+    }
+  }
+
+  if (typeof obj.spreadsheet !== 'undefined') {
+    if (typeof obj.spreadsheet !== 'object' || obj.spreadsheet === null) {
+      return false;
+    }
+
+    const spreadsheet = obj.spreadsheet as {
+      sheets?: unknown;
+      activeSheetId?: unknown;
+      activeCellKey?: unknown;
+      rowCount?: unknown;
+      columnCount?: unknown;
+    };
+    if (
+      !Array.isArray(spreadsheet.sheets) ||
+      typeof spreadsheet.activeSheetId !== 'string' ||
+      typeof spreadsheet.activeCellKey !== 'string' ||
+      typeof spreadsheet.rowCount !== 'number' ||
+      typeof spreadsheet.columnCount !== 'number'
+    ) {
+      return false;
+    }
+  }
+
+  if (typeof obj.steamAchievementArt !== 'undefined') {
+    if (typeof obj.steamAchievementArt !== 'object' || obj.steamAchievementArt === null) {
+      return false;
+    }
+
+    const steamAchievementArt = obj.steamAchievementArt as {
+      presetId?: unknown;
+      borderStyle?: unknown;
+      entries?: unknown;
+    };
+    const borderStyle = steamAchievementArt.borderStyle as {
+      enabled?: unknown;
+      thickness?: unknown;
+      opacity?: unknown;
+      margin?: unknown;
+      radius?: unknown;
+      gradientAngle?: unknown;
+      color?: unknown;
+      midColor?: unknown;
+      gradientColor?: unknown;
+      backgroundMode?: unknown;
+      backgroundOpacity?: unknown;
+      backgroundAngle?: unknown;
+      backgroundColor?: unknown;
+      backgroundMidColor?: unknown;
+      backgroundGradientColor?: unknown;
+      backgroundImageRelativePath?: unknown;
+    } | undefined;
+    if (
+      typeof steamAchievementArt.presetId !== 'string' ||
+      (typeof steamAchievementArt.borderStyle !== 'undefined' &&
+        (typeof borderStyle !== 'object' ||
+          borderStyle === null ||
+          typeof borderStyle.enabled !== 'boolean' ||
+          typeof borderStyle.thickness !== 'number' ||
+          typeof borderStyle.opacity !== 'number' ||
+          typeof borderStyle.margin !== 'number' ||
+          typeof borderStyle.radius !== 'number' ||
+          typeof borderStyle.gradientAngle !== 'number' ||
+          typeof borderStyle.color !== 'string' ||
+          typeof borderStyle.midColor !== 'string' ||
+          typeof borderStyle.gradientColor !== 'string' ||
+          (borderStyle.backgroundMode !== 'none' &&
+            borderStyle.backgroundMode !== 'gradient' &&
+            borderStyle.backgroundMode !== 'image') ||
+          typeof borderStyle.backgroundOpacity !== 'number' ||
+          typeof borderStyle.backgroundAngle !== 'number' ||
+          typeof borderStyle.backgroundColor !== 'string' ||
+          typeof borderStyle.backgroundMidColor !== 'string' ||
+          typeof borderStyle.backgroundGradientColor !== 'string' ||
+          (borderStyle.backgroundImageRelativePath !== null &&
+            typeof borderStyle.backgroundImageRelativePath !== 'string'))) ||
+      !Array.isArray(steamAchievementArt.entries)
+    ) {
+      return false;
+    }
+
+    const entriesValid = steamAchievementArt.entries.every((entry) => {
+      if (typeof entry !== 'object' || entry === null) {
+        return false;
+      }
+      const item = entry as {
+        id?: unknown;
+        name?: unknown;
+        sourceImageRelativePath?: unknown;
+        crop?: unknown;
+        createdAt?: unknown;
+        updatedAt?: unknown;
+      };
+      const crop = item.crop as { zoom?: unknown; offsetX?: unknown; offsetY?: unknown } | undefined;
+      return (
+        typeof item.id === 'string' &&
+        typeof item.name === 'string' &&
+        (item.sourceImageRelativePath === null || typeof item.sourceImageRelativePath === 'string') &&
+        typeof crop === 'object' &&
+        crop !== null &&
+        typeof crop.zoom === 'number' &&
+        typeof crop.offsetX === 'number' &&
+        typeof crop.offsetY === 'number' &&
+        typeof item.createdAt === 'number' &&
+        typeof item.updatedAt === 'number'
+      );
+    });
+
+    if (!entriesValid) {
       return false;
     }
   }

@@ -1,8 +1,10 @@
+import { createDefaultSteamAchievementBorderStyle } from '../steam-achievement/steam-achievement-art';
 import type { NodeWorkspaceData, PersistedTreeState } from '../../shared/types';
 
 type NoteboardData = NonNullable<NodeWorkspaceData['noteboard']>;
 type KanbanData = NonNullable<NodeWorkspaceData['kanban']>;
 type SpreadsheetData = NonNullable<NodeWorkspaceData['spreadsheet']>;
+type SteamAchievementArtData = NonNullable<NodeWorkspaceData['steamAchievementArt']>;
 
 const EMPTY_NOTEBOARD: NoteboardData = {
   cards: [],
@@ -22,6 +24,12 @@ const EMPTY_SPREADSHEET: SpreadsheetData = {
   columnCount: 26,
   rowHeights: {},
   columnWidths: {},
+};
+
+const EMPTY_STEAM_ACHIEVEMENT_ART: SteamAchievementArtData = {
+  presetId: 'steam-achievement-256',
+  borderStyle: createDefaultSteamAchievementBorderStyle(),
+  entries: [],
 };
 
 export const updateNodeWorkspaceData = (
@@ -91,5 +99,25 @@ export const updateNodeSpreadsheetData = (
     return {
       ...workspace,
       spreadsheet: next,
+    };
+  });
+
+export const updateNodeSteamAchievementArtData = (
+  state: PersistedTreeState,
+  nodeId: string,
+  updater: (
+    steamAchievementArt: SteamAchievementArtData,
+    workspace: NodeWorkspaceData,
+  ) => SteamAchievementArtData,
+): PersistedTreeState =>
+  updateNodeWorkspaceData(state, nodeId, (workspace) => {
+    const current = workspace.steamAchievementArt ?? EMPTY_STEAM_ACHIEVEMENT_ART;
+    const next = updater(current, workspace);
+    if (next === current) {
+      return workspace;
+    }
+    return {
+      ...workspace,
+      steamAchievementArt: next,
     };
   });

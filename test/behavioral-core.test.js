@@ -173,6 +173,44 @@ run('persistence guard accepts kanban state with shared backlog cards', () => {
   assert.equal(isPersistedTreeState(state), true);
 });
 
+run('persistence guard accepts steam achievement art payload', () => {
+  const state = {
+    nodes: [
+      {
+        id: 'node-steam',
+        name: 'Steam Art',
+        editorType: 'steam-achievement-art',
+        children: [],
+      },
+    ],
+    selectedNodeId: 'node-steam',
+    nextNodeNumber: 2,
+    nodeDataById: {
+      'node-steam': {
+        steamAchievementArt: {
+          presetId: 'steam-achievement-256',
+          entries: [
+            {
+              id: 'entry-1',
+              name: 'first',
+              sourceImageRelativePath: 'project-assets/images/hero.png',
+              crop: {
+                zoom: 1,
+                offsetX: 0,
+                offsetY: 0,
+              },
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            },
+          ],
+        },
+      },
+    },
+  };
+
+  assert.equal(isPersistedTreeState(state), true);
+});
+
 run('persistence guard rejects kanban state with invalid card markdown', () => {
   const invalidState = {
     nodes: [
