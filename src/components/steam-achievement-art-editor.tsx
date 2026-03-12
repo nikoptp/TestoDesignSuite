@@ -655,9 +655,23 @@ export const SteamAchievementArtEditor = ({
               <h3>Achievements</h3>
               <span>{art.entries.length}</span>
             </div>
-            <button type="button" className="steam-achievement-list-add" onClick={onAddEntry}>
-              +
-            </button>
+            <div className="steam-achievement-entry-list-actions">
+              <button
+                type="button"
+                className="steam-achievement-export-button"
+                onClick={() => {
+                  setIsExporting(true);
+                  void onExport().finally(() => setIsExporting(false));
+                }}
+                disabled={isExporting || art.entries.length === 0}
+              >
+                <i className={`fa-solid ${isExporting ? 'fa-spinner fa-spin' : 'fa-file-export'}`}></i>
+                <span>{isExporting ? 'Exporting' : 'Export'}</span>
+              </button>
+              <button type="button" className="steam-achievement-list-add" onClick={onAddEntry}>
+                +
+              </button>
+            </div>
           </div>
           {art.entries.length === 0 ? (
             <div
@@ -755,16 +769,6 @@ export const SteamAchievementArtEditor = ({
                   </p>
                 </div>
                 <div className="steam-achievement-crop-actions">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsExporting(true);
-                      void onExport().finally(() => setIsExporting(false));
-                    }}
-                    disabled={isExporting || art.entries.length === 0}
-                  >
-                    {isExporting ? 'Exporting...' : 'Export PNG Set'}
-                  </button>
                   <button type="button" onClick={() => onResetCrop(selectedEntry.id)}>
                     Fit Image
                   </button>
@@ -829,7 +833,6 @@ export const SteamAchievementArtEditor = ({
                     <span className="steam-achievement-guide-corner bottom-right"></span>
                   </div>
                 </div>
-                <div className="steam-achievement-safe-zone-label">Crop Output</div>
               </div>
               <label className="steam-achievement-zoom-control">
                 <span>Zoom</span>
