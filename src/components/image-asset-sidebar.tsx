@@ -5,14 +5,16 @@ import { setImageAssetDragPayload } from '../shared/drag-payloads';
 type ImageAssetSidebarProps = {
   assets: ProjectImageAsset[];
   onDeleteAsset: (relativePath: string) => void;
+  variant?: 'list' | 'grid';
 };
 
 export const ImageAssetSidebar = ({
   assets,
   onDeleteAsset,
+  variant = 'list',
 }: ImageAssetSidebarProps): React.ReactElement => {
   return (
-    <section className="image-asset-sidebar-section">
+    <section className={`image-asset-sidebar-section ${variant === 'grid' ? 'is-grid' : ''}`}>
       <div className="draw-sidebar-header">
         <h3>Images</h3>
       </div>

@@ -5,9 +5,11 @@ import {
   updateNodeNoteboardData,
   updateNodeSpreadsheetData,
   updateNodeSteamAchievementArtData,
+  updateNodeSteamMarketplaceAssetsData,
   updateNodeWorkspaceData,
 } from '../../src/features/app/workspace-node-updaters';
 import { createDefaultSteamAchievementBorderStyle } from '../../src/features/steam-achievement/steam-achievement-art';
+import { createDefaultSteamMarketplaceOutputState } from '../../src/features/steam-marketplace/steam-marketplace-assets';
 
 const baseState = (): PersistedTreeState => ({
   nodes: [],
@@ -97,5 +99,33 @@ describe('workspace-node-updaters', () => {
       'first-achievement',
     );
     expect(next.nodeDataById['node-steam']?.steamAchievementArt?.borderStyle.enabled).toBe(true);
+  });
+
+  it('updates steam marketplace assets slice with defaults when missing', () => {
+    const next = updateNodeSteamMarketplaceAssetsData(baseState(), 'node-marketplace', (steamMarketplaceAssets) => ({
+      ...steamMarketplaceAssets,
+      entries: [
+        {
+          id: 'entry-1',
+          name: 'capsule-art',
+          sourceImageRelativePath: 'project-assets/images/capsule.png',
+          logoImageRelativePath: 'project-assets/images/logo.png',
+          outputsByPresetId: {
+            'header-capsule': createDefaultSteamMarketplaceOutputState(),
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    }));
+
+    expect(next.nodeDataById['node-marketplace']?.steamMarketplaceAssets?.entries[0]?.name).toBe(
+      'capsule-art',
+    );
+    expect(
+      next.nodeDataById['node-marketplace']?.steamMarketplaceAssets?.entries[0]?.outputsByPresetId[
+        'header-capsule'
+      ]?.enabled,
+    ).toBe(true);
   });
 });

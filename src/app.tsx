@@ -8,6 +8,8 @@ import type {
   RecentProjectEntry,
   SteamAchievementBorderStyle,
   SteamAchievementTransform,
+  SteamMarketplaceCropTransform,
+  SteamMarketplaceOutputState,
   UserSettings,
 } from './shared/types';
 import {
@@ -30,6 +32,7 @@ import { DocumentEditor } from './components/document-editor';
 import { KanbanBoard } from './components/kanban-board';
 import { SpreadsheetEditor } from './components/spreadsheet-editor';
 import { SteamAchievementArtEditor } from './components/steam-achievement-art-editor';
+import { SteamMarketplaceAssetsEditor } from './components/steam-marketplace-assets-editor';
 import { StartupSplash } from './components/startup-splash';
 import {
   useProjectBootstrap,
@@ -72,10 +75,12 @@ import {
   ensureKanbanData,
   ensureSpreadsheetData,
   ensureSteamAchievementArtData,
+  ensureSteamMarketplaceAssetsData,
   getCardsForNode,
   getKanbanBoardForNode,
   getSpreadsheetForNode,
   getSteamAchievementArtForNode,
+  getSteamMarketplaceAssetsForNode,
   getSharedKanbanBacklogCards,
   getDocumentMarkdownForNode,
   getStrokesForNode,
@@ -103,6 +108,7 @@ import {
 import {
   updateNodeNoteboardData,
   updateNodeSteamAchievementArtData,
+  updateNodeSteamMarketplaceAssetsData,
 } from './features/app/workspace-node-updaters';
 import {
   clampSteamAchievementTransform,
@@ -114,6 +120,16 @@ import {
   normalizeSteamAchievementArtData,
   normalizeSteamAchievementEntryName,
 } from './features/steam-achievement/steam-achievement-art';
+import {
+  clampSteamMarketplaceCropTransform,
+  createDefaultSteamMarketplaceCropTransform,
+  createSteamMarketplaceEntry,
+  deriveSteamMarketplaceNameFromPath,
+  getSteamMarketplacePreset,
+  normalizeSteamMarketplaceAssetData,
+  normalizeSteamMarketplaceEntryName,
+  STEAM_MARKETPLACE_PRESETS,
+} from './features/steam-marketplace/steam-marketplace-assets';
 
 const SKIP_SPLASH_ONCE_KEY = 'testo.splash.skipOnce';
 const SKIP_SPLASH_QUERY_PARAM = 'skipSplashOnce';
@@ -586,6 +602,14 @@ export const App = (): React.ReactElement => {
     setState((prev) => ensureSteamAchievementArtData(prev, selectedNode.id));
   }, [selectedNode]);
 
+  React.useEffect(() => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+
+    setState((prev) => ensureSteamMarketplaceAssetsData(prev, selectedNode.id));
+  }, [selectedNode]);
+
   const pendingDeleteNode = React.useMemo(
     () => findNodeById(state.nodes, uiState.pendingDeleteNodeId),
     [state.nodes, uiState.pendingDeleteNodeId],
@@ -625,7 +649,8 @@ export const App = (): React.ReactElement => {
     selectedNode.editorType !== 'noteboard' &&
     selectedNode.editorType !== 'kanban-board' &&
     selectedNode.editorType !== 'spreadsheet' &&
-    selectedNode.editorType !== 'steam-achievement-art'
+    selectedNode.editorType !== 'steam-achievement-art' &&
+    selectedNode.editorType !== 'steam-marketplace-assets'
       ? getDocumentMarkdownForNode(state, selectedNode.id)
       : '';
   const selectedKanban =
@@ -639,6 +664,10 @@ export const App = (): React.ReactElement => {
   const selectedSteamAchievementArt =
     selectedNode && selectedNode.editorType === 'steam-achievement-art'
       ? getSteamAchievementArtForNode(state, selectedNode.id)
+      : null;
+  const selectedSteamMarketplaceAssets =
+    selectedNode && selectedNode.editorType === 'steam-marketplace-assets'
+      ? getSteamMarketplaceAssetsForNode(state, selectedNode.id)
       : null;
   const sharedKanbanBacklogCards = getSharedKanbanBacklogCards(state);
 
@@ -1547,6 +1576,511 @@ export const App = (): React.ReactElement => {
     }
   }, [selectedNode, selectedSteamAchievementArt, showTransientProjectStatus]);
 
+  const onAddSteamMarketplaceEntry = React.useCallback((): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    pushHistory();
+    setState((prev) =>
+      updateNodeSteamMarketplaceAssetsData(
+        ensureSteamMarketplaceAssetsData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamMarketplaceAssets) => ({
+          ...steamMarketplaceAssets,
+          entries: [
+            ...steamMarketplaceAssets.entries,
+            createSteamMarketplaceEntry(`asset-${steamMarketplaceAssets.entries.length + 1}`),
+          ],
+        }),
+      ),
+    );
+  }, [pushHistory, selectedNode]);
+
+  const onDeleteSteamMarketplaceEntry = React.useCallback((entryId: string): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    pushHistory();
+    setState((prev) =>
+      updateNodeSteamMarketplaceAssetsData(
+        ensureSteamMarketplaceAssetsData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamMarketplaceAssets) => ({
+          ...steamMarketplaceAssets,
+          entries: steamMarketplaceAssets.entries.filter((entry) => entry.id !== entryId),
+        }),
+      ),
+    );
+  }, [pushHistory, selectedNode]);
+
+  const onRenameSteamMarketplaceEntry = React.useCallback((entryId: string, name: string): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    setState((prev) =>
+      updateNodeSteamMarketplaceAssetsData(
+        ensureSteamMarketplaceAssetsData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamMarketplaceAssets) => ({
+          ...steamMarketplaceAssets,
+          entries: steamMarketplaceAssets.entries.map((entry) =>
+            entry.id === entryId
+              ? {
+                  ...entry,
+                  name: normalizeSteamMarketplaceEntryName(name),
+                  updatedAt: Date.now(),
+                }
+              : entry,
+          ),
+        }),
+      ),
+    );
+  }, [selectedNode]);
+
+  const onSetSteamMarketplaceEntryPreset = React.useCallback((entryId: string, presetId: string): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    setState((prev) =>
+      updateNodeSteamMarketplaceAssetsData(
+        ensureSteamMarketplaceAssetsData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamMarketplaceAssets) => ({
+          ...steamMarketplaceAssets,
+          entries: steamMarketplaceAssets.entries.map((entry) =>
+            entry.id === entryId
+              ? {
+                  ...entry,
+                  presetId,
+                  updatedAt: Date.now(),
+                }
+              : entry,
+          ),
+        }),
+      ),
+    );
+  }, [selectedNode]);
+
+  const onAssignSteamMarketplaceBaseAssetToEntry = React.useCallback((entryId: string, relativePath: string): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    pushHistory();
+    setState((prev) =>
+      updateNodeSteamMarketplaceAssetsData(
+        ensureSteamMarketplaceAssetsData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamMarketplaceAssets) => ({
+          ...steamMarketplaceAssets,
+          entries: steamMarketplaceAssets.entries.map((entry) =>
+            entry.id === entryId
+              ? {
+                  ...entry,
+                  name:
+                    entry.name.trim() && entry.name !== 'marketplace-asset'
+                      ? entry.name
+                      : deriveSteamMarketplaceNameFromPath(relativePath),
+                  sourceImageRelativePath: relativePath,
+                  updatedAt: Date.now(),
+                }
+              : entry,
+          ),
+        }),
+      ),
+    );
+  }, [pushHistory, selectedNode]);
+
+  const onAssignSteamMarketplaceLogoAssetToEntry = React.useCallback((entryId: string, relativePath: string | null): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    pushHistory();
+    setState((prev) =>
+      updateNodeSteamMarketplaceAssetsData(
+        ensureSteamMarketplaceAssetsData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamMarketplaceAssets) => ({
+          ...steamMarketplaceAssets,
+          logoAssetRelativePaths:
+            relativePath
+              ? [...new Set([...(steamMarketplaceAssets.logoAssetRelativePaths ?? []), relativePath])]
+              : steamMarketplaceAssets.logoAssetRelativePaths ?? [],
+          entries: steamMarketplaceAssets.entries.map((entry) =>
+            entry.id === entryId
+              ? {
+                  ...entry,
+                  logoImageRelativePath: relativePath,
+                  updatedAt: Date.now(),
+                }
+              : entry,
+          ),
+        }),
+      ),
+    );
+  }, [pushHistory, selectedNode]);
+
+  const onRemoveSteamMarketplaceLogoAsset = React.useCallback((relativePath: string): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    pushHistory();
+    setState((prev) =>
+      updateNodeSteamMarketplaceAssetsData(
+        ensureSteamMarketplaceAssetsData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamMarketplaceAssets) => ({
+          ...steamMarketplaceAssets,
+          logoAssetRelativePaths: (steamMarketplaceAssets.logoAssetRelativePaths ?? []).filter(
+            (path) => path !== relativePath,
+          ),
+          entries: steamMarketplaceAssets.entries.map((entry) =>
+            entry.logoImageRelativePath === relativePath
+              ? {
+                  ...entry,
+                  logoImageRelativePath: null,
+                  updatedAt: Date.now(),
+                }
+              : entry,
+          ),
+        }),
+      ),
+    );
+  }, [pushHistory, selectedNode]);
+
+  const onCreateSteamMarketplaceEntryFromAsset = React.useCallback((relativePath: string): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    pushHistory();
+    setState((prev) =>
+      updateNodeSteamMarketplaceAssetsData(
+        ensureSteamMarketplaceAssetsData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamMarketplaceAssets) => ({
+          ...steamMarketplaceAssets,
+          entries: [
+            ...steamMarketplaceAssets.entries,
+            {
+              ...createSteamMarketplaceEntry(deriveSteamMarketplaceNameFromPath(relativePath)),
+              sourceImageRelativePath: relativePath,
+              updatedAt: Date.now(),
+            },
+          ],
+        }),
+      ),
+    );
+  }, [pushHistory, selectedNode]);
+
+  const onCreateAllSteamMarketplaceTemplates = React.useCallback((): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    pushHistory();
+    setState((prev) =>
+      updateNodeSteamMarketplaceAssetsData(
+        ensureSteamMarketplaceAssetsData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamMarketplaceAssets) => {
+          const existingNames = new Set(
+            steamMarketplaceAssets.entries.map((entry) => entry.name.trim().toLowerCase()),
+          );
+          const missingEntries = STEAM_MARKETPLACE_PRESETS.filter(
+            (preset) => !existingNames.has(preset.label.trim().toLowerCase()),
+          ).map((preset) => ({
+            ...createSteamMarketplaceEntry(preset.label),
+            name: preset.label,
+            presetId: preset.id,
+          }));
+
+          if (missingEntries.length === 0) {
+            return steamMarketplaceAssets;
+          }
+
+          return {
+            ...steamMarketplaceAssets,
+            entries: [...steamMarketplaceAssets.entries, ...missingEntries],
+          };
+        },
+      ),
+    );
+  }, [pushHistory, selectedNode]);
+
+  const onImportSteamMarketplaceFiles = React.useCallback(async (
+    files: File[],
+    target: 'base' | 'logo',
+    targetEntryId?: string,
+  ): Promise<void> => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    if (!window.testoApi?.saveImageAsset || files.length === 0) {
+      return;
+    }
+
+    const savedEntries: Array<{ relativePath: string; name: string }> = [];
+    for (const file of files) {
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const saved = await window.testoApi.saveImageAsset({
+          bytes,
+          mimeType: file.type || 'image/png',
+        });
+        savedEntries.push({
+          relativePath: saved.relativePath,
+          name: deriveSteamMarketplaceNameFromPath(file.name),
+        });
+      } catch {
+        // Ignore individual import failure and continue the batch.
+      }
+    }
+
+    if (savedEntries.length === 0) {
+      showTransientProjectStatus('error', 'Unable to import any dropped marketplace images.');
+      return;
+    }
+
+    pushHistory();
+    setState((prev) =>
+      updateNodeSteamMarketplaceAssetsData(
+        ensureSteamMarketplaceAssetsData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamMarketplaceAssets) => {
+          const shouldReplaceTarget = Boolean(targetEntryId && savedEntries.length === 1);
+          if (target === 'logo' && targetEntryId) {
+            return {
+              ...steamMarketplaceAssets,
+              logoAssetRelativePaths: [
+                ...new Set([
+                  ...(steamMarketplaceAssets.logoAssetRelativePaths ?? []),
+                  ...savedEntries.map((savedEntry) => savedEntry.relativePath),
+                ]),
+              ],
+              entries: steamMarketplaceAssets.entries.map((entry) =>
+                entry.id === targetEntryId
+                  ? {
+                      ...entry,
+                      logoImageRelativePath: savedEntries[0].relativePath,
+                      updatedAt: Date.now(),
+                    }
+                  : entry,
+              ),
+            };
+          }
+
+          const nextEntries = shouldReplaceTarget
+            ? steamMarketplaceAssets.entries.map((entry) =>
+                entry.id === targetEntryId
+                  ? {
+                      ...entry,
+                      name: entry.name.trim() ? entry.name : savedEntries[0].name,
+                      sourceImageRelativePath: savedEntries[0].relativePath,
+                      updatedAt: Date.now(),
+                    }
+                  : entry,
+              )
+            : [
+                ...steamMarketplaceAssets.entries,
+                ...savedEntries.map((savedEntry) => ({
+                  ...createSteamMarketplaceEntry(savedEntry.name),
+                  name: savedEntry.name,
+                  sourceImageRelativePath: savedEntry.relativePath,
+                  updatedAt: Date.now(),
+                })),
+              ];
+
+          return {
+            ...steamMarketplaceAssets,
+            entries: nextEntries,
+          };
+        },
+      ),
+    );
+    await refreshImageAssets();
+    showTransientProjectStatus(
+      'success',
+      `Imported ${savedEntries.length} image${savedEntries.length === 1 ? '' : 's'} into the marketplace asset set.`,
+    );
+  }, [pushHistory, refreshImageAssets, selectedNode, showTransientProjectStatus]);
+
+  const onBeginSteamMarketplaceCropInteraction = React.useCallback((): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    pushHistory();
+  }, [pushHistory, selectedNode]);
+
+  const onChangeSteamMarketplaceCrop = React.useCallback((
+    entryId: string,
+    presetId: string,
+    transform: SteamMarketplaceCropTransform,
+  ): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    const preset = getSteamMarketplacePreset(presetId);
+    setState((prev) =>
+      updateNodeSteamMarketplaceAssetsData(
+        ensureSteamMarketplaceAssetsData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamMarketplaceAssets) => ({
+          ...steamMarketplaceAssets,
+          entries: steamMarketplaceAssets.entries.map((entry) => {
+            if (entry.id !== entryId) {
+              return entry;
+            }
+            const asset = imageAssets.find((candidate) => candidate.relativePath === entry.sourceImageRelativePath);
+            const currentOutput = entry.outputsByPresetId[presetId];
+            const nextTransform = asset
+              ? clampSteamMarketplaceCropTransform(asset.width, asset.height, preset, transform)
+              : transform;
+            if (
+              currentOutput &&
+              currentOutput.crop.zoom === nextTransform.zoom &&
+              currentOutput.crop.offsetX === nextTransform.offsetX &&
+              currentOutput.crop.offsetY === nextTransform.offsetY
+            ) {
+              return entry;
+            }
+            return {
+              ...entry,
+              outputsByPresetId: {
+                ...entry.outputsByPresetId,
+                [presetId]: {
+                  ...currentOutput,
+                  crop: nextTransform,
+                },
+              },
+              updatedAt: Date.now(),
+            };
+          }),
+        }),
+      ),
+    );
+  }, [imageAssets, selectedNode]);
+
+  const onPatchSteamMarketplaceOutput = React.useCallback((entryId: string, presetId: string, patch: Partial<SteamMarketplaceOutputState>): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    setState((prev) =>
+      updateNodeSteamMarketplaceAssetsData(
+        ensureSteamMarketplaceAssetsData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamMarketplaceAssets) => ({
+          ...steamMarketplaceAssets,
+          entries: steamMarketplaceAssets.entries.map((entry) =>
+            entry.id === entryId
+              ? {
+                  ...entry,
+                  outputsByPresetId: {
+                    ...entry.outputsByPresetId,
+                    [presetId]: {
+                      ...entry.outputsByPresetId[presetId],
+                      ...patch,
+                    },
+                  },
+                  updatedAt: Date.now(),
+                }
+              : entry,
+          ),
+        }),
+      ),
+    );
+  }, [selectedNode]);
+
+  const onPatchSteamMarketplaceSharedAdjustments = React.useCallback((
+    entryId: string,
+    patch: { overlays: Partial<SteamMarketplaceOutputState['overlays']> },
+  ): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    setState((prev) =>
+      updateNodeSteamMarketplaceAssetsData(
+        ensureSteamMarketplaceAssetsData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamMarketplaceAssets) => ({
+          ...steamMarketplaceAssets,
+          entries: steamMarketplaceAssets.entries.map((entry) =>
+            entry.id === entryId
+              ? {
+                  ...entry,
+                  outputsByPresetId: Object.fromEntries(
+                    Object.entries(entry.outputsByPresetId).map(([presetId, output]) => {
+                      const preset = getSteamMarketplacePreset(presetId);
+                      if (preset.kind !== 'image') {
+                        return [presetId, output];
+                      }
+                      return [
+                        presetId,
+                        {
+                          ...output,
+                          ...patch,
+                          overlays: {
+                            ...output.overlays,
+                            ...patch.overlays,
+                          },
+                        },
+                      ];
+                    }),
+                  ),
+                  updatedAt: Date.now(),
+                }
+              : entry,
+          ),
+        }),
+      ),
+    );
+  }, [selectedNode]);
+
+  const onResetSteamMarketplaceCrop = React.useCallback((entryId: string, presetId: string): void => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
+      return;
+    }
+    pushHistory();
+    setState((prev) =>
+      updateNodeSteamMarketplaceAssetsData(
+        ensureSteamMarketplaceAssetsData(prev, selectedNode.id),
+        selectedNode.id,
+        (steamMarketplaceAssets) => ({
+          ...steamMarketplaceAssets,
+          entries: steamMarketplaceAssets.entries.map((entry) =>
+            entry.id === entryId
+              ? {
+                  ...entry,
+                  outputsByPresetId: {
+                    ...entry.outputsByPresetId,
+                    [presetId]: {
+                      ...entry.outputsByPresetId[presetId],
+                      crop: createDefaultSteamMarketplaceCropTransform(),
+                    },
+                  },
+                  updatedAt: Date.now(),
+                }
+              : entry,
+          ),
+        }),
+      ),
+    );
+  }, [pushHistory, selectedNode]);
+
+  const onExportSteamMarketplaceAssets = React.useCallback(async (): Promise<void> => {
+    if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets' || !selectedSteamMarketplaceAssets) {
+      return;
+    }
+    if (!window.testoApi?.exportSteamMarketplaceAssets) {
+      showTransientProjectStatus('error', 'Steam marketplace export is not available in this build.');
+      return;
+    }
+    const result = await window.testoApi.exportSteamMarketplaceAssets({
+      nodeName: selectedNode.name,
+      data: normalizeSteamMarketplaceAssetData(selectedSteamMarketplaceAssets),
+    });
+    if (result.canceled) {
+      showTransientProjectStatus('info', 'Steam marketplace export canceled.');
+    }
+  }, [selectedNode, selectedSteamMarketplaceAssets, showTransientProjectStatus]);
+
   return (
     <motion.div
       ref={shellRef}
@@ -1818,6 +2352,40 @@ export const App = (): React.ReactElement => {
                 onResetCrop={onResetSteamAchievementCrop}
                 onBorderStyleChange={onChangeSteamAchievementBorderStyle}
                 onExport={onExportSteamAchievementSet}
+                onDeleteImageAsset={onDeleteImageAsset}
+              />
+            </motion.div>
+          ) : selectedNode &&
+            selectedNode.editorType === 'steam-marketplace-assets' &&
+            selectedSteamMarketplaceAssets ? (
+            <motion.div
+              key={`steam-marketplace-assets-${selectedNode.id}`}
+              className="main-view"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+            >
+              <SteamMarketplaceAssetsEditor
+                node={selectedNode}
+                data={selectedSteamMarketplaceAssets}
+                assets={imageAssets}
+                onAddEntry={onAddSteamMarketplaceEntry}
+                onDeleteEntry={onDeleteSteamMarketplaceEntry}
+                onRenameEntry={onRenameSteamMarketplaceEntry}
+                onSetEntryPreset={onSetSteamMarketplaceEntryPreset}
+                onAssignBaseAssetToEntry={onAssignSteamMarketplaceBaseAssetToEntry}
+                onAssignLogoAssetToEntry={onAssignSteamMarketplaceLogoAssetToEntry}
+                onRemoveLogoAsset={onRemoveSteamMarketplaceLogoAsset}
+                onCreateEntryFromAsset={onCreateSteamMarketplaceEntryFromAsset}
+                onImportFiles={onImportSteamMarketplaceFiles}
+                onCreateAllTemplates={onCreateAllSteamMarketplaceTemplates}
+                onBeginCropInteraction={onBeginSteamMarketplaceCropInteraction}
+                onCropChange={onChangeSteamMarketplaceCrop}
+                onOutputPatch={onPatchSteamMarketplaceOutput}
+                onSharedAdjustmentPatch={onPatchSteamMarketplaceSharedAdjustments}
+                onResetCrop={onResetSteamMarketplaceCrop}
+                onExport={onExportSteamMarketplaceAssets}
                 onDeleteImageAsset={onDeleteImageAsset}
               />
             </motion.div>

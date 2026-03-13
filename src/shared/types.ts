@@ -3,7 +3,8 @@ export type EditorType =
   | 'kanban-board'
   | 'spreadsheet'
   | 'story-document'
-  | 'steam-achievement-art';
+  | 'steam-achievement-art'
+  | 'steam-marketplace-assets';
 
 export type CategoryNode = {
   id: string;
@@ -162,6 +163,98 @@ export type SteamAchievementArtData = {
   entries: SteamAchievementEntry[];
 };
 
+export type SteamMarketplaceOutputFormat = 'png' | 'jpg';
+
+export type SteamMarketplacePresetKind = 'image' | 'logo';
+
+export type SteamMarketplacePreset = {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  format: SteamMarketplaceOutputFormat;
+  fileStem: string;
+  kind: SteamMarketplacePresetKind;
+  backgroundTransparent?: boolean;
+  allowLogoOverlay?: boolean;
+};
+
+export type SteamMarketplaceCropTransform = {
+  zoom: number;
+  offsetX: number;
+  offsetY: number;
+};
+
+export type SteamMarketplaceLogoTransform = {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+  opacity: number;
+};
+
+export type SteamMarketplaceGradientOverlayState = {
+  enabled: boolean;
+  angle: number;
+  opacity: number;
+  color: string;
+  midColor: string;
+  endColor: string;
+};
+
+export type SteamMarketplaceBlurOverlayState = {
+  enabled: boolean;
+  blurRadius: number;
+  opacity: number;
+};
+
+export type SteamMarketplaceImageAdjustmentState = {
+  saturation: number;
+  contrast: number;
+  vignette: number;
+};
+
+export type SteamMarketplaceLogoOverlayState = {
+  enabled: boolean;
+  opacity: number;
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+  shadowEnabled: boolean;
+  shadowBlur: number;
+  shadowOpacity: number;
+  shadowOffsetX: number;
+  shadowOffsetY: number;
+};
+
+export type SteamMarketplaceOverlayState = {
+  gradient: SteamMarketplaceGradientOverlayState;
+  blur: SteamMarketplaceBlurOverlayState;
+  image: SteamMarketplaceImageAdjustmentState;
+  logo: SteamMarketplaceLogoOverlayState;
+};
+
+export type SteamMarketplaceOutputState = {
+  enabled: boolean;
+  crop: SteamMarketplaceCropTransform;
+  overlays: SteamMarketplaceOverlayState;
+};
+
+export type SteamMarketplaceEntry = {
+  id: string;
+  name: string;
+  presetId: string;
+  sourceImageRelativePath: string | null;
+  logoImageRelativePath: string | null;
+  outputsByPresetId: Record<string, SteamMarketplaceOutputState>;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type SteamMarketplaceAssetData = {
+  entries: SteamMarketplaceEntry[];
+  logoAssetRelativePaths?: string[];
+};
+
 export type NodeWorkspaceData = {
   noteboard?: {
     cards: NoteboardCard[];
@@ -183,6 +276,7 @@ export type NodeWorkspaceData = {
   };
   spreadsheet?: SpreadsheetData;
   steamAchievementArt?: SteamAchievementArtData;
+  steamMarketplaceAssets?: SteamMarketplaceAssetData;
 };
 
 export type CardTemplate = {
@@ -238,6 +332,21 @@ export type SteamAchievementExportRequest = {
 };
 
 export type SteamAchievementExportResult = {
+  canceled: boolean;
+  outputDir: string | null;
+  exportedEntryCount: number;
+  skippedEntryCount: number;
+  writtenFileCount: number;
+};
+
+export type SteamMarketplaceExportRequest = {
+  nodeName: string;
+  data: SteamMarketplaceAssetData;
+  entryIds?: string[];
+  presetIds?: string[];
+};
+
+export type SteamMarketplaceExportResult = {
   canceled: boolean;
   outputDir: string | null;
   exportedEntryCount: number;

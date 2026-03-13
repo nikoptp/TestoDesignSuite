@@ -19,6 +19,7 @@ export const editorTypeOptions: EditorTypeOption[] = [
   { value: 'spreadsheet', label: 'Spreadsheet', iconClass: 'fa-solid fa-table-cells' },
   { value: 'story-document', label: 'Document', iconClass: 'fa-solid fa-file-lines' },
   { value: 'steam-achievement-art', label: 'Steam Achievement Art', iconClass: 'fa-brands fa-steam-symbol' },
+  { value: 'steam-marketplace-assets', label: 'Steam Marketplace Assets', iconClass: 'fa-brands fa-steam-symbol' },
 ];
 
 export const editorTypeMeta = (
