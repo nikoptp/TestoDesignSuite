@@ -165,6 +165,7 @@
 - 2026-03-11: Updated update UX: moved `Check for Updates...` to File menu, added persistent closeable update-available status banner with inline Update action, and hardened Windows installer launch via detached delayed command launcher.
 - 2026-03-12: Added `steam-achievement-art` editor type with persisted batch entry data, 256x256 Steam achievement crop workflow, project-image drag/drop intake, and folder export for color plus grayscale PNG sets.
 - 2026-03-12: Hardened Windows in-app updater relaunch flow so the detached silent NSIS helper waits for install completion, avoids `start`-based installer invocation, and reopens the packaged app executable after update.
+- 2026-03-13: Added `steam-marketplace-assets` editor type with per-preset crop/overlay state, Steamworks marketplace preset catalog, optional logo upload/overlay workflow, preview-card single export actions, shared image-workbench primitives, and main/preload export IPC for filtered Steam marketplace asset exports.
 
 ## Open Questions
 - Single-window only for MVP, or multi-window support early?

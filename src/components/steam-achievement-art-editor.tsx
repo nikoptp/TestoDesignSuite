@@ -173,11 +173,17 @@ export const SteamAchievementArtEditor = ({
     }
 
     const updateScales = (): void => {
-      setCropFrameScale(Math.max(0.01, frame.clientWidth / preset.width));
-      setCropFrameOffset({
+      const nextScale = Math.max(0.01, frame.clientWidth / preset.width);
+      const nextOffset = {
         left: (stage.clientWidth - frame.clientWidth) * 0.5,
         top: (stage.clientHeight - frame.clientHeight) * 0.5,
-      });
+      };
+      setCropFrameScale((current) => (Math.abs(current - nextScale) < 0.0001 ? current : nextScale));
+      setCropFrameOffset((current) =>
+        Math.abs(current.left - nextOffset.left) < 0.5 && Math.abs(current.top - nextOffset.top) < 0.5
+          ? current
+          : nextOffset,
+      );
     };
 
     updateScales();
@@ -852,6 +858,9 @@ export const SteamAchievementArtEditor = ({
                 />
                 <strong>{selectedEntry.crop.zoom.toFixed(2)}x</strong>
               </label>
+              <div className="steam-achievement-catalog-panel">
+                <ImageAssetSidebar assets={assets} onDeleteAsset={onDeleteImageAsset} variant="grid" />
+              </div>
             </>
           ) : (
             <div
@@ -870,7 +879,6 @@ export const SteamAchievementArtEditor = ({
         <aside className="steam-achievement-assets">
           <div className="steam-achievement-assets-scroll">
             {stylePanel}
-            <ImageAssetSidebar assets={assets} onDeleteAsset={onDeleteImageAsset} />
           </div>
         </aside>
       </div>

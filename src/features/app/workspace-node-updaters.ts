@@ -1,10 +1,12 @@
 import { createDefaultSteamAchievementBorderStyle } from '../steam-achievement/steam-achievement-art';
+import { createDefaultSteamMarketplaceAssetData } from '../steam-marketplace/steam-marketplace-assets';
 import type { NodeWorkspaceData, PersistedTreeState } from '../../shared/types';
 
 type NoteboardData = NonNullable<NodeWorkspaceData['noteboard']>;
 type KanbanData = NonNullable<NodeWorkspaceData['kanban']>;
 type SpreadsheetData = NonNullable<NodeWorkspaceData['spreadsheet']>;
 type SteamAchievementArtData = NonNullable<NodeWorkspaceData['steamAchievementArt']>;
+type SteamMarketplaceAssetData = NonNullable<NodeWorkspaceData['steamMarketplaceAssets']>;
 
 const EMPTY_NOTEBOARD: NoteboardData = {
   cards: [],
@@ -31,6 +33,9 @@ const EMPTY_STEAM_ACHIEVEMENT_ART: SteamAchievementArtData = {
   borderStyle: createDefaultSteamAchievementBorderStyle(),
   entries: [],
 };
+
+const EMPTY_STEAM_MARKETPLACE_ASSETS: SteamMarketplaceAssetData =
+  createDefaultSteamMarketplaceAssetData();
 
 export const updateNodeWorkspaceData = (
   state: PersistedTreeState,
@@ -119,5 +124,25 @@ export const updateNodeSteamAchievementArtData = (
     return {
       ...workspace,
       steamAchievementArt: next,
+    };
+  });
+
+export const updateNodeSteamMarketplaceAssetsData = (
+  state: PersistedTreeState,
+  nodeId: string,
+  updater: (
+    steamMarketplaceAssets: SteamMarketplaceAssetData,
+    workspace: NodeWorkspaceData,
+  ) => SteamMarketplaceAssetData,
+): PersistedTreeState =>
+  updateNodeWorkspaceData(state, nodeId, (workspace) => {
+    const current = workspace.steamMarketplaceAssets ?? EMPTY_STEAM_MARKETPLACE_ASSETS;
+    const next = updater(current, workspace);
+    if (next === current) {
+      return workspace;
+    }
+    return {
+      ...workspace,
+      steamMarketplaceAssets: next,
     };
   });

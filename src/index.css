@@ -993,6 +993,51 @@ body.is-resizing-sidebar * {
   color: var(--heading-muted);
 }
 
+.image-asset-sidebar-section.is-grid {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.image-asset-sidebar-section.is-grid .image-asset-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 10px;
+}
+
+.image-asset-sidebar-section.is-grid .image-asset-item {
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    'thumb thumb'
+    'meta delete';
+  align-items: start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--app-text) 8%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-soft) 44%, transparent);
+}
+
+.image-asset-sidebar-section.is-grid .image-asset-thumb {
+  grid-area: thumb;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+}
+
+.image-asset-sidebar-section.is-grid .image-asset-meta {
+  grid-area: meta;
+}
+
+.image-asset-sidebar-section.is-grid .template-delete-btn {
+  grid-area: delete;
+  align-self: center;
+}
+
+.image-asset-sidebar-section.is-grid .image-asset-name {
+  white-space: nowrap;
+}
+
 .image-asset-empty {
   margin: 0;
   font-size: 12px;
@@ -3438,6 +3483,7 @@ body.is-dragging-template * {
   flex-direction: column;
   min-height: 0;
   padding: 16px 18px 18px;
+  overflow: auto;
 }
 
 .steam-achievement-crop-header {
@@ -3460,9 +3506,8 @@ body.is-dragging-template * {
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  flex: 0 0 auto;
-  max-height: 50%;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--scrollbar-thumb) 84%, var(--active-item-border))
@@ -3506,8 +3551,7 @@ body.is-dragging-template * {
   padding: 4px;
 }
 
-.steam-achievement-style-sidebar .settings-input[type='range'],
-.steam-achievement-zoom-control input[type='range'] {
+input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
   height: 6px;
@@ -3521,8 +3565,7 @@ body.is-dragging-template * {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dialog-border) 72%, transparent);
 }
 
-.steam-achievement-style-sidebar .settings-input[type='range']::-webkit-slider-thumb,
-.steam-achievement-zoom-control input[type='range']::-webkit-slider-thumb {
+input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 16px;
@@ -3538,8 +3581,7 @@ body.is-dragging-template * {
   cursor: pointer;
 }
 
-.steam-achievement-style-sidebar .settings-input[type='range']::-moz-range-track,
-.steam-achievement-zoom-control input[type='range']::-moz-range-track {
+input[type='range']::-moz-range-track {
   height: 6px;
   border: 0;
   border-radius: 999px;
@@ -3551,8 +3593,7 @@ body.is-dragging-template * {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dialog-border) 72%, transparent);
 }
 
-.steam-achievement-style-sidebar .settings-input[type='range']::-moz-range-thumb,
-.steam-achievement-zoom-control input[type='range']::-moz-range-thumb {
+input[type='range']::-moz-range-thumb {
   width: 16px;
   height: 16px;
   border-radius: 999px;
@@ -3781,6 +3822,16 @@ body.is-dragging-template * {
   padding-bottom: 12px;
 }
 
+.steam-achievement-catalog-panel {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--app-text) 8%, transparent);
+}
+
+.steam-achievement-catalog-panel .image-asset-sidebar-section {
+  min-height: 0;
+}
+
 @media (max-width: 1260px) {
   .steam-achievement-layout {
     grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
@@ -3806,5 +3857,431 @@ body.is-dragging-template * {
       'assets'
       'workbench'
       'list';
+  }
+}
+
+.steam-marketplace-editor,
+.steam-marketplace-assets-scroll,
+.steam-marketplace-controls,
+.steam-marketplace-dimensions-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--scrollbar-thumb) 84%, var(--active-item-border))
+    color-mix(in srgb, var(--app-bg) 72%, var(--surface-soft));
+}
+
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+  background: color-mix(in srgb, var(--app-bg) 68%, var(--surface-soft));
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--scrollbar-thumb) 82%, var(--button-border));
+  border: 1px solid color-mix(in srgb, var(--dialog-border) 36%, transparent);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--scrollbar-thumb) 92%, var(--active-item-border));
+}
+
+.steam-marketplace-editor {
+  gap: 18px;
+  height: 100%;
+  min-height: 0;
+}
+
+.steam-marketplace-header,
+.steam-marketplace-entry-list-header,
+.steam-marketplace-crop-header,
+.steam-marketplace-preview-card-header,
+.steam-marketplace-entry-list-title,
+.steam-marketplace-entry-list-actions,
+.steam-marketplace-upload-actions,
+.steam-marketplace-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.steam-marketplace-header,
+.steam-marketplace-entry-list-header,
+.steam-marketplace-crop-header,
+.steam-marketplace-preview-card-header {
+  justify-content: space-between;
+}
+
+.steam-marketplace-layout {
+  display: grid;
+  grid-template-columns: minmax(250px, 290px) minmax(0, 1fr) minmax(260px, 340px);
+  gap: 18px;
+  min-height: 0;
+  flex: 1;
+}
+
+.steam-marketplace-entry-list,
+.steam-marketplace-workbench,
+.steam-marketplace-assets {
+  min-height: 0;
+  border: 1px solid color-mix(in srgb, var(--app-text) 8%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--app-bg) 70%, var(--surface-soft));
+  backdrop-filter: blur(12px);
+}
+
+.steam-marketplace-entry-list,
+.steam-marketplace-assets,
+.steam-marketplace-assets-scroll {
+  overflow: auto;
+}
+
+.steam-marketplace-assets-scroll {
+  height: 100%;
+  padding-bottom: 12px;
+}
+
+.steam-marketplace-entry-list-header,
+.steam-marketplace-crop-header {
+  padding: 16px 18px 12px;
+}
+
+.steam-marketplace-entry-list-title,
+.steam-marketplace-entry-list-actions,
+.steam-marketplace-upload-actions,
+.steam-marketplace-toggle,
+.steam-marketplace-preview-card-header {
+  gap: 10px;
+}
+
+.steam-marketplace-create-all {
+  min-width: 40px;
+  border-radius: 999px;
+}
+
+.steam-marketplace-sidebar-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-text) 8%, transparent);
+}
+
+.steam-marketplace-entry-card,
+.steam-marketplace-preview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 12px 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--app-text) 8%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-soft) 48%, transparent);
+}
+
+.steam-marketplace-preview-card {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.steam-marketplace-entry-card.active,
+.steam-marketplace-preview-card.active {
+  border-color: color-mix(in srgb, var(--active-item-border) 72%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--active-item-border) 28%, transparent);
+}
+
+.steam-marketplace-entry-thumb,
+.steam-marketplace-crop-surface {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--app-text) 8%, transparent),
+      color-mix(in srgb, var(--active-item-border) 8%, transparent)
+    ),
+    color-mix(in srgb, var(--surface-soft) 56%, var(--app-bg));
+}
+
+.steam-marketplace-entry-thumb-shell {
+  display: grid;
+  place-items: center;
+  min-height: 148px;
+  max-height: 148px;
+}
+
+.steam-marketplace-entry-thumb {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.steam-marketplace-thumb-gradient,
+.steam-marketplace-thumb-vignette,
+.steam-marketplace-thumb-image,
+.steam-marketplace-thumb-logo-shell,
+.steam-marketplace-canvas-gradient,
+.steam-marketplace-canvas-vignette,
+.steam-marketplace-logo-workbench {
+  position: absolute;
+  inset: 0;
+}
+
+.steam-marketplace-thumb-gradient,
+.steam-marketplace-thumb-vignette,
+.steam-marketplace-canvas-gradient,
+.steam-marketplace-canvas-vignette {
+  pointer-events: none;
+}
+
+.steam-marketplace-thumb-image,
+.steam-marketplace-thumb-logo,
+.steam-marketplace-logo-workbench-image {
+  position: absolute;
+  max-width: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.steam-marketplace-thumb-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--heading-muted);
+  font-size: 0.88rem;
+  letter-spacing: 0.02em;
+}
+
+.steam-marketplace-thumb-logo-shell,
+.steam-marketplace-logo-workbench {
+  pointer-events: none;
+}
+
+.steam-marketplace-thumb-logo,
+.steam-marketplace-logo-workbench-image {
+  position: absolute;
+  object-fit: contain;
+}
+
+.steam-marketplace-dimension-card {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  min-height: 116px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--app-text) 8%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--surface-soft) 55%, transparent),
+      color-mix(in srgb, var(--active-item-border) 10%, transparent)
+    );
+}
+
+.steam-marketplace-dimension-shape-shell {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 58px;
+  padding: 6px 0;
+}
+
+.steam-marketplace-dimension-shape {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  min-height: 28px;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 8px);
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--app-text) 18%, transparent);
+  background: color-mix(in srgb, var(--active-item-border) 10%, transparent);
+  justify-self: center;
+  align-self: center;
+}
+
+.steam-marketplace-dimension-card-size {
+  font-size: 0.82rem;
+  color: var(--heading-muted);
+}
+
+.steam-marketplace-workbench {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px 18px;
+  overflow: auto;
+}
+
+.steam-marketplace-crop-stage {
+  position: relative;
+  width: min(100%, 820px);
+  aspect-ratio: 16 / 9;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.steam-marketplace-crop-surface {
+  width: 88%;
+  aspect-ratio: inherit;
+  border: 1px solid color-mix(in srgb, var(--app-text) 14%, transparent);
+  box-shadow: 0 20px 50px color-mix(in srgb, var(--context-shadow) 40%, transparent);
+  cursor: grab;
+}
+
+.steam-marketplace-crop-surface.has-image:active {
+  cursor: grabbing;
+}
+
+.steam-marketplace-controls {
+  gap: 10px;
+  padding: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.steam-marketplace-dimensions-panel {
+  gap: 10px;
+  padding: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.steam-marketplace-assets .image-asset-sidebar-section {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.steam-marketplace-catalog-panel {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--app-text) 8%, transparent);
+}
+
+.steam-marketplace-catalog-panel .image-asset-sidebar-section {
+  min-height: 0;
+}
+
+.steam-marketplace-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.steam-marketplace-preview-card-header strong,
+.steam-marketplace-preview-card-header span,
+.steam-marketplace-crop-header p {
+  display: block;
+}
+
+.steam-marketplace-preview-card-header span,
+.steam-marketplace-crop-header p,
+.steam-marketplace-toggle {
+  color: var(--heading-muted);
+  font-size: 0.78rem;
+}
+
+.steam-marketplace-entry-resolution {
+  font-size: 0.72rem;
+  color: var(--heading-muted);
+}
+
+.steam-marketplace-output-meta {
+  margin: 0;
+  color: var(--heading-muted);
+  font-size: 0.82rem;
+}
+
+.steam-marketplace-upload-actions button {
+  flex: 1;
+}
+
+.steam-marketplace-logo-list {
+  display: grid;
+  gap: 8px;
+}
+
+.steam-marketplace-logo-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.steam-marketplace-logo-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--app-text) 8%, transparent);
+  background: color-mix(in srgb, var(--surface-soft) 44%, transparent);
+  color: var(--app-text);
+  text-align: left;
+}
+
+.steam-marketplace-logo-list-item.active {
+  border-color: color-mix(in srgb, var(--active-item-border) 72%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--active-item-border) 28%, transparent);
+}
+
+.steam-marketplace-logo-list-item img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-soft) 60%, var(--app-bg));
+}
+
+.steam-marketplace-logo-list-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.steam-marketplace-logo-delete {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+}
+
+.steam-marketplace-logo-empty {
+  margin: 0;
+  color: var(--heading-muted);
+  font-size: 0.78rem;
+}
+
+.steam-marketplace-logo-dropzone {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px dashed color-mix(in srgb, var(--active-item-border) 36%, transparent);
+  background: color-mix(in srgb, var(--active-item-border) 8%, transparent);
+  color: var(--app-text);
+}
+
+.steam-marketplace-logo-dropzone span {
+  font-size: 0.78rem;
+  color: var(--heading-muted);
+}
+
+@media (max-width: 1280px) {
+  .steam-marketplace-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .steam-marketplace-preview-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
 }

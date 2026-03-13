@@ -82,6 +82,7 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
     kanban?: unknown;
     spreadsheet?: unknown;
     steamAchievementArt?: unknown;
+    steamMarketplaceAssets?: unknown;
   };
 
   if (typeof obj.noteboard !== 'undefined') {
@@ -309,6 +310,137 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
         typeof item.createdAt === 'number' &&
         typeof item.updatedAt === 'number'
       );
+    });
+
+    if (!entriesValid) {
+      return false;
+    }
+  }
+
+  if (typeof obj.steamMarketplaceAssets !== 'undefined') {
+    if (typeof obj.steamMarketplaceAssets !== 'object' || obj.steamMarketplaceAssets === null) {
+      return false;
+    }
+
+    const steamMarketplaceAssets = obj.steamMarketplaceAssets as {
+      entries?: unknown;
+      logoAssetRelativePaths?: unknown;
+    };
+    if (
+      !Array.isArray(steamMarketplaceAssets.entries) ||
+      (typeof steamMarketplaceAssets.logoAssetRelativePaths !== 'undefined' &&
+        (!Array.isArray(steamMarketplaceAssets.logoAssetRelativePaths) ||
+          !steamMarketplaceAssets.logoAssetRelativePaths.every((value) => typeof value === 'string')))
+    ) {
+      return false;
+    }
+
+    const entriesValid = steamMarketplaceAssets.entries.every((entry) => {
+      if (typeof entry !== 'object' || entry === null) {
+        return false;
+      }
+      const item = entry as {
+        id?: unknown;
+        name?: unknown;
+        presetId?: unknown;
+        sourceImageRelativePath?: unknown;
+        logoImageRelativePath?: unknown;
+        outputsByPresetId?: unknown;
+        createdAt?: unknown;
+        updatedAt?: unknown;
+      };
+      if (
+        typeof item.id !== 'string' ||
+        typeof item.name !== 'string' ||
+        (typeof item.presetId !== 'undefined' && typeof item.presetId !== 'string') ||
+        (item.sourceImageRelativePath !== null && typeof item.sourceImageRelativePath !== 'string') ||
+        (item.logoImageRelativePath !== null && typeof item.logoImageRelativePath !== 'string') ||
+        typeof item.outputsByPresetId !== 'object' ||
+        item.outputsByPresetId === null ||
+        typeof item.createdAt !== 'number' ||
+        typeof item.updatedAt !== 'number'
+      ) {
+        return false;
+      }
+
+      return Object.values(item.outputsByPresetId as Record<string, unknown>).every((output) => {
+        if (typeof output !== 'object' || output === null) {
+          return false;
+        }
+        const out = output as {
+          enabled?: unknown;
+          crop?: unknown;
+          overlays?: unknown;
+        };
+        const crop = out.crop as { zoom?: unknown; offsetX?: unknown; offsetY?: unknown } | undefined;
+        const overlays = out.overlays as {
+          gradient?: unknown;
+          blur?: unknown;
+          image?: unknown;
+          logo?: unknown;
+        } | undefined;
+        const gradient = overlays?.gradient as {
+          enabled?: unknown;
+          angle?: unknown;
+          opacity?: unknown;
+          color?: unknown;
+          midColor?: unknown;
+          endColor?: unknown;
+        } | undefined;
+        const blur = overlays?.blur as {
+          enabled?: unknown;
+          blurRadius?: unknown;
+          opacity?: unknown;
+        } | undefined;
+        const image = overlays?.image as {
+          saturation?: unknown;
+          contrast?: unknown;
+          vignette?: unknown;
+        } | undefined;
+        const logo = overlays?.logo as {
+          enabled?: unknown;
+          opacity?: unknown;
+          scale?: unknown;
+          offsetX?: unknown;
+          offsetY?: unknown;
+        } | undefined;
+
+        return (
+          typeof out.enabled === 'boolean' &&
+          typeof crop === 'object' &&
+          crop !== null &&
+          typeof crop.zoom === 'number' &&
+          typeof crop.offsetX === 'number' &&
+          typeof crop.offsetY === 'number' &&
+          typeof overlays === 'object' &&
+          overlays !== null &&
+          typeof gradient === 'object' &&
+          gradient !== null &&
+          typeof gradient.enabled === 'boolean' &&
+          typeof gradient.angle === 'number' &&
+          typeof gradient.opacity === 'number' &&
+          typeof gradient.color === 'string' &&
+          typeof gradient.midColor === 'string' &&
+          typeof gradient.endColor === 'string' &&
+          typeof blur === 'object' &&
+          blur !== null &&
+          typeof blur.enabled === 'boolean' &&
+          typeof blur.blurRadius === 'number' &&
+          typeof blur.opacity === 'number' &&
+          typeof image === 'object' &&
+          image !== null &&
+          typeof image.saturation === 'number' &&
+          typeof image.contrast === 'number' &&
+          typeof image.vignette === 'number' &&
+          typeof logo === 'object' &&
+          logo !== null &&
+          typeof logo.enabled === 'boolean' &&
+          typeof logo.opacity === 'number' &&
+          typeof logo.scale === 'number' &&
+          typeof logo.offsetX === 'number' &&
+          typeof logo.offsetY === 'number'
+        );
+      });
     });
 
     if (!entriesValid) {

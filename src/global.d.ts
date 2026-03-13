@@ -8,6 +8,8 @@ import type {
   SavedImageAsset,
   SteamAchievementExportRequest,
   SteamAchievementExportResult,
+  SteamMarketplaceExportRequest,
+  SteamMarketplaceExportResult,
   UserSettings,
 } from './shared/types';
 
@@ -24,6 +26,9 @@ declare global {
       exportSteamAchievementSet: (
         request: SteamAchievementExportRequest,
       ) => Promise<SteamAchievementExportResult>;
+      exportSteamMarketplaceAssets: (
+        request: SteamMarketplaceExportRequest,
+      ) => Promise<SteamMarketplaceExportResult>;
       exportCustomTheme: (theme: CustomThemeDefinition) => Promise<boolean>;
       importCustomTheme: () => Promise<CustomThemeDefinition | null>;
       onRequestProjectSnapshot: (

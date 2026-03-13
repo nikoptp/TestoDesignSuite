@@ -9,6 +9,8 @@ import type {
   SavedImageAsset,
   SteamAchievementExportRequest,
   SteamAchievementExportResult,
+  SteamMarketplaceExportRequest,
+  SteamMarketplaceExportResult,
   UserSettings,
 } from './shared/types';
 
@@ -31,6 +33,10 @@ contextBridge.exposeInMainWorld('testoApi', {
     request: SteamAchievementExportRequest,
   ): Promise<SteamAchievementExportResult> =>
     ipcRenderer.invoke('steam-achievement:export-set', request) as Promise<SteamAchievementExportResult>,
+  exportSteamMarketplaceAssets: (
+    request: SteamMarketplaceExportRequest,
+  ): Promise<SteamMarketplaceExportResult> =>
+    ipcRenderer.invoke('steam-marketplace:export-assets', request) as Promise<SteamMarketplaceExportResult>,
   exportCustomTheme: (theme: CustomThemeDefinition): Promise<boolean> =>
     ipcRenderer.invoke('themes:export-custom', theme) as Promise<boolean>,
   importCustomTheme: (): Promise<CustomThemeDefinition | null> =>

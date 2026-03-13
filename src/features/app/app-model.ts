@@ -11,6 +11,7 @@ import type {
   PersistedTreeState,
   ProjectStatusPayload,
   SteamAchievementArtData,
+  SteamMarketplaceAssetData,
   SpreadsheetData,
   SpreadsheetSheet,
   UserSettings,
@@ -41,6 +42,10 @@ import {
   createDefaultSteamAchievementArtData,
   normalizeSteamAchievementArtData,
 } from '../steam-achievement/steam-achievement-art';
+import {
+  createDefaultSteamMarketplaceAssetData,
+  normalizeSteamMarketplaceAssetData,
+} from '../steam-marketplace/steam-marketplace-assets';
 
 export type UiState = {
   editingNodeId: string | null;
@@ -727,6 +732,8 @@ const DEFAULT_SPREADSHEET_DATA: SpreadsheetData = {
   columnWidths: {},
 };
 const DEFAULT_STEAM_ACHIEVEMENT_ART_DATA: SteamAchievementArtData = createDefaultSteamAchievementArtData();
+const DEFAULT_STEAM_MARKETPLACE_ASSET_DATA: SteamMarketplaceAssetData =
+  createDefaultSteamMarketplaceAssetData();
 
 export const getKanbanBoardForNode = (
   state: PersistedTreeState,
@@ -771,6 +778,18 @@ export const getSteamAchievementArtForNode = (
   }
 
   return normalizeSteamAchievementArtData(steamAchievementArt);
+};
+
+export const getSteamMarketplaceAssetsForNode = (
+  state: PersistedTreeState,
+  nodeId: string,
+): SteamMarketplaceAssetData => {
+  const steamMarketplaceAssets = state.nodeDataById[nodeId]?.steamMarketplaceAssets;
+  if (!steamMarketplaceAssets) {
+    return DEFAULT_STEAM_MARKETPLACE_ASSET_DATA;
+  }
+
+  return normalizeSteamMarketplaceAssetData(steamMarketplaceAssets);
 };
 
 export const ensureKanbanData = (
@@ -1333,6 +1352,34 @@ export const ensureSteamAchievementArtData = (
       [nodeId]: {
         ...(workspace ?? {}),
         steamAchievementArt: nextSteamAchievementArt,
+      },
+    },
+  };
+};
+
+export const ensureSteamMarketplaceAssetsData = (
+  state: PersistedTreeState,
+  nodeId: string,
+): PersistedTreeState => {
+  const workspace = state.nodeDataById[nodeId];
+  const steamMarketplaceAssets = workspace?.steamMarketplaceAssets;
+  const nextSteamMarketplaceAssets = normalizeSteamMarketplaceAssetData(steamMarketplaceAssets);
+
+  const hasEffectiveChange =
+    !steamMarketplaceAssets ||
+    JSON.stringify(steamMarketplaceAssets) !== JSON.stringify(nextSteamMarketplaceAssets);
+
+  if (!hasEffectiveChange && workspace) {
+    return state;
+  }
+
+  return {
+    ...state,
+    nodeDataById: {
+      ...state.nodeDataById,
+      [nodeId]: {
+        ...(workspace ?? {}),
+        steamMarketplaceAssets: nextSteamMarketplaceAssets,
       },
     },
   };

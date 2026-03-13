@@ -1,5 +1,13 @@
 import React from 'react';
 import { createId } from '../../shared/tree-utils';
+import {
+  clampCoverTransform,
+  getCoverDrawRect,
+  normalizeCoverTransform,
+  renderCoverBitmap,
+  sanitizeExportFileStem,
+} from '../../shared/image-workbench';
+export { createGrayscaleBitmap } from '../../shared/image-workbench';
 import type {
   ProjectImageAsset,
   SteamAchievementArtData,
@@ -217,20 +225,11 @@ export const createSteamAchievementEntry = (name = DEFAULT_NAME): SteamAchieveme
 
 export const normalizeSteamAchievementTransform = (
   transform: Partial<SteamAchievementTransform> | null | undefined,
-): SteamAchievementTransform => ({
-  zoom:
-    typeof transform?.zoom === 'number' && Number.isFinite(transform.zoom)
-      ? Math.min(MAX_STEAM_ACHIEVEMENT_ZOOM, Math.max(MIN_STEAM_ACHIEVEMENT_ZOOM, transform.zoom))
-      : 1,
-  offsetX:
-    typeof transform?.offsetX === 'number' && Number.isFinite(transform.offsetX)
-      ? transform.offsetX
-      : 0,
-  offsetY:
-    typeof transform?.offsetY === 'number' && Number.isFinite(transform.offsetY)
-      ? transform.offsetY
-      : 0,
-});
+): SteamAchievementTransform =>
+  normalizeCoverTransform(transform, {
+    minZoom: MIN_STEAM_ACHIEVEMENT_ZOOM,
+    maxZoom: MAX_STEAM_ACHIEVEMENT_ZOOM,
+  });
 
 export const getSteamAchievementFrameRect = (
   width: number,
@@ -255,38 +254,22 @@ export const getSteamAchievementDrawRect = (
   sourceHeight: number,
   preset: SteamImagePreset,
   transform: SteamAchievementTransform,
-): { width: number; height: number; left: number; top: number } => {
-  const safeWidth = Math.max(1, sourceWidth);
-  const safeHeight = Math.max(1, sourceHeight);
-  const zoom = Math.min(MAX_STEAM_ACHIEVEMENT_ZOOM, Math.max(MIN_STEAM_ACHIEVEMENT_ZOOM, transform.zoom));
-  const baseScale = Math.max(preset.width / safeWidth, preset.height / safeHeight);
-  const scale = baseScale * zoom;
-  const width = safeWidth * scale;
-  const height = safeHeight * scale;
-  return {
-    width,
-    height,
-    left: (preset.width - width) * 0.5 + transform.offsetX,
-    top: (preset.height - height) * 0.5 + transform.offsetY,
-  };
-};
+): { width: number; height: number; left: number; top: number } =>
+  getCoverDrawRect(sourceWidth, sourceHeight, preset, transform, {
+    minZoom: MIN_STEAM_ACHIEVEMENT_ZOOM,
+    maxZoom: MAX_STEAM_ACHIEVEMENT_ZOOM,
+  });
 
 export const clampSteamAchievementTransform = (
   sourceWidth: number,
   sourceHeight: number,
   preset: SteamImagePreset,
   transform: Partial<SteamAchievementTransform> | null | undefined,
-): SteamAchievementTransform => {
-  const next = normalizeSteamAchievementTransform(transform);
-  const drawRect = getSteamAchievementDrawRect(sourceWidth, sourceHeight, preset, next);
-  const maxOffsetX = Math.max(0, (drawRect.width - preset.width) * 0.5);
-  const maxOffsetY = Math.max(0, (drawRect.height - preset.height) * 0.5);
-  return {
-    zoom: next.zoom,
-    offsetX: Math.min(maxOffsetX, Math.max(-maxOffsetX, next.offsetX)),
-    offsetY: Math.min(maxOffsetY, Math.max(-maxOffsetY, next.offsetY)),
-  };
-};
+): SteamAchievementTransform =>
+  clampCoverTransform(sourceWidth, sourceHeight, preset, transform, {
+    minZoom: MIN_STEAM_ACHIEVEMENT_ZOOM,
+    maxZoom: MAX_STEAM_ACHIEVEMENT_ZOOM,
+  });
 
 export const normalizeSteamAchievementArtData = (input: unknown): SteamAchievementArtData => {
   if (typeof input !== 'object' || input === null) {
@@ -376,48 +359,11 @@ export const buildSteamAchievementExportFileNames = (
   entryName: string,
   preset: SteamImagePreset,
 ): { color: string; grayscale: string | null } => {
-  const stem = sanitizeSteamAchievementFileStem(entryName);
+  const stem = sanitizeExportFileStem(entryName, DEFAULT_NAME);
   return {
     color: `${stem}.png`,
     grayscale: preset.exportGrayscale ? `${stem}${preset.grayscaleSuffix}.png` : null,
   };
-};
-
-const sampleBgraChannel = (
-  data: Uint8Array,
-  width: number,
-  height: number,
-  x: number,
-  y: number,
-  channel: 0 | 1 | 2 | 3,
-): number => {
-  const clampedX = Math.min(width - 1, Math.max(0, Math.floor(x)));
-  const clampedY = Math.min(height - 1, Math.max(0, Math.floor(y)));
-  return data[(clampedY * width + clampedX) * 4 + channel] ?? 0;
-};
-
-const sampleBilinearChannel = (
-  data: Uint8Array,
-  width: number,
-  height: number,
-  sourceX: number,
-  sourceY: number,
-  channel: 0 | 1 | 2 | 3,
-): number => {
-  const x0 = Math.floor(sourceX);
-  const y0 = Math.floor(sourceY);
-  const x1 = Math.min(width - 1, x0 + 1);
-  const y1 = Math.min(height - 1, y0 + 1);
-  const tx = sourceX - x0;
-  const ty = sourceY - y0;
-
-  const top =
-    sampleBgraChannel(data, width, height, x0, y0, channel) * (1 - tx) +
-    sampleBgraChannel(data, width, height, x1, y0, channel) * tx;
-  const bottom =
-    sampleBgraChannel(data, width, height, x0, y1, channel) * (1 - tx) +
-    sampleBgraChannel(data, width, height, x1, y1, channel) * tx;
-  return Math.round(top * (1 - ty) + bottom * ty);
 };
 
 export const renderSteamAchievementBitmap = (input: {
@@ -426,78 +372,18 @@ export const renderSteamAchievementBitmap = (input: {
   sourceBgra: Uint8Array;
   preset: SteamImagePreset;
   transform: SteamAchievementTransform;
-}): Uint8Array => {
-  const nextTransform = clampSteamAchievementTransform(
-    input.sourceWidth,
-    input.sourceHeight,
-    input.preset,
-    input.transform,
-  );
-  const drawRect = getSteamAchievementDrawRect(
-    input.sourceWidth,
-    input.sourceHeight,
-    input.preset,
-    nextTransform,
-  );
-  const output = new Uint8Array(input.preset.width * input.preset.height * 4);
-
-  for (let y = 0; y < input.preset.height; y += 1) {
-    for (let x = 0; x < input.preset.width; x += 1) {
-      const sourceX = ((x + 0.5) - drawRect.left) / drawRect.width * input.sourceWidth - 0.5;
-      const sourceY = ((y + 0.5) - drawRect.top) / drawRect.height * input.sourceHeight - 0.5;
-      const offset = (y * input.preset.width + x) * 4;
-
-      output[offset] = sampleBilinearChannel(
-        input.sourceBgra,
-        input.sourceWidth,
-        input.sourceHeight,
-        sourceX,
-        sourceY,
-        0,
-      );
-      output[offset + 1] = sampleBilinearChannel(
-        input.sourceBgra,
-        input.sourceWidth,
-        input.sourceHeight,
-        sourceX,
-        sourceY,
-        1,
-      );
-      output[offset + 2] = sampleBilinearChannel(
-        input.sourceBgra,
-        input.sourceWidth,
-        input.sourceHeight,
-        sourceX,
-        sourceY,
-        2,
-      );
-      output[offset + 3] = sampleBilinearChannel(
-        input.sourceBgra,
-        input.sourceWidth,
-        input.sourceHeight,
-        sourceX,
-        sourceY,
-        3,
-      );
-    }
-  }
-
-  return output;
-};
-
-export const createGrayscaleBitmap = (sourceBgra: Uint8Array): Uint8Array => {
-  const next = new Uint8Array(sourceBgra);
-  for (let index = 0; index < next.length; index += 4) {
-    const blue = next[index];
-    const green = next[index + 1];
-    const red = next[index + 2];
-    const luminance = Math.round(red * 0.299 + green * 0.587 + blue * 0.114);
-    next[index] = luminance;
-    next[index + 1] = luminance;
-    next[index + 2] = luminance;
-  }
-  return next;
-};
+}): Uint8Array =>
+  renderCoverBitmap({
+    sourceWidth: input.sourceWidth,
+    sourceHeight: input.sourceHeight,
+    sourceBgra: input.sourceBgra,
+    size: input.preset,
+    transform: input.transform,
+    limits: {
+      minZoom: MIN_STEAM_ACHIEVEMENT_ZOOM,
+      maxZoom: MAX_STEAM_ACHIEVEMENT_ZOOM,
+    },
+  });
 
 const blendChannel = (source: number, target: number, alpha: number): number =>
   Math.round(source * (1 - alpha) + target * alpha);

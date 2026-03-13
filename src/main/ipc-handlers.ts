@@ -9,6 +9,8 @@ import type {
   LaunchState,
   SteamAchievementExportRequest,
   SteamAchievementExportResult,
+  SteamMarketplaceExportRequest,
+  SteamMarketplaceExportResult,
 } from '../shared/types';
 
 export type PendingSnapshotRequest = {
@@ -28,6 +30,9 @@ type RegisterIpcHandlersDeps = {
   exportSteamAchievementSet: (
     request: SteamAchievementExportRequest,
   ) => Promise<SteamAchievementExportResult>;
+  exportSteamMarketplaceAssets: (
+    request: SteamMarketplaceExportRequest,
+  ) => Promise<SteamMarketplaceExportResult>;
   exportCustomThemeToFile: (theme: CustomThemeDefinition) => Promise<boolean>;
   importCustomThemeFromFile: () => Promise<CustomThemeDefinition | null>;
   getLaunchState: () => Promise<LaunchState>;
@@ -47,6 +52,7 @@ export const registerIpcHandlers = ({
   listImageAssets,
   deleteImageAsset,
   exportSteamAchievementSet,
+  exportSteamMarketplaceAssets,
   exportCustomThemeToFile,
   importCustomThemeFromFile,
   getLaunchState,
@@ -81,6 +87,10 @@ export const registerIpcHandlers = ({
   ipcMain.handle(
     'steam-achievement:export-set',
     async (_event, request: SteamAchievementExportRequest) => exportSteamAchievementSet(request),
+  );
+  ipcMain.handle(
+    'steam-marketplace:export-assets',
+    async (_event, request: SteamMarketplaceExportRequest) => exportSteamMarketplaceAssets(request),
   );
   ipcMain.handle('themes:export-custom', async (_event, theme: CustomThemeDefinition) =>
     exportCustomThemeToFile(theme),
