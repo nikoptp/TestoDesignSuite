@@ -22,6 +22,16 @@
 - formula bar and cell edit mode
 - formula evaluation (`+ - * /`, refs, `SUM/AVG/MIN/MAX`, cycle/error states)
 - single-cell copy and range paste (TSV/plain text)
+- Steam achievement art editor:
+- `steam-achievement-art` node type with persisted batch entry data
+- 256x256 achievement crop workflow with zoom/offset controls
+- border styling, background gradient/image support, and live preview composition
+- export of color + grayscale PNG sets
+- Steam marketplace asset editor:
+- `steam-marketplace-assets` node type with persisted entry and per-preset output state
+- Steamworks preset catalog for capsules, library assets, event art, icons, screenshot baseline, and transparent logo output
+- overlay controls for gradient, blur, image adjustments, and optional logo placement/shadow
+- project-image and logo asset reuse plus single-item or batch export flows
 - Theme system:
 - built-in themes
 - custom theme overrides (token-based Theme Studio)

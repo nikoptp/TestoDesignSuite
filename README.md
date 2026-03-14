@@ -7,6 +7,8 @@ TestoDesignSuite is a desktop-first game design workspace built with Electron, R
 - Nested node tree for organizing game design content by feature/area.
 - Noteboard canvas for spatial ideation with cards, drawing, and selection tools.
 - Document editor with markdown preview, templates, and quick formatting tools.
+- Steam achievement art editor for 256x256 achievement exports with color and grayscale output.
+- Steam marketplace asset editor for capsule, library, event, and logo asset variants.
 - Local-first persistence with autosave and project file workflow (`.testo`).
 - Theme Studio for custom UI token overrides (import/export supported).
 - Project image asset library with drag and drop support.
@@ -37,6 +39,18 @@ TestoDesignSuite is a desktop-first game design workspace built with Electron, R
   - Quest spec
   - Lore entry
   - Level brief
+
+### Steam Achievement Art
+- Dedicated `steam-achievement-art` editor for batch entry management.
+- 256x256 Steam achievement crop workflow with zoom and positioning controls.
+- Style controls for gradient borders, rounded framing, and optional background image/gradient treatments.
+- Export set generation for both color and grayscale PNG output.
+
+### Steam Marketplace Assets
+- Dedicated `steam-marketplace-assets` editor for Steam store and library artwork.
+- Preset catalog covering capsules, library art, event assets, screenshot baseline, shortcut icon, app icon, and logo output.
+- Per-preset crop state with reusable overlay controls for gradient, blur, saturation, contrast, vignette, and logo placement.
+- Project image and logo asset intake, preview cards, and filtered export actions for individual or batch output.
 
 ### Persistence
 - Autosave for tree and settings.

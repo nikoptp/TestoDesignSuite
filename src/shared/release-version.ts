@@ -44,7 +44,7 @@ export function assertReleaseTagMatchesPackageVersion(tagName: string, packageJs
   const packageVersion = readPackageVersion(packageJsonPath);
   const result = validateReleaseTagMatchesVersion(tagName, packageVersion);
 
-  if (!result.ok) {
+  if (result.ok === false) {
     throw new Error(result.message);
   }
 
