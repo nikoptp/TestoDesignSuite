@@ -88,6 +88,8 @@ export type ProjectStatusUi = {
   message: string;
   at: number;
   action?: ProjectStatusPayload['action'];
+  updatePhase?: ProjectStatusPayload['updatePhase'];
+  progressMode?: ProjectStatusPayload['progressMode'];
   persistent?: boolean;
 };
 

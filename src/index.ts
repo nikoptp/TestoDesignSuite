@@ -457,6 +457,7 @@ const checkForGithubUpdates = async (manual: boolean): Promise<void> => {
         action: 'update',
         filePath: null,
         message: `Update available: v${latest.latestVersion} (current v${currentVersion}).`,
+        updatePhase: 'available',
       });
 
       if (manual && focusedWindow) {
@@ -487,6 +488,8 @@ const checkForGithubUpdates = async (manual: boolean): Promise<void> => {
                 action: 'update',
                 filePath: null,
                 message: `Downloading installer (${installerAsset.name})...`,
+                updatePhase: 'downloading',
+                progressMode: 'indeterminate',
               });
 
               const updaterDir = path.join(app.getPath('userData'), 'updater');
@@ -497,6 +500,15 @@ const checkForGithubUpdates = async (manual: boolean): Promise<void> => {
               });
 
               if (checksumAsset) {
+                emitProjectStatus(focusedWindow, {
+                  status: 'info',
+                  action: 'update',
+                  filePath: null,
+                  message: `Verifying installer checksum (${checksumAsset.name})...`,
+                  updatePhase: 'verifying',
+                  progressMode: 'indeterminate',
+                });
+
                 const downloadedChecksum = await downloadReleaseAsset({
                   asset: checksumAsset,
                   userAgent: `${app.getName()}/${app.getVersion()}`,
@@ -513,6 +525,8 @@ const checkForGithubUpdates = async (manual: boolean): Promise<void> => {
                 action: 'update',
                 filePath: null,
                 message: 'Installing update and restarting...',
+                updatePhase: 'installing',
+                progressMode: 'indeterminate',
               });
 
               await launchSilentWindowsInstaller(

@@ -2081,6 +2081,13 @@ export const App = (): React.ReactElement => {
     }
   }, [selectedNode, selectedSteamMarketplaceAssets, showTransientProjectStatus]);
 
+  const isUpdateProgressVisible =
+    projectStatus?.action === 'update' &&
+    (projectStatus.updatePhase === 'downloading' ||
+      projectStatus.updatePhase === 'verifying' ||
+      projectStatus.updatePhase === 'installing') &&
+    projectStatus.progressMode === 'indeterminate';
+
   return (
     <motion.div
       ref={shellRef}
@@ -2103,8 +2110,20 @@ export const App = (): React.ReactElement => {
             role="status"
             aria-live="polite"
           >
-            <span className="project-status-message">{projectStatus.message}</span>
-            {projectStatus.persistent && projectStatus.action === 'update' ? (
+            <div className="project-status-main">
+              <span className="project-status-message">{projectStatus.message}</span>
+              {isUpdateProgressVisible ? (
+                <span className="project-status-progress" aria-hidden="true">
+                  <span className="project-status-spinner"></span>
+                  <span className="project-status-progress-track">
+                    <span className="project-status-progress-bar"></span>
+                  </span>
+                </span>
+              ) : null}
+            </div>
+            {projectStatus.persistent &&
+            projectStatus.action === 'update' &&
+            projectStatus.updatePhase === 'available' ? (
               <span className="project-status-actions">
                 <button
                   type="button"

@@ -322,6 +322,8 @@ export type ProjectStatusPayload = {
   status: 'success' | 'error' | 'info';
   action: 'save' | 'save-as' | 'open' | 'new' | 'update' | 'export';
   message: string;
+  updatePhase?: 'available' | 'downloading' | 'verifying' | 'installing';
+  progressMode?: 'indeterminate';
   filePath?: string | null;
   at: number;
 };

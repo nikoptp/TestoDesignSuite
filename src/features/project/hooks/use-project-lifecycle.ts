@@ -223,21 +223,30 @@ export const useProjectStatusListener = ({
       const isPersistentUpdateNotice =
         payload.action === 'update' &&
         payload.status === 'info' &&
-        /^update available:/i.test(payload.message.trim());
+        (payload.updatePhase === 'available' || /^update available:/i.test(payload.message.trim()));
+      const isPersistentUpdateProgress =
+        payload.action === 'update' &&
+        payload.status === 'info' &&
+        (payload.updatePhase === 'downloading' ||
+          payload.updatePhase === 'verifying' ||
+          payload.updatePhase === 'installing');
+      const isPersistentStatus = isPersistentUpdateNotice || isPersistentUpdateProgress;
 
       setProjectStatus({
         status: payload.status,
         message: payload.message,
         at: payload.at,
         action: payload.action,
-        persistent: isPersistentUpdateNotice,
+        updatePhase: payload.updatePhase,
+        progressMode: payload.progressMode,
+        persistent: isPersistentStatus,
       });
 
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
 
-      if (isPersistentUpdateNotice) {
+      if (isPersistentStatus) {
         return;
       }
 
