@@ -14,7 +14,7 @@
 - React components: `src/components/*`
 - Feature hooks/controllers: `src/features/*`
 - Renderer markup/styles: `src/index.html`, `src/index.css`
-- Shared reusable modules: `src/shared/types.ts`, `src/shared/editor-types.ts`, `src/shared/tree-utils.ts`, `src/shared/noteboard-constants.ts`, `src/shared/pointer-session.ts`, `src/shared/noteboard-coordinate-utils.ts`, `src/shared/drag-payloads.ts`, `src/shared/project-file-migrations.ts`, `src/features/app/workspace-node-updaters.ts`, `src/features/noteboard/noteboard-dom-selectors.ts`
+- Shared reusable modules: `src/shared/types.ts`, `src/shared/editor-types.ts`, `src/shared/tree-utils.ts`, `src/shared/noteboard-constants.ts`, `src/shared/pointer-session.ts`, `src/shared/noteboard-coordinate-utils.ts`, `src/shared/drag-payloads.ts`, `src/shared/project-file-migrations.ts`, `src/shared/release-version.ts`, `src/features/app/workspace-node-updaters.ts`, `src/features/noteboard/noteboard-dom-selectors.ts`
 - Shared reusable hooks: `src/shared/hooks/use-outside-pointer-dismiss.ts`, `src/shared/hooks/use-global-keydown.ts`
 - Legacy renderer modules: removed
 - Build/config: `forge.config.ts`, `webpack.*.ts`, `tsconfig.json`, `.eslintrc.json`
@@ -63,6 +63,7 @@
 - Noteboard coordinates: `src/shared/noteboard-coordinate-utils.ts`
 - Drag payloads/contracts: `src/shared/drag-payloads.ts`
 - Project-file migrations: `src/shared/project-file-migrations.ts`
+- Release tag/version validation: `src/shared/release-version.ts`
 - Workspace node-data updaters: `src/features/app/workspace-node-updaters.ts`
 - Noteboard interaction selectors: `src/features/noteboard/noteboard-dom-selectors.ts`
 
@@ -166,6 +167,7 @@
 - 2026-03-12: Added `steam-achievement-art` editor type with persisted batch entry data, 256x256 Steam achievement crop workflow, project-image drag/drop intake, and folder export for color plus grayscale PNG sets.
 - 2026-03-12: Hardened Windows in-app updater relaunch flow so the detached silent NSIS helper waits for install completion, avoids `start`-based installer invocation, and reopens the packaged app executable after update.
 - 2026-03-13: Added `steam-marketplace-assets` editor type with per-preset crop/overlay state, Steamworks marketplace preset catalog, optional logo upload/overlay workflow, preview-card single export actions, shared image-workbench primitives, and main/preload export IPC for filtered Steam marketplace asset exports.
+- 2026-03-14: Added shared release tag/version validation (`src/shared/release-version.ts`), unit coverage for tag/package mismatch handling, and wired the GitHub release workflow to the repository script used for the same package-version check.
 
 ## Open Questions
 - Single-window only for MVP, or multi-window support early?

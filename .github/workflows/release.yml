@@ -31,8 +31,7 @@ jobs:
         run: npm run test:unit
 
       - name: Verify tag matches package version
-        run: >
-          node -e "const fs=require('node:fs');const v=JSON.parse(fs.readFileSync('package.json','utf8')).version;const t=process.env.GITHUB_REF_NAME||'';if(t!==('v'+v)){console.error('Tag/version mismatch: tag='+t+' package='+v);process.exit(1);}console.log('Tag/version check passed for '+t);"
+        run: node scripts/check-release-version.js
 
       - name: Install NSIS
         run: choco install nsis -y --no-progress
