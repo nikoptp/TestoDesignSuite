@@ -1,25 +1,34 @@
 import React from 'react';
 import { createId } from '../../shared/tree-utils';
 import {
-  clampCoverTransform,
+  applyBlurLayer,
+  applyImageAdjustments,
+  buildCssBlurFilter,
+  buildCssImageAdjustmentFilter,
+  buildCssShadowFilter,
   getCoverDrawRect,
   normalizeCoverTransform,
   renderCoverBitmap,
+  renderScaledBitmap,
   sanitizeExportFileStem,
 } from '../../shared/image-workbench';
 export { createGrayscaleBitmap } from '../../shared/image-workbench';
 import type {
+  SteamAchievementBackgroundAdjustmentState,
   ProjectImageAsset,
   SteamAchievementArtData,
   SteamAchievementBorderStyle,
   SteamAchievementEntry,
+  SteamAchievementEntryImageStyle,
+  SteamAchievementImageAdjustmentState,
+  SteamAchievementShadowState,
   SteamAchievementTransform,
   SteamImagePreset,
 } from '../../shared/types';
 
 export const STEAM_ACHIEVEMENT_256_PRESET_ID = 'steam-achievement-256';
-export const MIN_STEAM_ACHIEVEMENT_ZOOM = 1;
-export const MAX_STEAM_ACHIEVEMENT_ZOOM = 12;
+export const MIN_STEAM_ACHIEVEMENT_ZOOM = 0.1;
+export const MAX_STEAM_ACHIEVEMENT_ZOOM = 6;
 
 export const STEAM_IMAGE_PRESETS: SteamImagePreset[] = [
   {
@@ -57,11 +66,41 @@ export const createDefaultSteamAchievementBorderStyle = (): SteamAchievementBord
   gradientColor: '#475872',
   backgroundMode: 'none',
   backgroundOpacity: 1,
+  backgroundGradientOverlayEnabled: false,
+  backgroundGradientOpacity: 0.42,
   backgroundAngle: 180,
   backgroundColor: '#142236',
   backgroundMidColor: '#22314f',
   backgroundGradientColor: '#0a101a',
   backgroundImageRelativePath: null,
+});
+
+export const createDefaultSteamAchievementImageAdjustmentState =
+  (): SteamAchievementImageAdjustmentState => ({
+    saturation: 1,
+    contrast: 1,
+    blurEnabled: false,
+    blurRadius: 12,
+    blurOpacity: 0.35,
+  });
+
+export const createDefaultSteamAchievementBackgroundAdjustmentState =
+  (): SteamAchievementBackgroundAdjustmentState => ({
+    ...createDefaultSteamAchievementImageAdjustmentState(),
+    vignette: 0,
+  });
+
+export const createDefaultSteamAchievementShadowState = (): SteamAchievementShadowState => ({
+  enabled: false,
+  blur: 18,
+  opacity: 0.4,
+  offsetX: 0,
+  offsetY: 8,
+});
+
+export const createDefaultSteamAchievementEntryImageStyle = (): SteamAchievementEntryImageStyle => ({
+  adjustments: createDefaultSteamAchievementImageAdjustmentState(),
+  shadow: createDefaultSteamAchievementShadowState(),
 });
 
 const borderStyleFromLegacyPreset = (
@@ -157,13 +196,25 @@ export const normalizeSteamAchievementBorderStyle = (
     midColor: normalizeHexColor(obj.midColor, fallback.midColor),
     gradientColor: normalizeHexColor(obj.gradientColor, fallback.gradientColor),
     backgroundMode:
-      obj.backgroundMode === 'gradient' || obj.backgroundMode === 'image' || obj.backgroundMode === 'none'
+      obj.backgroundMode === 'image' || obj.backgroundMode === 'none'
         ? obj.backgroundMode
-        : fallback.backgroundMode,
+        : obj.backgroundMode === 'gradient'
+          ? 'image'
+          : fallback.backgroundMode,
     backgroundOpacity:
       typeof obj.backgroundOpacity === 'number' && Number.isFinite(obj.backgroundOpacity)
         ? Math.min(1, Math.max(0, obj.backgroundOpacity))
         : fallback.backgroundOpacity,
+    backgroundGradientOverlayEnabled:
+      typeof obj.backgroundGradientOverlayEnabled === 'boolean'
+        ? obj.backgroundGradientOverlayEnabled
+        : obj.backgroundMode === 'gradient'
+          ? true
+        : fallback.backgroundGradientOverlayEnabled,
+    backgroundGradientOpacity:
+      typeof obj.backgroundGradientOpacity === 'number' && Number.isFinite(obj.backgroundGradientOpacity)
+        ? Math.min(1, Math.max(0, obj.backgroundGradientOpacity))
+        : fallback.backgroundGradientOpacity,
     backgroundAngle: normalizeAngle(obj.backgroundAngle, fallback.backgroundAngle),
     backgroundColor: normalizeHexColor(obj.backgroundColor, fallback.backgroundColor),
     backgroundMidColor: normalizeHexColor(obj.backgroundMidColor, fallback.backgroundMidColor),
@@ -178,9 +229,91 @@ export const normalizeSteamAchievementBorderStyle = (
   };
 };
 
+export const normalizeSteamAchievementImageAdjustmentState = (
+  input: unknown,
+): SteamAchievementImageAdjustmentState => {
+  const fallback = createDefaultSteamAchievementImageAdjustmentState();
+  if (typeof input !== 'object' || input === null) {
+    return fallback;
+  }
+  const obj = input as Partial<SteamAchievementImageAdjustmentState>;
+  return {
+    saturation:
+      typeof obj.saturation === 'number' && Number.isFinite(obj.saturation)
+        ? Math.min(2, Math.max(0, obj.saturation))
+        : fallback.saturation,
+    contrast:
+      typeof obj.contrast === 'number' && Number.isFinite(obj.contrast)
+        ? Math.min(2, Math.max(0.4, obj.contrast))
+        : fallback.contrast,
+    blurEnabled: typeof obj.blurEnabled === 'boolean' ? obj.blurEnabled : fallback.blurEnabled,
+    blurRadius:
+      typeof obj.blurRadius === 'number' && Number.isFinite(obj.blurRadius)
+        ? Math.min(64, Math.max(0, obj.blurRadius))
+        : fallback.blurRadius,
+    blurOpacity:
+      typeof obj.blurOpacity === 'number' && Number.isFinite(obj.blurOpacity)
+        ? Math.min(1, Math.max(0, obj.blurOpacity))
+        : fallback.blurOpacity,
+  };
+};
+
+export const normalizeSteamAchievementBackgroundAdjustmentState = (
+  input: unknown,
+): SteamAchievementBackgroundAdjustmentState => {
+  const fallback = createDefaultSteamAchievementBackgroundAdjustmentState();
+  if (typeof input !== 'object' || input === null) {
+    return fallback;
+  }
+  const obj = input as Partial<SteamAchievementBackgroundAdjustmentState>;
+  const base = normalizeSteamAchievementImageAdjustmentState(input);
+  return {
+    ...base,
+    vignette:
+      typeof obj.vignette === 'number' && Number.isFinite(obj.vignette)
+        ? Math.min(1, Math.max(0, obj.vignette))
+        : fallback.vignette,
+  };
+};
+
+export const normalizeSteamAchievementShadowState = (input: unknown): SteamAchievementShadowState => {
+  const fallback = createDefaultSteamAchievementShadowState();
+  if (typeof input !== 'object' || input === null) {
+    return fallback;
+  }
+  const obj = input as Partial<SteamAchievementShadowState>;
+  return {
+    enabled: typeof obj.enabled === 'boolean' ? obj.enabled : fallback.enabled,
+    blur:
+      typeof obj.blur === 'number' && Number.isFinite(obj.blur)
+        ? Math.min(96, Math.max(0, obj.blur))
+        : fallback.blur,
+    opacity:
+      typeof obj.opacity === 'number' && Number.isFinite(obj.opacity)
+        ? Math.min(1, Math.max(0, obj.opacity))
+        : fallback.opacity,
+    offsetX:
+      typeof obj.offsetX === 'number' && Number.isFinite(obj.offsetX) ? obj.offsetX : fallback.offsetX,
+    offsetY:
+      typeof obj.offsetY === 'number' && Number.isFinite(obj.offsetY) ? obj.offsetY : fallback.offsetY,
+  };
+};
+
+export const normalizeSteamAchievementEntryImageStyle = (
+  input: unknown,
+): SteamAchievementEntryImageStyle => {
+  const obj = typeof input === 'object' && input !== null ? (input as Partial<SteamAchievementEntryImageStyle>) : null;
+  return {
+    adjustments: normalizeSteamAchievementImageAdjustmentState(obj?.adjustments),
+    shadow: normalizeSteamAchievementShadowState(obj?.shadow),
+  };
+};
+
 export const createDefaultSteamAchievementArtData = (): SteamAchievementArtData => ({
   presetId: STEAM_ACHIEVEMENT_256_PRESET_ID,
   borderStyle: createDefaultSteamAchievementBorderStyle(),
+  backgroundAdjustments: createDefaultSteamAchievementBackgroundAdjustmentState(),
+  backgroundAssetRelativePaths: [],
   entries: [],
 });
 
@@ -218,6 +351,7 @@ export const createSteamAchievementEntry = (name = DEFAULT_NAME): SteamAchieveme
     name: normalizeSteamAchievementEntryName(name),
     sourceImageRelativePath: null,
     crop: createDefaultSteamAchievementTransform(),
+    imageStyle: createDefaultSteamAchievementEntryImageStyle(),
     createdAt: now,
     updatedAt: now,
   };
@@ -265,11 +399,18 @@ export const clampSteamAchievementTransform = (
   sourceHeight: number,
   preset: SteamImagePreset,
   transform: Partial<SteamAchievementTransform> | null | undefined,
-): SteamAchievementTransform =>
-  clampCoverTransform(sourceWidth, sourceHeight, preset, transform, {
-    minZoom: MIN_STEAM_ACHIEVEMENT_ZOOM,
-    maxZoom: MAX_STEAM_ACHIEVEMENT_ZOOM,
-  });
+): SteamAchievementTransform => {
+  const next = normalizeSteamAchievementTransform(transform);
+  const drawRect = getSteamAchievementDrawRect(sourceWidth, sourceHeight, preset, next);
+  const maxOffsetX = Math.abs(drawRect.width - preset.width) * 0.5;
+  const maxOffsetY = Math.abs(drawRect.height - preset.height) * 0.5;
+
+  return {
+    zoom: next.zoom,
+    offsetX: Math.min(maxOffsetX, Math.max(-maxOffsetX, next.offsetX)),
+    offsetY: Math.min(maxOffsetY, Math.max(-maxOffsetY, next.offsetY)),
+  };
+};
 
 export const normalizeSteamAchievementArtData = (input: unknown): SteamAchievementArtData => {
   if (typeof input !== 'object' || input === null) {
@@ -280,6 +421,8 @@ export const normalizeSteamAchievementArtData = (input: unknown): SteamAchieveme
     presetId?: unknown;
     borderStyle?: unknown;
     borderOverlayId?: unknown;
+    backgroundAdjustments?: unknown;
+    backgroundAssetRelativePaths?: unknown;
     entries?: unknown;
   };
 
@@ -295,6 +438,7 @@ export const normalizeSteamAchievementArtData = (input: unknown): SteamAchieveme
           name?: unknown;
           sourceImageRelativePath?: unknown;
           crop?: unknown;
+          imageStyle?: unknown;
           createdAt?: unknown;
           updatedAt?: unknown;
         };
@@ -327,11 +471,21 @@ export const normalizeSteamAchievementArtData = (input: unknown): SteamAchieveme
                 ? (item.crop as Partial<SteamAchievementTransform>)
                 : null,
             ),
+            imageStyle: normalizeSteamAchievementEntryImageStyle(item.imageStyle),
             createdAt,
             updatedAt,
           },
         ];
       })
+    : [];
+
+  const backgroundAssetRelativePaths = Array.isArray(obj.backgroundAssetRelativePaths)
+    ? [...new Set(
+        obj.backgroundAssetRelativePaths
+          .filter((value): value is string => typeof value === 'string')
+          .map((value) => value.trim())
+          .filter(Boolean),
+      )]
     : [];
 
   return {
@@ -340,6 +494,8 @@ export const normalizeSteamAchievementArtData = (input: unknown): SteamAchieveme
       obj.borderStyle,
       typeof obj.borderOverlayId === 'string' ? obj.borderOverlayId : null,
     ),
+    backgroundAdjustments: normalizeSteamAchievementBackgroundAdjustmentState(obj.backgroundAdjustments),
+    backgroundAssetRelativePaths,
     entries,
   };
 };
@@ -427,9 +583,10 @@ const sampleGradientColor = (
   y: number,
   colors: [string, string, string],
 ): { r: number; g: number; b: number } => {
+  // Match CSS linear-gradient semantics: 0deg points upward, 90deg points right.
   const radians = (angle * Math.PI) / 180;
-  const dx = Math.cos(radians);
-  const dy = Math.sin(radians);
+  const dx = Math.sin(radians);
+  const dy = -Math.cos(radians);
   const centeredX = width <= 1 ? 0 : x / (width - 1) - 0.5;
   const centeredY = height <= 1 ? 0 : y / (height - 1) - 0.5;
   const projected = centeredX * dx + centeredY * dy;
@@ -465,7 +622,8 @@ const compositeBitmapIntoRoundedRect = (
   targetWidth: number,
   targetHeight: number,
   bitmap: Uint8Array,
-  rect: { left: number; top: number; width: number; height: number; radius: number },
+  rect: { left: number; top: number; width: number; height: number },
+  clipRect: { left: number; top: number; width: number; height: number; radius: number },
 ): void => {
   for (let y = 0; y < rect.height; y += 1) {
     for (let x = 0; x < rect.width; x += 1) {
@@ -476,18 +634,63 @@ const compositeBitmapIntoRoundedRect = (
         targetY < 0 ||
         targetX >= targetWidth ||
         targetY >= targetHeight ||
-        !isInsideRoundedRect(targetX + 0.5, targetY + 0.5, rect)
+        !isInsideRoundedRect(targetX + 0.5, targetY + 0.5, clipRect)
       ) {
         continue;
       }
       const sourceOffset = (y * rect.width + x) * 4;
       const targetOffset = (targetY * targetWidth + targetX) * 4;
-      target[targetOffset] = bitmap[sourceOffset];
-      target[targetOffset + 1] = bitmap[sourceOffset + 1];
-      target[targetOffset + 2] = bitmap[sourceOffset + 2];
-      target[targetOffset + 3] = bitmap[sourceOffset + 3];
+      const alpha = (bitmap[sourceOffset + 3] ?? 0) / 255;
+      target[targetOffset] = blendChannel(target[targetOffset], bitmap[sourceOffset], alpha);
+      target[targetOffset + 1] = blendChannel(target[targetOffset + 1], bitmap[sourceOffset + 1], alpha);
+      target[targetOffset + 2] = blendChannel(target[targetOffset + 2], bitmap[sourceOffset + 2], alpha);
+      target[targetOffset + 3] = Math.round(
+        Math.max(target[targetOffset + 3], bitmap[sourceOffset + 3] ?? 0),
+      );
     }
   }
+};
+
+const applyAchievementImageAdjustments = (
+  bitmap: Uint8Array,
+  width: number,
+  height: number,
+  adjustments: SteamAchievementBackgroundAdjustmentState,
+): Uint8Array => {
+  return applyImageAdjustments(bitmap, width, height, adjustments);
+};
+
+const applyVignetteOverlay = (
+  bitmap: Uint8Array,
+  width: number,
+  height: number,
+  strength: number,
+): Uint8Array => {
+  if (strength <= 0) {
+    return bitmap;
+  }
+
+  const next = new Uint8Array(bitmap);
+
+  const centerX = (width - 1) * 0.5;
+  const centerY = (height - 1) * 0.5;
+  const maxDistance = Math.max(1, Math.sqrt(centerX * centerX + centerY * centerY));
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      const distance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2) / maxDistance;
+      const edgeStrength = Math.max(0, distance - 0.35) / 0.65;
+      const vignetteAlpha = Math.max(0, Math.min(1, edgeStrength * edgeStrength * strength * 0.78));
+      const vignetteFactor = 1 - vignetteAlpha;
+      next[offset] = Math.max(0, Math.min(255, Math.round(next[offset] * vignetteFactor)));
+      next[offset + 1] = Math.max(0, Math.min(255, Math.round(next[offset + 1] * vignetteFactor)));
+      next[offset + 2] = Math.max(0, Math.min(255, Math.round(next[offset + 2] * vignetteFactor)));
+      next[offset + 3] = Math.max(next[offset + 3], Math.round(255 * vignetteAlpha));
+    }
+  }
+
+  return next;
 };
 
 export const composeSteamAchievementFrameBitmap = (input: {
@@ -496,7 +699,9 @@ export const composeSteamAchievementFrameBitmap = (input: {
   sourceBgra: Uint8Array;
   preset: SteamImagePreset;
   transform: SteamAchievementTransform;
+  imageStyle?: SteamAchievementEntryImageStyle;
   borderStyle: SteamAchievementBorderStyle;
+  backgroundAdjustments?: SteamAchievementBackgroundAdjustmentState;
   backgroundImageBgra?: Uint8Array | null;
   backgroundImageWidth?: number;
   backgroundImageHeight?: number;
@@ -506,26 +711,74 @@ export const composeSteamAchievementFrameBitmap = (input: {
     width: input.preset.width,
     height: input.preset.height,
     borderStyle: input.borderStyle,
+    backgroundAdjustments: input.backgroundAdjustments,
     backgroundImageBgra: input.backgroundImageBgra,
     backgroundImageWidth: input.backgroundImageWidth,
     backgroundImageHeight: input.backgroundImageHeight,
   });
-  const imageBitmap = renderSteamAchievementBitmap({
-    sourceWidth: input.sourceWidth,
-    sourceHeight: input.sourceHeight,
-    sourceBgra: input.sourceBgra,
-    preset: {
+  const imageDrawRect = getSteamAchievementDrawRect(
+    input.sourceWidth,
+    input.sourceHeight,
+    {
       ...input.preset,
       width: frameRect.width,
       height: frameRect.height,
     },
-    transform: input.transform,
+    input.transform,
+  );
+  const imageRect = {
+    left: frameRect.left + Math.round(imageDrawRect.left),
+    top: frameRect.top + Math.round(imageDrawRect.top),
+    width: Math.max(1, Math.round(imageDrawRect.width)),
+    height: Math.max(1, Math.round(imageDrawRect.height)),
+  };
+  const renderedImageBitmap = renderScaledBitmap({
+    sourceWidth: input.sourceWidth,
+    sourceHeight: input.sourceHeight,
+    sourceBgra: input.sourceBgra,
+    width: imageRect.width,
+    height: imageRect.height,
   });
+  const imageStyle = input.imageStyle ?? createDefaultSteamAchievementEntryImageStyle();
+  const imageBitmap = applyBlurLayer(
+    applyImageAdjustments(
+      renderedImageBitmap,
+      imageRect.width,
+      imageRect.height,
+      imageStyle.adjustments,
+    ),
+    imageRect.width,
+    imageRect.height,
+    {
+      enabled: imageStyle.adjustments.blurEnabled,
+      blurRadius: imageStyle.adjustments.blurRadius,
+      opacity: imageStyle.adjustments.blurOpacity,
+    },
+  );
+  if (imageStyle.shadow.enabled && imageStyle.shadow.opacity > 0 && imageStyle.shadow.blur > 0) {
+    const shadowBitmap = applyBlurLayer(
+      createShadowMask(imageBitmap, imageStyle.shadow.opacity),
+      imageRect.width,
+      imageRect.height,
+      {
+        enabled: true,
+        blurRadius: imageStyle.shadow.blur,
+        opacity: 1,
+      },
+    );
+    compositeBitmap(backgroundBitmap, input.preset.width, input.preset.height, shadowBitmap, {
+      left: imageRect.left + Math.round(imageStyle.shadow.offsetX),
+      top: imageRect.top + Math.round(imageStyle.shadow.offsetY),
+      width: imageRect.width,
+      height: imageRect.height,
+    });
+  }
   compositeBitmapIntoRoundedRect(
     backgroundBitmap,
     input.preset.width,
     input.preset.height,
     imageBitmap,
+    imageRect,
     frameRect,
   );
   return applySteamAchievementBorderStyle(
@@ -541,13 +794,29 @@ export const createSteamAchievementBackgroundBitmap = (input: {
   width: number;
   height: number;
   borderStyle: SteamAchievementBorderStyle;
+  backgroundAdjustments?: SteamAchievementBackgroundAdjustmentState;
   backgroundImageBgra?: Uint8Array | null;
   backgroundImageWidth?: number;
   backgroundImageHeight?: number;
 }): Uint8Array => {
   const output = new Uint8Array(input.width * input.height * 4);
   const style = input.borderStyle;
-  if (style.backgroundMode === 'none' || style.backgroundOpacity <= 0) {
+  const adjustments =
+    input.backgroundAdjustments ?? createDefaultSteamAchievementBackgroundAdjustmentState();
+  const shouldApplyGradient =
+    style.backgroundMode === 'image' &&
+    style.backgroundGradientOverlayEnabled &&
+    style.backgroundGradientOpacity > 0;
+
+  if (style.backgroundMode === 'none') {
+    return applyVignetteOverlay(output, input.width, input.height, adjustments.vignette);
+  }
+
+  if (
+    style.backgroundOpacity <= 0 &&
+    !shouldApplyGradient &&
+    adjustments.vignette <= 0
+  ) {
     return output;
   }
 
@@ -572,13 +841,30 @@ export const createSteamAchievementBackgroundBitmap = (input: {
       },
       transform: createDefaultSteamAchievementTransform(),
     });
+    const adjustedCoverBitmap = applyBlurLayer(
+      applyAchievementImageAdjustments(coverBitmap, input.width, input.height, adjustments),
+      input.width,
+      input.height,
+      {
+        enabled: adjustments.blurEnabled,
+        blurRadius: adjustments.blurRadius,
+        opacity: adjustments.blurOpacity,
+      },
+    );
     for (let index = 0; index < output.length; index += 4) {
-      output[index] = blendChannel(0, coverBitmap[index], style.backgroundOpacity);
-      output[index + 1] = blendChannel(0, coverBitmap[index + 1], style.backgroundOpacity);
-      output[index + 2] = blendChannel(0, coverBitmap[index + 2], style.backgroundOpacity);
+      output[index] = blendChannel(0, adjustedCoverBitmap[index], style.backgroundOpacity);
+      output[index + 1] = blendChannel(0, adjustedCoverBitmap[index + 1], style.backgroundOpacity);
+      output[index + 2] = blendChannel(0, adjustedCoverBitmap[index + 2], style.backgroundOpacity);
       output[index + 3] = Math.round(255 * style.backgroundOpacity);
     }
-    return output;
+    if (!shouldApplyGradient) {
+      return applyVignetteOverlay(output, input.width, input.height, adjustments.vignette);
+    }
+  }
+
+  const backgroundWithVignette = applyVignetteOverlay(output, input.width, input.height, adjustments.vignette);
+  if (!shouldApplyGradient) {
+    return backgroundWithVignette;
   }
 
   for (let y = 0; y < input.height; y += 1) {
@@ -592,13 +878,69 @@ export const createSteamAchievementBackgroundBitmap = (input: {
         [style.backgroundColor, style.backgroundMidColor, style.backgroundGradientColor],
       );
       const offset = (y * input.width + x) * 4;
-      output[offset] = color.b;
-      output[offset + 1] = color.g;
-      output[offset + 2] = color.r;
-      output[offset + 3] = Math.round(255 * style.backgroundOpacity);
+      backgroundWithVignette[offset] = blendChannel(
+        backgroundWithVignette[offset],
+        color.b,
+        style.backgroundGradientOpacity,
+      );
+      backgroundWithVignette[offset + 1] = blendChannel(
+        backgroundWithVignette[offset + 1],
+        color.g,
+        style.backgroundGradientOpacity,
+      );
+      backgroundWithVignette[offset + 2] = blendChannel(
+        backgroundWithVignette[offset + 2],
+        color.r,
+        style.backgroundGradientOpacity,
+      );
+      backgroundWithVignette[offset + 3] = Math.max(
+        backgroundWithVignette[offset + 3],
+        Math.round(255 * style.backgroundGradientOpacity),
+      );
     }
   }
-  return output;
+  return backgroundWithVignette;
+};
+
+const createShadowMask = (
+  bitmap: Uint8Array,
+  opacity: number,
+): Uint8Array => {
+  const next = new Uint8Array(bitmap.length);
+  for (let index = 0; index < bitmap.length; index += 4) {
+    next[index] = 0;
+    next[index + 1] = 0;
+    next[index + 2] = 0;
+    next[index + 3] = Math.round((bitmap[index + 3] ?? 0) * opacity);
+  }
+  return next;
+};
+
+const compositeBitmap = (
+  target: Uint8Array,
+  targetWidth: number,
+  targetHeight: number,
+  bitmap: Uint8Array,
+  rect: { left: number; top: number; width: number; height: number },
+): void => {
+  for (let y = 0; y < rect.height; y += 1) {
+    for (let x = 0; x < rect.width; x += 1) {
+      const targetX = rect.left + x;
+      const targetY = rect.top + y;
+      if (targetX < 0 || targetY < 0 || targetX >= targetWidth || targetY >= targetHeight) {
+        continue;
+      }
+      const sourceOffset = (y * rect.width + x) * 4;
+      const targetOffset = (targetY * targetWidth + targetX) * 4;
+      const alpha = (bitmap[sourceOffset + 3] ?? 0) / 255;
+      target[targetOffset] = blendChannel(target[targetOffset], bitmap[sourceOffset], alpha);
+      target[targetOffset + 1] = blendChannel(target[targetOffset + 1], bitmap[sourceOffset + 1], alpha);
+      target[targetOffset + 2] = blendChannel(target[targetOffset + 2], bitmap[sourceOffset + 2], alpha);
+      target[targetOffset + 3] = Math.round(
+        Math.max(target[targetOffset + 3], bitmap[sourceOffset + 3] ?? 0),
+      );
+    }
+  }
 };
 
 export const applySteamAchievementBorderStyle = (
@@ -656,25 +998,101 @@ const toRgbaString = (hexColor: string, alpha: number): string => {
 
 export const buildSteamAchievementBackgroundCss = (
   borderStyle: SteamAchievementBorderStyle,
+  adjustments?: SteamAchievementBackgroundAdjustmentState,
   backgroundAssetUrl?: string | null,
 ): React.CSSProperties => {
   if (borderStyle.backgroundMode === 'none' || borderStyle.backgroundOpacity <= 0) {
     return { display: 'none' };
   }
 
+  const backgroundAdjustments =
+    adjustments ?? createDefaultSteamAchievementBackgroundAdjustmentState();
   if (borderStyle.backgroundMode === 'image' && backgroundAssetUrl) {
     return {
-      backgroundImage: `linear-gradient(rgba(0, 0, 0, ${1 - borderStyle.backgroundOpacity}), rgba(0, 0, 0, ${1 - borderStyle.backgroundOpacity})), url("${backgroundAssetUrl}")`,
+      backgroundImage: `url("${backgroundAssetUrl}")`,
       backgroundSize: 'cover',
       backgroundPosition: 'center',
       backgroundRepeat: 'no-repeat',
+      filter: buildCssImageAdjustmentFilter(backgroundAdjustments),
+      opacity: borderStyle.backgroundOpacity,
     };
   }
 
+  return { display: 'none' };
+};
+
+export const buildSteamAchievementBackgroundBlurCss = (
+  borderStyle: SteamAchievementBorderStyle,
+  adjustments?: SteamAchievementBackgroundAdjustmentState,
+  backgroundAssetUrl?: string | null,
+): React.CSSProperties => {
+  if (
+    borderStyle.backgroundMode !== 'image' ||
+    !backgroundAssetUrl
+  ) {
+    return { display: 'none' };
+  }
+
+  const backgroundAdjustments =
+    adjustments ?? createDefaultSteamAchievementBackgroundAdjustmentState();
   return {
-    backgroundImage: `linear-gradient(${borderStyle.backgroundAngle}deg, ${toRgbaString(borderStyle.backgroundColor, borderStyle.backgroundOpacity)} 0%, ${toRgbaString(borderStyle.backgroundMidColor, borderStyle.backgroundOpacity)} 52%, ${toRgbaString(borderStyle.backgroundGradientColor, borderStyle.backgroundOpacity)} 100%)`,
+    backgroundImage: `url("${backgroundAssetUrl}")`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+    filter: `${buildCssImageAdjustmentFilter(backgroundAdjustments)} ${buildCssBlurFilter(
+      {
+        enabled: backgroundAdjustments.blurEnabled,
+        blurRadius: backgroundAdjustments.blurRadius * 0.12,
+        opacity: backgroundAdjustments.blurOpacity,
+      },
+    )}`.trim(),
+    opacity:
+      borderStyle.backgroundOpacity *
+      (backgroundAdjustments.blurEnabled ? backgroundAdjustments.blurOpacity : 0),
   };
 };
+
+export const buildSteamAchievementBackgroundGradientOverlayCss = (
+  borderStyle: SteamAchievementBorderStyle,
+): React.CSSProperties => {
+  const showGradient = borderStyle.backgroundMode === 'image' && borderStyle.backgroundGradientOverlayEnabled;
+  if (!showGradient || borderStyle.backgroundGradientOpacity <= 0) {
+    return { display: 'none' };
+  }
+  return {
+    backgroundImage: `linear-gradient(${borderStyle.backgroundAngle}deg, ${toRgbaString(borderStyle.backgroundColor, borderStyle.backgroundGradientOpacity)} 0%, ${toRgbaString(borderStyle.backgroundMidColor, borderStyle.backgroundGradientOpacity)} 52%, ${toRgbaString(borderStyle.backgroundGradientColor, borderStyle.backgroundGradientOpacity)} 100%)`,
+  };
+};
+
+export const buildSteamAchievementBackgroundVignetteCss = (
+  adjustments: SteamAchievementBackgroundAdjustmentState,
+): React.CSSProperties => ({
+  background: `radial-gradient(circle at center, rgba(0, 0, 0, 0) 34%, rgba(0, 0, 0, ${adjustments.vignette * 0.78}) 100%)`,
+  opacity: adjustments.vignette > 0 ? 1 : 0,
+});
+
+export const buildSteamAchievementImageCss = (
+  imageStyle: SteamAchievementEntryImageStyle,
+): React.CSSProperties => ({
+  filter: `${buildCssImageAdjustmentFilter(imageStyle.adjustments)} ${buildCssShadowFilter(
+    imageStyle.shadow,
+  )}`.trim(),
+});
+
+export const buildSteamAchievementImageBlurCss = (
+  imageStyle: SteamAchievementEntryImageStyle,
+  scale = 1,
+): React.CSSProperties => ({
+  filter: `${buildCssImageAdjustmentFilter(imageStyle.adjustments)} ${buildCssBlurFilter(
+    {
+      enabled: imageStyle.adjustments.blurEnabled,
+      blurRadius: imageStyle.adjustments.blurRadius * scale,
+      opacity: imageStyle.adjustments.blurOpacity,
+    },
+  )}`.trim(),
+  opacity: imageStyle.adjustments.blurEnabled ? imageStyle.adjustments.blurOpacity : 0,
+});
 
 export const buildSteamAchievementBorderCss = (
   borderStyle: SteamAchievementBorderStyle,
