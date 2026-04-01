@@ -6,9 +6,13 @@ import {
   updateNodeSpreadsheetData,
   updateNodeSteamAchievementArtData,
   updateNodeSteamMarketplaceAssetsData,
+  updateNodeTerminalCommandCenterData,
   updateNodeWorkspaceData,
 } from '../../src/features/app/workspace-node-updaters';
-import { createDefaultSteamAchievementBorderStyle } from '../../src/features/steam-achievement/steam-achievement-art';
+import {
+  createDefaultSteamAchievementBorderStyle,
+  createDefaultSteamAchievementEntryImageStyle,
+} from '../../src/features/steam-achievement/steam-achievement-art';
 import { createDefaultSteamMarketplaceOutputState } from '../../src/features/steam-marketplace/steam-marketplace-assets';
 
 const baseState = (): PersistedTreeState => ({
@@ -89,6 +93,7 @@ describe('workspace-node-updaters', () => {
             offsetX: 0,
             offsetY: 0,
           },
+          imageStyle: createDefaultSteamAchievementEntryImageStyle(),
           createdAt: 1,
           updatedAt: 1,
         },
@@ -127,5 +132,37 @@ describe('workspace-node-updaters', () => {
         'header-capsule'
       ]?.enabled,
     ).toBe(true);
+  });
+
+  it('updates terminal command center slice with defaults when missing', () => {
+    const next = updateNodeTerminalCommandCenterData(baseState(), 'node-terminal', (terminalCommandCenter) => ({
+      ...terminalCommandCenter,
+      commands: [
+        {
+          id: 'command-1',
+          name: 'Install',
+          command: 'npm install',
+          executionFolder: 'j:/Repositories/Git/TestoDesignSuite',
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      panels: [
+        {
+          id: 'panel-1',
+          title: 'Install shell',
+          x: 32,
+          y: 32,
+          width: 640,
+          height: 360,
+          defaultExecutionFolder: 'j:/Repositories/Git/TestoDesignSuite',
+        },
+      ],
+    }));
+
+    expect(next.nodeDataById['node-terminal']?.terminalCommandCenter?.commands[0]?.name).toBe('Install');
+    expect(next.nodeDataById['node-terminal']?.terminalCommandCenter?.panels[0]?.title).toBe(
+      'Install shell',
+    );
   });
 });

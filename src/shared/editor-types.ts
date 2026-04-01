@@ -20,6 +20,7 @@ export const editorTypeOptions: EditorTypeOption[] = [
   { value: 'story-document', label: 'Document', iconClass: 'fa-solid fa-file-lines' },
   { value: 'steam-achievement-art', label: 'Steam Achievement Art', iconClass: 'fa-brands fa-steam-symbol' },
   { value: 'steam-marketplace-assets', label: 'Steam Marketplace Assets', iconClass: 'fa-brands fa-steam-symbol' },
+  { value: 'terminal-command-center', label: 'Terminal Command Center', iconClass: 'fa-solid fa-terminal' },
 ];
 
 export const editorTypeMeta = (

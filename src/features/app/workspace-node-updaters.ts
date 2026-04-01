@@ -1,5 +1,6 @@
-import { createDefaultSteamAchievementBorderStyle } from '../steam-achievement/steam-achievement-art';
+import { createDefaultSteamAchievementArtData } from '../steam-achievement/steam-achievement-art';
 import { createDefaultSteamMarketplaceAssetData } from '../steam-marketplace/steam-marketplace-assets';
+import { createDefaultTerminalCommandCenterData } from '../terminal-command-center/terminal-command-center';
 import type { NodeWorkspaceData, PersistedTreeState } from '../../shared/types';
 
 type NoteboardData = NonNullable<NodeWorkspaceData['noteboard']>;
@@ -7,6 +8,7 @@ type KanbanData = NonNullable<NodeWorkspaceData['kanban']>;
 type SpreadsheetData = NonNullable<NodeWorkspaceData['spreadsheet']>;
 type SteamAchievementArtData = NonNullable<NodeWorkspaceData['steamAchievementArt']>;
 type SteamMarketplaceAssetData = NonNullable<NodeWorkspaceData['steamMarketplaceAssets']>;
+type TerminalCommandCenterData = NonNullable<NodeWorkspaceData['terminalCommandCenter']>;
 
 const EMPTY_NOTEBOARD: NoteboardData = {
   cards: [],
@@ -28,14 +30,11 @@ const EMPTY_SPREADSHEET: SpreadsheetData = {
   columnWidths: {},
 };
 
-const EMPTY_STEAM_ACHIEVEMENT_ART: SteamAchievementArtData = {
-  presetId: 'steam-achievement-256',
-  borderStyle: createDefaultSteamAchievementBorderStyle(),
-  entries: [],
-};
+const EMPTY_STEAM_ACHIEVEMENT_ART: SteamAchievementArtData = createDefaultSteamAchievementArtData();
 
 const EMPTY_STEAM_MARKETPLACE_ASSETS: SteamMarketplaceAssetData =
   createDefaultSteamMarketplaceAssetData();
+const EMPTY_TERMINAL_COMMAND_CENTER: TerminalCommandCenterData = createDefaultTerminalCommandCenterData();
 
 export const updateNodeWorkspaceData = (
   state: PersistedTreeState,
@@ -144,5 +143,25 @@ export const updateNodeSteamMarketplaceAssetsData = (
     return {
       ...workspace,
       steamMarketplaceAssets: next,
+    };
+  });
+
+export const updateNodeTerminalCommandCenterData = (
+  state: PersistedTreeState,
+  nodeId: string,
+  updater: (
+    terminalCommandCenter: TerminalCommandCenterData,
+    workspace: NodeWorkspaceData,
+  ) => TerminalCommandCenterData,
+): PersistedTreeState =>
+  updateNodeWorkspaceData(state, nodeId, (workspace) => {
+    const current = workspace.terminalCommandCenter ?? EMPTY_TERMINAL_COMMAND_CENTER;
+    const next = updater(current, workspace);
+    if (next === current) {
+      return workspace;
+    }
+    return {
+      ...workspace,
+      terminalCommandCenter: next,
     };
   });

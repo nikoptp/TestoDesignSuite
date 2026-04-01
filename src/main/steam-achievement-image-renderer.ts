@@ -33,7 +33,9 @@ export const renderSteamAchievementEntryPngs = async (
     sourceBgra: sourceImage.toBitmap(),
     preset,
     transform: entry.crop,
+    imageStyle: entry.imageStyle,
     borderStyle: request.data.borderStyle,
+    backgroundAdjustments: request.data.backgroundAdjustments,
     backgroundImageBgra:
       backgroundImage && !backgroundImage.isEmpty() && backgroundSize.width > 0 && backgroundSize.height > 0
         ? backgroundImage.toBitmap()

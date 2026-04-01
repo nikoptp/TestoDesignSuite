@@ -1,6 +1,10 @@
 import React from 'react';
 import { createId } from '../../shared/tree-utils';
 import {
+  applyBlurLayer,
+  applyImageAdjustments,
+  buildCssImageAdjustmentFilter,
+  blurBitmap,
   clampCoverTransform,
   getCoverDrawRect,
   normalizeCoverTransform,
@@ -531,52 +535,18 @@ const createGradientOverlayBitmap = (
   return output;
 };
 
-const blurBitmap = (bitmap: Uint8Array, width: number, height: number, radius: number): Uint8Array => {
-  if (radius <= 0) {
-    return new Uint8Array(bitmap);
-  }
-  const next = new Uint8Array(bitmap.length);
-  const size = Math.max(1, Math.round(radius * 0.5));
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      let b = 0;
-      let g = 0;
-      let r = 0;
-      let a = 0;
-      let count = 0;
-      for (let sampleY = Math.max(0, y - size); sampleY <= Math.min(height - 1, y + size); sampleY += 1) {
-        for (let sampleX = Math.max(0, x - size); sampleX <= Math.min(width - 1, x + size); sampleX += 1) {
-          const offset = (sampleY * width + sampleX) * 4;
-          b += bitmap[offset];
-          g += bitmap[offset + 1];
-          r += bitmap[offset + 2];
-          a += bitmap[offset + 3];
-          count += 1;
-        }
-      }
-      const offset = (y * width + x) * 4;
-      next[offset] = Math.round(b / count);
-      next[offset + 1] = Math.round(g / count);
-      next[offset + 2] = Math.round(r / count);
-      next[offset + 3] = Math.round(a / count);
-    }
-  }
-  return next;
-};
-
-const applyContrastChannel = (value: number, contrast: number): number =>
-  Math.max(0, Math.min(255, Math.round((value - 128) * contrast + 128)));
-
-const applyImageAdjustments = (
+const applyMarketplaceImageAdjustments = (
   bitmap: Uint8Array,
   width: number,
   height: number,
   adjustments: SteamMarketplaceImageAdjustmentState,
 ): Uint8Array => {
-  const next = new Uint8Array(bitmap);
-  const saturation = adjustments.saturation;
-  const contrast = adjustments.contrast;
+  const next = applyImageAdjustments(bitmap, width, height, adjustments);
   const vignette = adjustments.vignette;
+  if (vignette <= 0) {
+    return next;
+  }
+
   const centerX = (width - 1) * 0.5;
   const centerY = (height - 1) * 0.5;
   const maxDistance = Math.max(1, Math.sqrt(centerX * centerX + centerY * centerY));
@@ -584,31 +554,12 @@ const applyImageAdjustments = (
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const offset = (y * width + x) * 4;
-      const blue = next[offset];
-      const green = next[offset + 1];
-      const red = next[offset + 2];
-      const luminance = red * 0.299 + green * 0.587 + blue * 0.114;
-
-      let adjustedBlue = luminance + (blue - luminance) * saturation;
-      let adjustedGreen = luminance + (green - luminance) * saturation;
-      let adjustedRed = luminance + (red - luminance) * saturation;
-
-      adjustedBlue = applyContrastChannel(adjustedBlue, contrast);
-      adjustedGreen = applyContrastChannel(adjustedGreen, contrast);
-      adjustedRed = applyContrastChannel(adjustedRed, contrast);
-
-      if (vignette > 0) {
-        const distance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2) / maxDistance;
-        const edgeStrength = Math.max(0, distance - 0.35) / 0.65;
-        const vignetteFactor = 1 - edgeStrength * edgeStrength * vignette * 0.85;
-        adjustedBlue *= vignetteFactor;
-        adjustedGreen *= vignetteFactor;
-        adjustedRed *= vignetteFactor;
-      }
-
-      next[offset] = Math.max(0, Math.min(255, Math.round(adjustedBlue)));
-      next[offset + 1] = Math.max(0, Math.min(255, Math.round(adjustedGreen)));
-      next[offset + 2] = Math.max(0, Math.min(255, Math.round(adjustedRed)));
+      const distance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2) / maxDistance;
+      const edgeStrength = Math.max(0, distance - 0.35) / 0.65;
+      const vignetteFactor = 1 - edgeStrength * edgeStrength * vignette * 0.85;
+      next[offset] = Math.max(0, Math.min(255, Math.round(next[offset] * vignetteFactor)));
+      next[offset + 1] = Math.max(0, Math.min(255, Math.round(next[offset + 1] * vignetteFactor)));
+      next[offset + 2] = Math.max(0, Math.min(255, Math.round(next[offset + 2] * vignetteFactor)));
     }
   }
 
@@ -683,7 +634,7 @@ export const renderSteamMarketplaceBitmap = (input: {
         maxZoom: MAX_STEAM_MARKETPLACE_ZOOM,
       },
     });
-    const baseBitmap = applyImageAdjustments(
+    const baseBitmap = applyMarketplaceImageAdjustments(
       renderedBaseBitmap,
       preset.width,
       preset.height,
@@ -691,15 +642,7 @@ export const renderSteamMarketplaceBitmap = (input: {
     );
     canvas.set(baseBitmap);
 
-    if (output.overlays.blur.enabled && output.overlays.blur.opacity > 0 && output.overlays.blur.blurRadius > 0) {
-      const blurred = blurBitmap(baseBitmap, preset.width, preset.height, output.overlays.blur.blurRadius);
-      for (let index = 0; index < canvas.length; index += 4) {
-        canvas[index] = blendChannel(canvas[index], blurred[index], output.overlays.blur.opacity);
-        canvas[index + 1] = blendChannel(canvas[index + 1], blurred[index + 1], output.overlays.blur.opacity);
-        canvas[index + 2] = blendChannel(canvas[index + 2], blurred[index + 2], output.overlays.blur.opacity);
-        canvas[index + 3] = Math.max(canvas[index + 3], blurred[index + 3]);
-      }
-    }
+    canvas.set(applyBlurLayer(baseBitmap, preset.width, preset.height, output.overlays.blur));
 
     if (output.overlays.gradient.enabled && output.overlays.gradient.opacity > 0) {
       const gradient = createGradientOverlayBitmap(preset.width, preset.height, output.overlays.gradient);
@@ -775,8 +718,7 @@ export const buildSteamMarketplacePreviewBackground = (
 
 export const buildSteamMarketplaceImageFilter = (
   output: SteamMarketplaceOutputState,
-): string =>
-  `saturate(${output.overlays.image.saturation}) contrast(${output.overlays.image.contrast})`;
+): string => buildCssImageAdjustmentFilter(output.overlays.image);
 
 export const buildSteamMarketplaceVignetteStyle = (
   output: SteamMarketplaceOutputState,

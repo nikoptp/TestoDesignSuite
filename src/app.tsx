@@ -6,7 +6,9 @@ import type {
   PersistedTreeState,
   ProjectImageAsset,
   RecentProjectEntry,
+  SteamAchievementBackgroundAdjustmentState,
   SteamAchievementBorderStyle,
+  SteamAchievementEntryImageStyle,
   SteamAchievementTransform,
   SteamMarketplaceCropTransform,
   SteamMarketplaceOutputState,
@@ -33,6 +35,7 @@ import { KanbanBoard } from './components/kanban-board';
 import { SpreadsheetEditor } from './components/spreadsheet-editor';
 import { SteamAchievementArtEditor } from './components/steam-achievement-art-editor';
 import { SteamMarketplaceAssetsEditor } from './components/steam-marketplace-assets-editor';
+import { TerminalCommandCenterEditor } from './components/terminal-command-center-editor';
 import { StartupSplash } from './components/startup-splash';
 import {
   useProjectBootstrap,
@@ -76,11 +79,13 @@ import {
   ensureSpreadsheetData,
   ensureSteamAchievementArtData,
   ensureSteamMarketplaceAssetsData,
+  ensureTerminalCommandCenterData,
   getCardsForNode,
   getKanbanBoardForNode,
   getSpreadsheetForNode,
   getSteamAchievementArtForNode,
   getSteamMarketplaceAssetsForNode,
+  getTerminalCommandCenterForNode,
   getSharedKanbanBacklogCards,
   getDocumentMarkdownForNode,
   getStrokesForNode,
@@ -107,18 +112,22 @@ import {
 } from './features/app/kanban-state';
 import {
   updateNodeNoteboardData,
+  updateNodeTerminalCommandCenterData,
   updateNodeSteamAchievementArtData,
   updateNodeSteamMarketplaceAssetsData,
 } from './features/app/workspace-node-updaters';
 import {
   clampSteamAchievementTransform,
+  createDefaultSteamAchievementEntryImageStyle,
   createDefaultSteamAchievementTransform,
   createSteamAchievementEntry,
   deriveSteamAchievementNameFromPath,
   getSteamAchievementFrameRect,
   getSteamImagePreset,
   normalizeSteamAchievementArtData,
+  normalizeSteamAchievementBackgroundAdjustmentState,
   normalizeSteamAchievementEntryName,
+  normalizeSteamAchievementEntryImageStyle,
 } from './features/steam-achievement/steam-achievement-art';
 import {
   clampSteamMarketplaceCropTransform,
@@ -130,6 +139,12 @@ import {
   normalizeSteamMarketplaceEntryName,
   STEAM_MARKETPLACE_PRESETS,
 } from './features/steam-marketplace/steam-marketplace-assets';
+import {
+  normalizeExecutionFolder,
+  normalizeTerminalCommandName,
+  normalizeTerminalCommandString,
+  normalizeTerminalPanelTitle,
+} from './features/terminal-command-center/terminal-command-center';
 
 const SKIP_SPLASH_ONCE_KEY = 'testo.splash.skipOnce';
 const SKIP_SPLASH_QUERY_PARAM = 'skipSplashOnce';
@@ -610,6 +625,14 @@ export const App = (): React.ReactElement => {
     setState((prev) => ensureSteamMarketplaceAssetsData(prev, selectedNode.id));
   }, [selectedNode]);
 
+  React.useEffect(() => {
+    if (!selectedNode || selectedNode.editorType !== 'terminal-command-center') {
+      return;
+    }
+
+    setState((prev) => ensureTerminalCommandCenterData(prev, selectedNode.id));
+  }, [selectedNode]);
+
   const pendingDeleteNode = React.useMemo(
     () => findNodeById(state.nodes, uiState.pendingDeleteNodeId),
     [state.nodes, uiState.pendingDeleteNodeId],
@@ -650,7 +673,8 @@ export const App = (): React.ReactElement => {
     selectedNode.editorType !== 'kanban-board' &&
     selectedNode.editorType !== 'spreadsheet' &&
     selectedNode.editorType !== 'steam-achievement-art' &&
-    selectedNode.editorType !== 'steam-marketplace-assets'
+    selectedNode.editorType !== 'steam-marketplace-assets' &&
+    selectedNode.editorType !== 'terminal-command-center'
       ? getDocumentMarkdownForNode(state, selectedNode.id)
       : '';
   const selectedKanban =
@@ -668,6 +692,10 @@ export const App = (): React.ReactElement => {
   const selectedSteamMarketplaceAssets =
     selectedNode && selectedNode.editorType === 'steam-marketplace-assets'
       ? getSteamMarketplaceAssetsForNode(state, selectedNode.id)
+      : null;
+  const selectedTerminalCommandCenter =
+    selectedNode && selectedNode.editorType === 'terminal-command-center'
+      ? getTerminalCommandCenterForNode(state, selectedNode.id)
       : null;
   const sharedKanbanBacklogCards = getSharedKanbanBacklogCards(state);
 
@@ -1325,6 +1353,7 @@ export const App = (): React.ReactElement => {
                         : deriveSteamAchievementNameFromPath(relativePath),
                     sourceImageRelativePath: relativePath,
                     crop: createDefaultSteamAchievementTransform(),
+                    imageStyle: createDefaultSteamAchievementEntryImageStyle(),
                     updatedAt: Date.now(),
                   }
                 : entry,
@@ -1355,6 +1384,7 @@ export const App = (): React.ReactElement => {
                 ...createSteamAchievementEntry(deriveSteamAchievementNameFromPath(relativePath)),
                 sourceImageRelativePath: relativePath,
                 crop: createDefaultSteamAchievementTransform(),
+                imageStyle: createDefaultSteamAchievementEntryImageStyle(),
                 updatedAt: Date.now(),
               },
             ],
@@ -1366,7 +1396,7 @@ export const App = (): React.ReactElement => {
   );
 
   const onImportSteamAchievementFiles = React.useCallback(
-    async (files: File[], targetEntryId?: string): Promise<void> => {
+    async (files: File[], target: 'entry' | 'background', targetEntryId?: string): Promise<void> => {
       if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
         return;
       }
@@ -1405,6 +1435,22 @@ export const App = (): React.ReactElement => {
           ensureSteamAchievementArtData(prev, selectedNode.id),
           selectedNode.id,
           (steamAchievementArt) => {
+            if (target === 'background') {
+              return {
+                ...steamAchievementArt,
+                backgroundAssetRelativePaths: [
+                  ...new Set([
+                    ...(steamAchievementArt.backgroundAssetRelativePaths ?? []),
+                    ...savedEntries.map((entry) => entry.relativePath),
+                  ]),
+                ],
+                borderStyle: {
+                  ...steamAchievementArt.borderStyle,
+                  backgroundImageRelativePath: savedEntries[0]?.relativePath ?? null,
+                  backgroundMode: savedEntries[0] ? 'image' : steamAchievementArt.borderStyle.backgroundMode,
+                },
+              };
+            }
             const shouldReplaceTarget = Boolean(targetEntryId && savedEntries.length === 1);
             const nextEntries = shouldReplaceTarget
               ? steamAchievementArt.entries.map((entry) =>
@@ -1414,6 +1460,7 @@ export const App = (): React.ReactElement => {
                         name: entry.name.trim() ? entry.name : savedEntries[0].name,
                         sourceImageRelativePath: savedEntries[0].relativePath,
                         crop: createDefaultSteamAchievementTransform(),
+                        imageStyle: createDefaultSteamAchievementEntryImageStyle(),
                         updatedAt: Date.now(),
                       }
                     : entry,
@@ -1425,6 +1472,7 @@ export const App = (): React.ReactElement => {
                     name: savedEntry.name,
                     sourceImageRelativePath: savedEntry.relativePath,
                     crop: createDefaultSteamAchievementTransform(),
+                    imageStyle: createDefaultSteamAchievementEntryImageStyle(),
                     updatedAt: Date.now(),
                   })),
                 ];
@@ -1439,10 +1487,72 @@ export const App = (): React.ReactElement => {
       await refreshImageAssets();
       showTransientProjectStatus(
         'success',
-        `Imported ${savedEntries.length} image${savedEntries.length === 1 ? '' : 's'} into the achievement set.`,
+        target === 'background'
+          ? `Imported ${savedEntries.length} background image${savedEntries.length === 1 ? '' : 's'} for the achievement frame.`
+          : `Imported ${savedEntries.length} image${savedEntries.length === 1 ? '' : 's'} into the achievement set.`,
       );
     },
     [pushHistory, refreshImageAssets, selectedNode, showTransientProjectStatus],
+  );
+
+  const onAssignSteamAchievementBackgroundAsset = React.useCallback(
+    (relativePath: string | null): void => {
+      if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+        return;
+      }
+
+      pushHistory();
+      setState((prev) =>
+        updateNodeSteamAchievementArtData(
+          ensureSteamAchievementArtData(prev, selectedNode.id),
+          selectedNode.id,
+          (steamAchievementArt) => ({
+            ...steamAchievementArt,
+            backgroundAssetRelativePaths:
+              relativePath
+                ? [...new Set([...(steamAchievementArt.backgroundAssetRelativePaths ?? []), relativePath])]
+                : steamAchievementArt.backgroundAssetRelativePaths ?? [],
+            borderStyle: {
+              ...steamAchievementArt.borderStyle,
+              backgroundImageRelativePath: relativePath,
+              backgroundMode: relativePath ? 'image' : 'none',
+            },
+          }),
+        ),
+      );
+    },
+    [pushHistory, selectedNode],
+  );
+
+  const onRemoveSteamAchievementBackgroundAsset = React.useCallback(
+    (relativePath: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+        return;
+      }
+
+      pushHistory();
+      setState((prev) =>
+        updateNodeSteamAchievementArtData(
+          ensureSteamAchievementArtData(prev, selectedNode.id),
+          selectedNode.id,
+          (steamAchievementArt) => ({
+            ...steamAchievementArt,
+            backgroundAssetRelativePaths: (steamAchievementArt.backgroundAssetRelativePaths ?? []).filter(
+              (path) => path !== relativePath,
+            ),
+            borderStyle:
+              steamAchievementArt.borderStyle.backgroundImageRelativePath === relativePath
+                ? {
+                    ...steamAchievementArt.borderStyle,
+                    backgroundImageRelativePath: null,
+                    backgroundMode: 'none',
+                  }
+                : steamAchievementArt.borderStyle,
+          }),
+        ),
+      );
+    },
+    [pushHistory, selectedNode],
   );
 
   const onBeginSteamAchievementCropInteraction = React.useCallback((): void => {
@@ -1595,6 +1705,70 @@ export const App = (): React.ReactElement => {
       ),
     );
   }, [pushHistory, selectedNode]);
+
+  const onChangeSteamAchievementBackgroundAdjustments = React.useCallback(
+    (patch: Partial<SteamAchievementBackgroundAdjustmentState>): void => {
+      if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+        return;
+      }
+
+      pushHistory();
+      setState((prev) =>
+        updateNodeSteamAchievementArtData(
+          ensureSteamAchievementArtData(prev, selectedNode.id),
+          selectedNode.id,
+          (steamAchievementArt) => ({
+            ...steamAchievementArt,
+            backgroundAdjustments: normalizeSteamAchievementBackgroundAdjustmentState({
+              ...steamAchievementArt.backgroundAdjustments,
+              ...patch,
+            }),
+          }),
+        ),
+      );
+    },
+    [pushHistory, selectedNode],
+  );
+
+  const onChangeSteamAchievementEntryImageStyle = React.useCallback(
+    (entryId: string, patch: Partial<SteamAchievementEntryImageStyle>): void => {
+      if (!selectedNode || selectedNode.editorType !== 'steam-achievement-art') {
+        return;
+      }
+
+      pushHistory();
+      setState((prev) =>
+        updateNodeSteamAchievementArtData(
+          ensureSteamAchievementArtData(prev, selectedNode.id),
+          selectedNode.id,
+          (steamAchievementArt) => ({
+            ...steamAchievementArt,
+            entries: steamAchievementArt.entries.map((entry) =>
+              entry.id === entryId
+                ? {
+                    ...entry,
+                    imageStyle: normalizeSteamAchievementEntryImageStyle({
+                      ...entry.imageStyle,
+                      ...patch,
+                      adjustments: {
+                        ...entry.imageStyle.adjustments,
+                        ...(patch.adjustments ?? {}),
+                      },
+                      shadow: {
+                        ...entry.imageStyle.shadow,
+                        ...(patch.shadow ?? {}),
+                      },
+                    }),
+                    updatedAt: Date.now(),
+                  }
+                : entry,
+            ),
+          }),
+        ),
+      );
+    },
+    [pushHistory, selectedNode],
+  );
 
   const onDeleteSteamMarketplaceEntry = React.useCallback((entryId: string): void => {
     if (!selectedNode || selectedNode.editorType !== 'steam-marketplace-assets') {
@@ -2081,6 +2255,208 @@ export const App = (): React.ReactElement => {
     }
   }, [selectedNode, selectedSteamMarketplaceAssets, showTransientProjectStatus]);
 
+  const onCreateTerminalCommand = React.useCallback(
+    (input: { id: string; name: string; command: string; executionFolder: string }): void => {
+      if (!selectedNode || selectedNode.editorType !== 'terminal-command-center') {
+        return;
+      }
+      pushHistory();
+      setState((prev) =>
+        updateNodeTerminalCommandCenterData(
+          ensureTerminalCommandCenterData(prev, selectedNode.id),
+          selectedNode.id,
+          (terminalCommandCenter) => ({
+            ...terminalCommandCenter,
+            commands: [
+              ...terminalCommandCenter.commands,
+              {
+                id: input.id,
+                name: normalizeTerminalCommandName(input.name),
+                command: normalizeTerminalCommandString(input.command),
+                executionFolder: normalizeExecutionFolder(input.executionFolder),
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+              },
+            ],
+          }),
+        ),
+      );
+    },
+    [pushHistory, selectedNode],
+  );
+
+  const onPatchTerminalCommand = React.useCallback(
+    (
+      commandId: string,
+      patch: Partial<{ name: string; command: string; executionFolder: string }>,
+    ): void => {
+      if (!selectedNode || selectedNode.editorType !== 'terminal-command-center') {
+        return;
+      }
+      setState((prev) =>
+        updateNodeTerminalCommandCenterData(
+          ensureTerminalCommandCenterData(prev, selectedNode.id),
+          selectedNode.id,
+          (terminalCommandCenter) => ({
+            ...terminalCommandCenter,
+            commands: terminalCommandCenter.commands.map((command) =>
+              command.id === commandId
+                ? {
+                    ...command,
+                    name:
+                      typeof patch.name === 'string'
+                        ? normalizeTerminalCommandName(patch.name)
+                        : command.name,
+                    command:
+                      typeof patch.command === 'string'
+                        ? normalizeTerminalCommandString(patch.command)
+                        : command.command,
+                    executionFolder:
+                      typeof patch.executionFolder === 'string'
+                        ? normalizeExecutionFolder(patch.executionFolder)
+                        : command.executionFolder,
+                    updatedAt: Date.now(),
+                  }
+                : command,
+            ),
+          }),
+        ),
+      );
+    },
+    [selectedNode],
+  );
+
+  const onDeleteTerminalCommand = React.useCallback(
+    (commandId: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'terminal-command-center') {
+        return;
+      }
+      pushHistory();
+      setState((prev) =>
+        updateNodeTerminalCommandCenterData(
+          ensureTerminalCommandCenterData(prev, selectedNode.id),
+          selectedNode.id,
+          (terminalCommandCenter) => ({
+            ...terminalCommandCenter,
+            commands: terminalCommandCenter.commands.filter((command) => command.id !== commandId),
+          }),
+        ),
+      );
+    },
+    [pushHistory, selectedNode],
+  );
+
+  const onCreateTerminalPanel = React.useCallback(
+    (input: {
+      id: string;
+      title: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      defaultExecutionFolder: string | null;
+    }): void => {
+      if (!selectedNode || selectedNode.editorType !== 'terminal-command-center') {
+        return;
+      }
+      setState((prev) =>
+        updateNodeTerminalCommandCenterData(
+          ensureTerminalCommandCenterData(prev, selectedNode.id),
+          selectedNode.id,
+          (terminalCommandCenter) => ({
+            ...terminalCommandCenter,
+            panels: [
+              ...terminalCommandCenter.panels,
+              {
+                ...input,
+                title: normalizeTerminalPanelTitle(input.title),
+                defaultExecutionFolder:
+                  typeof input.defaultExecutionFolder === 'string' && input.defaultExecutionFolder.trim()
+                    ? input.defaultExecutionFolder.trim()
+                    : null,
+              },
+            ],
+          }),
+        ),
+      );
+    },
+    [selectedNode],
+  );
+
+  const onPatchTerminalPanel = React.useCallback(
+    (
+      panelId: string,
+      patch: Partial<{
+        title: string;
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        defaultExecutionFolder: string | null;
+      }>,
+    ): void => {
+      if (!selectedNode || selectedNode.editorType !== 'terminal-command-center') {
+        return;
+      }
+      setState((prev) =>
+        updateNodeTerminalCommandCenterData(
+          ensureTerminalCommandCenterData(prev, selectedNode.id),
+          selectedNode.id,
+          (terminalCommandCenter) => ({
+            ...terminalCommandCenter,
+            panels: terminalCommandCenter.panels.map((panel) =>
+              panel.id === panelId
+                ? {
+                    ...panel,
+                    title:
+                      typeof patch.title === 'string'
+                        ? normalizeTerminalPanelTitle(patch.title)
+                        : panel.title,
+                    x: typeof patch.x === 'number' && Number.isFinite(patch.x) ? Math.round(patch.x) : panel.x,
+                    y: typeof patch.y === 'number' && Number.isFinite(patch.y) ? Math.round(patch.y) : panel.y,
+                    width:
+                      typeof patch.width === 'number' && Number.isFinite(patch.width)
+                        ? patch.width
+                        : panel.width,
+                    height:
+                      typeof patch.height === 'number' && Number.isFinite(patch.height)
+                        ? patch.height
+                        : panel.height,
+                    defaultExecutionFolder:
+                      patch.defaultExecutionFolder === null
+                        ? null
+                        : typeof patch.defaultExecutionFolder === 'string'
+                          ? normalizeExecutionFolder(patch.defaultExecutionFolder)
+                          : panel.defaultExecutionFolder,
+                  }
+                : panel,
+            ),
+          }),
+        ),
+      );
+    },
+    [selectedNode],
+  );
+
+  const onDeleteTerminalPanel = React.useCallback(
+    (panelId: string): void => {
+      if (!selectedNode || selectedNode.editorType !== 'terminal-command-center') {
+        return;
+      }
+      setState((prev) =>
+        updateNodeTerminalCommandCenterData(
+          ensureTerminalCommandCenterData(prev, selectedNode.id),
+          selectedNode.id,
+          (terminalCommandCenter) => ({
+            ...terminalCommandCenter,
+            panels: terminalCommandCenter.panels.filter((panel) => panel.id !== panelId),
+          }),
+        ),
+      );
+    },
+    [selectedNode],
+  );
+
   const isUpdateProgressVisible =
     projectStatus?.action === 'update' &&
     (projectStatus.updatePhase === 'downloading' ||
@@ -2370,6 +2746,10 @@ export const App = (): React.ReactElement => {
                 onCropChange={onChangeSteamAchievementCrop}
                 onResetCrop={onResetSteamAchievementCrop}
                 onBorderStyleChange={onChangeSteamAchievementBorderStyle}
+                onBackgroundAdjustmentsChange={onChangeSteamAchievementBackgroundAdjustments}
+                onEntryImageStyleChange={onChangeSteamAchievementEntryImageStyle}
+                onAssignBackgroundAsset={onAssignSteamAchievementBackgroundAsset}
+                onRemoveBackgroundAsset={onRemoveSteamAchievementBackgroundAsset}
                 onExport={onExportSteamAchievementSet}
                 onDeleteImageAsset={onDeleteImageAsset}
               />
@@ -2406,6 +2786,28 @@ export const App = (): React.ReactElement => {
                 onResetCrop={onResetSteamMarketplaceCrop}
                 onExport={onExportSteamMarketplaceAssets}
                 onDeleteImageAsset={onDeleteImageAsset}
+              />
+            </motion.div>
+          ) : selectedNode &&
+            selectedNode.editorType === 'terminal-command-center' &&
+            selectedTerminalCommandCenter ? (
+            <motion.div
+              key={`terminal-command-center-${selectedNode.id}`}
+              className="main-view"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+            >
+              <TerminalCommandCenterEditor
+                node={selectedNode}
+                data={selectedTerminalCommandCenter}
+                onCreateCommand={onCreateTerminalCommand}
+                onPatchCommand={onPatchTerminalCommand}
+                onDeleteCommand={onDeleteTerminalCommand}
+                onCreatePanel={onCreateTerminalPanel}
+                onPatchPanel={onPatchTerminalPanel}
+                onDeletePanel={onDeleteTerminalPanel}
               />
             </motion.div>
           ) : selectedNode ? (

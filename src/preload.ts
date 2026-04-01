@@ -9,6 +9,16 @@ import type {
   SavedImageAsset,
   SteamAchievementExportRequest,
   SteamAchievementExportResult,
+  TerminalActionResult,
+  TerminalCommandRequest,
+  TerminalCreateSessionRequest,
+  TerminalCreateSessionResult,
+  TerminalOutputPayload,
+  TerminalResizeRequest,
+  TerminalSessionStatusPayload,
+  TerminalStopByCommandRequest,
+  TerminalStopByCommandResult,
+  TerminalWriteRequest,
   SteamMarketplaceExportRequest,
   SteamMarketplaceExportResult,
   UserSettings,
@@ -37,6 +47,42 @@ contextBridge.exposeInMainWorld('testoApi', {
     request: SteamMarketplaceExportRequest,
   ): Promise<SteamMarketplaceExportResult> =>
     ipcRenderer.invoke('steam-marketplace:export-assets', request) as Promise<SteamMarketplaceExportResult>,
+  terminalCreateSession: (
+    request: TerminalCreateSessionRequest,
+  ): Promise<TerminalCreateSessionResult> =>
+    ipcRenderer.invoke('terminal:create-session', request) as Promise<TerminalCreateSessionResult>,
+  terminalRunPreset: (request: TerminalCommandRequest): Promise<TerminalActionResult> =>
+    ipcRenderer.invoke('terminal:run-command', request) as Promise<TerminalActionResult>,
+  terminalWrite: (request: TerminalWriteRequest): Promise<TerminalActionResult> =>
+    ipcRenderer.invoke('terminal:write', request) as Promise<TerminalActionResult>,
+  terminalResize: (request: TerminalResizeRequest): Promise<TerminalActionResult> =>
+    ipcRenderer.invoke('terminal:resize', request) as Promise<TerminalActionResult>,
+  terminalStopSession: (sessionId: string): Promise<TerminalActionResult> =>
+    ipcRenderer.invoke('terminal:stop-session', sessionId) as Promise<TerminalActionResult>,
+  terminalStopByCommand: (
+    request: TerminalStopByCommandRequest,
+  ): Promise<TerminalStopByCommandResult> =>
+    ipcRenderer.invoke('terminal:stop-by-command', request) as Promise<TerminalStopByCommandResult>,
+  terminalCloseSession: (sessionId: string): Promise<TerminalActionResult> =>
+    ipcRenderer.invoke('terminal:close-session', sessionId) as Promise<TerminalActionResult>,
+  terminalOnOutput: (listener: (payload: TerminalOutputPayload) => void): (() => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: TerminalOutputPayload): void => {
+      listener(payload);
+    };
+    ipcRenderer.on('terminal:output', wrapped);
+    return () => {
+      ipcRenderer.removeListener('terminal:output', wrapped);
+    };
+  },
+  terminalOnStatus: (listener: (payload: TerminalSessionStatusPayload) => void): (() => void) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, payload: TerminalSessionStatusPayload): void => {
+      listener(payload);
+    };
+    ipcRenderer.on('terminal:status', wrapped);
+    return () => {
+      ipcRenderer.removeListener('terminal:status', wrapped);
+    };
+  },
   exportCustomTheme: (theme: CustomThemeDefinition): Promise<boolean> =>
     ipcRenderer.invoke('themes:export-custom', theme) as Promise<boolean>,
   importCustomTheme: (): Promise<CustomThemeDefinition | null> =>
@@ -86,6 +132,8 @@ contextBridge.exposeInMainWorld('testoApi', {
     ipcRenderer.invoke('project:launch-state') as Promise<LaunchState>,
   openProjectFileDialog: (): Promise<boolean> =>
     ipcRenderer.invoke('project:open-dialog') as Promise<boolean>,
+  terminalPickExecutionFolder: (defaultPath?: string): Promise<string | null> =>
+    ipcRenderer.invoke('terminal:pick-execution-folder', defaultPath) as Promise<string | null>,
   openRecentProject: (filePath: string): Promise<boolean> =>
     ipcRenderer.invoke('project:open-recent', filePath) as Promise<boolean>,
   createNewProject: (): Promise<boolean> =>

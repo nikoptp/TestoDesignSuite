@@ -83,6 +83,7 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
     spreadsheet?: unknown;
     steamAchievementArt?: unknown;
     steamMarketplaceAssets?: unknown;
+    terminalCommandCenter?: unknown;
   };
 
   if (typeof obj.noteboard !== 'undefined') {
@@ -236,6 +237,8 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
     const steamAchievementArt = obj.steamAchievementArt as {
       presetId?: unknown;
       borderStyle?: unknown;
+      backgroundAdjustments?: unknown;
+      backgroundAssetRelativePaths?: unknown;
       entries?: unknown;
     };
     const borderStyle = steamAchievementArt.borderStyle as {
@@ -250,11 +253,21 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
       gradientColor?: unknown;
       backgroundMode?: unknown;
       backgroundOpacity?: unknown;
+      backgroundGradientOverlayEnabled?: unknown;
+      backgroundGradientOpacity?: unknown;
       backgroundAngle?: unknown;
       backgroundColor?: unknown;
       backgroundMidColor?: unknown;
       backgroundGradientColor?: unknown;
       backgroundImageRelativePath?: unknown;
+    } | undefined;
+    const backgroundAdjustments = steamAchievementArt.backgroundAdjustments as {
+      saturation?: unknown;
+      contrast?: unknown;
+      blurEnabled?: unknown;
+      blurRadius?: unknown;
+      blurOpacity?: unknown;
+      vignette?: unknown;
     } | undefined;
     if (
       typeof steamAchievementArt.presetId !== 'string' ||
@@ -274,12 +287,30 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
             borderStyle.backgroundMode !== 'gradient' &&
             borderStyle.backgroundMode !== 'image') ||
           typeof borderStyle.backgroundOpacity !== 'number' ||
+          typeof borderStyle.backgroundGradientOverlayEnabled !== 'boolean' ||
+          (typeof borderStyle.backgroundGradientOpacity !== 'undefined' &&
+            typeof borderStyle.backgroundGradientOpacity !== 'number') ||
           typeof borderStyle.backgroundAngle !== 'number' ||
           typeof borderStyle.backgroundColor !== 'string' ||
           typeof borderStyle.backgroundMidColor !== 'string' ||
           typeof borderStyle.backgroundGradientColor !== 'string' ||
           (borderStyle.backgroundImageRelativePath !== null &&
             typeof borderStyle.backgroundImageRelativePath !== 'string'))) ||
+      (typeof steamAchievementArt.backgroundAdjustments !== 'undefined' &&
+        (typeof backgroundAdjustments !== 'object' ||
+          backgroundAdjustments === null ||
+          typeof backgroundAdjustments.saturation !== 'number' ||
+          typeof backgroundAdjustments.contrast !== 'number' ||
+          typeof backgroundAdjustments.blurEnabled !== 'boolean' ||
+          typeof backgroundAdjustments.blurRadius !== 'number' ||
+          typeof backgroundAdjustments.blurOpacity !== 'number' ||
+          (typeof backgroundAdjustments.vignette !== 'undefined' &&
+            typeof backgroundAdjustments.vignette !== 'number'))) ||
+      (typeof steamAchievementArt.backgroundAssetRelativePaths !== 'undefined' &&
+        (!Array.isArray(steamAchievementArt.backgroundAssetRelativePaths) ||
+          !steamAchievementArt.backgroundAssetRelativePaths.every(
+            (value) => typeof value === 'string',
+          ))) ||
       !Array.isArray(steamAchievementArt.entries)
     ) {
       return false;
@@ -294,10 +325,27 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
         name?: unknown;
         sourceImageRelativePath?: unknown;
         crop?: unknown;
+        imageStyle?: unknown;
         createdAt?: unknown;
         updatedAt?: unknown;
       };
       const crop = item.crop as { zoom?: unknown; offsetX?: unknown; offsetY?: unknown } | undefined;
+      const imageStyle = item.imageStyle as {
+        adjustments?: {
+          saturation?: unknown;
+          contrast?: unknown;
+          blurEnabled?: unknown;
+          blurRadius?: unknown;
+          blurOpacity?: unknown;
+        };
+        shadow?: {
+          enabled?: unknown;
+          blur?: unknown;
+          opacity?: unknown;
+          offsetX?: unknown;
+          offsetY?: unknown;
+        };
+      } | undefined;
       return (
         typeof item.id === 'string' &&
         typeof item.name === 'string' &&
@@ -307,6 +355,23 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
         typeof crop.zoom === 'number' &&
         typeof crop.offsetX === 'number' &&
         typeof crop.offsetY === 'number' &&
+        (typeof item.imageStyle === 'undefined' ||
+          (typeof imageStyle === 'object' &&
+            imageStyle !== null &&
+            typeof imageStyle.adjustments === 'object' &&
+            imageStyle.adjustments !== null &&
+            typeof imageStyle.adjustments.saturation === 'number' &&
+            typeof imageStyle.adjustments.contrast === 'number' &&
+            typeof imageStyle.adjustments.blurEnabled === 'boolean' &&
+            typeof imageStyle.adjustments.blurRadius === 'number' &&
+            typeof imageStyle.adjustments.blurOpacity === 'number' &&
+            typeof imageStyle.shadow === 'object' &&
+            imageStyle.shadow !== null &&
+            typeof imageStyle.shadow.enabled === 'boolean' &&
+            typeof imageStyle.shadow.blur === 'number' &&
+            typeof imageStyle.shadow.opacity === 'number' &&
+            typeof imageStyle.shadow.offsetX === 'number' &&
+            typeof imageStyle.shadow.offsetY === 'number')) &&
         typeof item.createdAt === 'number' &&
         typeof item.updatedAt === 'number'
       );
@@ -444,6 +509,73 @@ const isNodeWorkspaceData = (value: unknown): value is NodeWorkspaceData => {
     });
 
     if (!entriesValid) {
+      return false;
+    }
+  }
+
+  if (typeof obj.terminalCommandCenter !== 'undefined') {
+    if (typeof obj.terminalCommandCenter !== 'object' || obj.terminalCommandCenter === null) {
+      return false;
+    }
+
+    const terminalCommandCenter = obj.terminalCommandCenter as {
+      commands?: unknown;
+      panels?: unknown;
+    };
+
+    if (!Array.isArray(terminalCommandCenter.commands) || !Array.isArray(terminalCommandCenter.panels)) {
+      return false;
+    }
+
+    const commandsValid = terminalCommandCenter.commands.every((command) => {
+      if (typeof command !== 'object' || command === null) {
+        return false;
+      }
+      const item = command as {
+        id?: unknown;
+        name?: unknown;
+        command?: unknown;
+        executionFolder?: unknown;
+        createdAt?: unknown;
+        updatedAt?: unknown;
+      };
+      return (
+        typeof item.id === 'string' &&
+        typeof item.name === 'string' &&
+        typeof item.command === 'string' &&
+        typeof item.executionFolder === 'string' &&
+        typeof item.createdAt === 'number' &&
+        typeof item.updatedAt === 'number'
+      );
+    });
+    if (!commandsValid) {
+      return false;
+    }
+
+    const panelsValid = terminalCommandCenter.panels.every((panel) => {
+      if (typeof panel !== 'object' || panel === null) {
+        return false;
+      }
+      const item = panel as {
+        id?: unknown;
+        title?: unknown;
+        x?: unknown;
+        y?: unknown;
+        width?: unknown;
+        height?: unknown;
+        defaultExecutionFolder?: unknown;
+      };
+      return (
+        typeof item.id === 'string' &&
+        typeof item.title === 'string' &&
+        typeof item.x === 'number' &&
+        typeof item.y === 'number' &&
+        typeof item.width === 'number' &&
+        typeof item.height === 'number' &&
+        (item.defaultExecutionFolder === null || typeof item.defaultExecutionFolder === 'string')
+      );
+    });
+    if (!panelsValid) {
       return false;
     }
   }

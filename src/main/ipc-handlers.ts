@@ -9,6 +9,14 @@ import type {
   LaunchState,
   SteamAchievementExportRequest,
   SteamAchievementExportResult,
+  TerminalActionResult,
+  TerminalCommandRequest,
+  TerminalCreateSessionRequest,
+  TerminalCreateSessionResult,
+  TerminalResizeRequest,
+  TerminalStopByCommandRequest,
+  TerminalStopByCommandResult,
+  TerminalWriteRequest,
   SteamMarketplaceExportRequest,
   SteamMarketplaceExportResult,
 } from '../shared/types';
@@ -33,10 +41,21 @@ type RegisterIpcHandlersDeps = {
   exportSteamMarketplaceAssets: (
     request: SteamMarketplaceExportRequest,
   ) => Promise<SteamMarketplaceExportResult>;
+  terminalCreateSession: (
+    ownerWebContentsId: number,
+    request: TerminalCreateSessionRequest,
+  ) => Promise<TerminalCreateSessionResult>;
+  terminalRunCommand: (request: TerminalCommandRequest) => TerminalActionResult;
+  terminalWrite: (request: TerminalWriteRequest) => TerminalActionResult;
+  terminalResize: (request: TerminalResizeRequest) => TerminalActionResult;
+  terminalStopSession: (sessionId: string) => TerminalActionResult;
+  terminalStopByCommand: (request: TerminalStopByCommandRequest) => TerminalStopByCommandResult;
+  terminalCloseSession: (sessionId: string) => TerminalActionResult;
   exportCustomThemeToFile: (theme: CustomThemeDefinition) => Promise<boolean>;
   importCustomThemeFromFile: () => Promise<CustomThemeDefinition | null>;
   getLaunchState: () => Promise<LaunchState>;
   openProjectFile: () => Promise<boolean>;
+  pickExecutionFolder: (defaultPath?: string) => Promise<string | null>;
   openRecentProject: (filePath: string) => Promise<boolean>;
   createNewProject: () => Promise<boolean>;
   checkForGithubUpdates: (manual: boolean) => Promise<void>;
@@ -53,10 +72,18 @@ export const registerIpcHandlers = ({
   deleteImageAsset,
   exportSteamAchievementSet,
   exportSteamMarketplaceAssets,
+  terminalCreateSession,
+  terminalRunCommand,
+  terminalWrite,
+  terminalResize,
+  terminalStopSession,
+  terminalStopByCommand,
+  terminalCloseSession,
   exportCustomThemeToFile,
   importCustomThemeFromFile,
   getLaunchState,
   openProjectFile,
+  pickExecutionFolder,
   openRecentProject,
   createNewProject,
   checkForGithubUpdates,
@@ -92,12 +119,39 @@ export const registerIpcHandlers = ({
     'steam-marketplace:export-assets',
     async (_event, request: SteamMarketplaceExportRequest) => exportSteamMarketplaceAssets(request),
   );
+  ipcMain.handle(
+    'terminal:create-session',
+    async (event, request: TerminalCreateSessionRequest) =>
+      terminalCreateSession(event.sender.id, request),
+  );
+  ipcMain.handle('terminal:run-command', async (_event, request: TerminalCommandRequest) =>
+    terminalRunCommand(request),
+  );
+  ipcMain.handle('terminal:write', async (_event, request: TerminalWriteRequest) =>
+    terminalWrite(request),
+  );
+  ipcMain.handle('terminal:resize', async (_event, request: TerminalResizeRequest) =>
+    terminalResize(request),
+  );
+  ipcMain.handle('terminal:stop-session', async (_event, sessionId: string) =>
+    terminalStopSession(sessionId),
+  );
+  ipcMain.handle(
+    'terminal:stop-by-command',
+    async (_event, request: TerminalStopByCommandRequest) => terminalStopByCommand(request),
+  );
+  ipcMain.handle('terminal:close-session', async (_event, sessionId: string) =>
+    terminalCloseSession(sessionId),
+  );
   ipcMain.handle('themes:export-custom', async (_event, theme: CustomThemeDefinition) =>
     exportCustomThemeToFile(theme),
   );
   ipcMain.handle('themes:import-custom', async () => importCustomThemeFromFile());
   ipcMain.handle('project:launch-state', async () => getLaunchState());
   ipcMain.handle('project:open-dialog', async () => openProjectFile());
+  ipcMain.handle('terminal:pick-execution-folder', async (_event, defaultPath?: string) =>
+    pickExecutionFolder(defaultPath),
+  );
   ipcMain.handle('project:open-recent', async (_event, filePath: string) =>
     openRecentProject(filePath),
   );

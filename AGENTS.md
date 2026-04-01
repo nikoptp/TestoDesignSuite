@@ -113,9 +113,11 @@
 - Feature map: `docs/features/feature-map.md`
 - Agent architecture reference: `docs/architecture/agent-architecture-reference.md`
 - Agent change checklist: `docs/architecture/agent-change-checklist.md`
+- UI style guide: `docs/architecture/ui-style-guide.md`
 - Testing strategy: `docs/architecture/testing-plan-v1.md`
 
 ## Change Log
+- 2026-04-01: Added `terminal-command-center` editor type with node-local command presets, draggable/resizable terminal panel layouts, and PowerShell session IPC runtime for creating/running/stopping/closing terminal sessions with streamed output.
 - 2026-02-10: Electron Forge project initialized and moved to repository root.
 - 2026-02-10: Root project install verified (`npm install`, `npm run lint`, `npm start`).
 - 2026-02-10: Implemented app shell with category/subcategory navigation and placeholder naming in renderer UI.
@@ -168,6 +170,8 @@
 - 2026-03-12: Hardened Windows in-app updater relaunch flow so the detached silent NSIS helper waits for install completion, avoids `start`-based installer invocation, and reopens the packaged app executable after update.
 - 2026-03-13: Added `steam-marketplace-assets` editor type with per-preset crop/overlay state, Steamworks marketplace preset catalog, optional logo upload/overlay workflow, preview-card single export actions, shared image-workbench primitives, and main/preload export IPC for filtered Steam marketplace asset exports.
 - 2026-03-14: Added shared release tag/version validation (`src/shared/release-version.ts`), unit coverage for tag/package mismatch handling, and wired the GitHub release workflow to the repository script used for the same package-version check.
+- 2026-03-15: Expanded the Steam achievement art editor with marketplace-style background asset picking, optional gradient-over-image backgrounds, background/image saturation-contrast-blur controls, and per-entry artwork drop shadow styling across preview/export paths.
+- 2026-04-01: Applied app-wide glass surface styling tokens across major editor containers and documented the visual system in `docs/architecture/ui-style-guide.md`.
 
 ## Open Questions
 - Single-window only for MVP, or multi-window support early?

@@ -77,6 +77,21 @@
   --kanban-column-default: #5f6f8a;
   --splash-image-shadow-start: rgba(0, 0, 0, 0.24);
   --splash-image-shadow-end: rgba(0, 0, 0, 0.44);
+  --glass-surface-bg: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel-bg-start) 58%, rgba(226, 232, 240, 0.12)),
+    color-mix(in srgb, var(--panel-bg-end) 70%, rgba(15, 23, 42, 0.26))
+  );
+  --glass-surface-bg-soft: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-soft) 70%, rgba(226, 232, 240, 0.08)),
+    color-mix(in srgb, var(--panel-bg-end) 74%, rgba(15, 23, 42, 0.2))
+  );
+  --glass-surface-border: color-mix(in srgb, var(--dialog-border) 66%, rgba(255, 255, 255, 0.2));
+  --glass-surface-shadow:
+    0 16px 30px color-mix(in srgb, var(--context-shadow) 48%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --glass-surface-blur: blur(14px) saturate(128%);
 
   color: var(--app-text);
   background: var(--app-bg);
@@ -162,6 +177,21 @@
   --kanban-column-default: #5f6f8a;
   --splash-image-shadow-start: rgba(0, 0, 0, 0.24);
   --splash-image-shadow-end: rgba(0, 0, 0, 0.44);
+  --glass-surface-bg: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel-bg-start) 64%, rgba(255, 255, 255, 0.09)),
+    color-mix(in srgb, var(--panel-bg-end) 76%, rgba(12, 16, 22, 0.26))
+  );
+  --glass-surface-bg-soft: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-soft) 74%, rgba(255, 255, 255, 0.06)),
+    color-mix(in srgb, var(--panel-bg-end) 82%, rgba(12, 16, 22, 0.22))
+  );
+  --glass-surface-border: color-mix(in srgb, var(--dialog-border) 72%, rgba(255, 255, 255, 0.14));
+  --glass-surface-shadow:
+    0 14px 28px color-mix(in srgb, var(--context-shadow) 52%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --glass-surface-blur: blur(12px) saturate(120%);
 }
 
 :root[data-theme='evergreen'] {
@@ -243,6 +273,21 @@
   --kanban-column-default: #5f6f8a;
   --splash-image-shadow-start: rgba(0, 0, 0, 0.24);
   --splash-image-shadow-end: rgba(0, 0, 0, 0.44);
+  --glass-surface-bg: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel-bg-start) 62%, rgba(255, 239, 222, 0.09)),
+    color-mix(in srgb, var(--panel-bg-end) 78%, rgba(30, 18, 10, 0.24))
+  );
+  --glass-surface-bg-soft: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-soft) 76%, rgba(255, 239, 222, 0.06)),
+    color-mix(in srgb, var(--panel-bg-end) 84%, rgba(30, 18, 10, 0.2))
+  );
+  --glass-surface-border: color-mix(in srgb, var(--dialog-border) 74%, rgba(255, 232, 210, 0.14));
+  --glass-surface-shadow:
+    0 14px 28px color-mix(in srgb, var(--context-shadow) 52%, transparent),
+    inset 0 1px 0 rgba(255, 244, 233, 0.08);
+  --glass-surface-blur: blur(12px) saturate(118%);
 }
 
 * {
@@ -3792,6 +3837,48 @@ input[type='range']::-moz-range-thumb {
   pointer-events: none;
 }
 
+.steam-achievement-snap-image-bounds {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+  border: 1px solid rgba(120, 213, 255, 0.48);
+  box-shadow:
+    0 0 0 1px rgba(9, 18, 32, 0.38),
+    inset 0 0 18px rgba(120, 213, 255, 0.08),
+    0 0 18px rgba(120, 213, 255, 0.16);
+}
+
+.steam-achievement-snap-image-line {
+  position: absolute;
+  opacity: 0.8;
+}
+
+.steam-achievement-snap-image-line.vertical {
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(120, 213, 255, 0.85) 0 6px,
+    transparent 6px 12px
+  );
+}
+
+.steam-achievement-snap-image-line.horizontal {
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  background-image: repeating-linear-gradient(
+    to right,
+    rgba(120, 213, 255, 0.85) 0 6px,
+    transparent 6px 12px
+  );
+}
+
 .steam-achievement-guide-line {
   position: absolute;
   background: rgba(255, 255, 255, 0.18);
@@ -4343,4 +4430,380 @@ input[type='range']::-moz-range-thumb {
   .steam-marketplace-preview-grid {
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
+}
+
+.terminal-command-center {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 12px;
+}
+
+.terminal-command-center-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.terminal-create-panel {
+  white-space: nowrap;
+}
+
+.terminal-command-center-layout {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 12px;
+}
+
+.terminal-command-list {
+  min-height: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--panel-bg) 90%, #0f172a 10%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.terminal-command-create {
+  display: grid;
+  gap: 8px;
+}
+
+.terminal-command-items {
+  overflow: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.terminal-command-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 6px;
+  background: color-mix(in srgb, var(--panel-bg) 88%, #111827 12%);
+}
+
+.terminal-command-delete-confirm {
+  grid-column: 1 / -1;
+  border: 1px solid color-mix(in srgb, var(--danger-border) 64%, transparent);
+  border-radius: 8px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--danger-bg) 58%, var(--panel-bg));
+}
+
+.terminal-command-delete-confirm p {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+}
+
+.terminal-command-delete-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.terminal-command-name {
+  min-width: 0;
+}
+
+.terminal-empty-help {
+  color: var(--app-subtext);
+  font-size: 0.86rem;
+}
+
+.terminal-status-chip {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  background: color-mix(in srgb, var(--panel-bg) 50%, rgba(15, 23, 42, 0.38));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.terminal-status-chip.is-running {
+  color: #67ff7e;
+}
+
+.terminal-status-chip.is-idle {
+  color: #8ab4ff;
+}
+
+.terminal-status-chip.is-warning {
+  color: #ffd866;
+}
+
+.terminal-status-chip.is-stopped {
+  color: #ff7a7a;
+}
+
+.terminal-status-chip.is-error {
+  color: #ff6b6b;
+}
+
+.terminal-canvas-shell {
+  position: relative;
+  min-height: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--panel-bg) 92%, #0b1220 8%),
+    color-mix(in srgb, var(--panel-bg) 80%, #05080f 20%)
+  );
+  cursor: default;
+}
+
+.terminal-canvas-zoom-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 68%, rgba(255, 255, 255, 0.16));
+  background: color-mix(in srgb, var(--panel-bg) 50%, rgba(15, 23, 42, 0.48));
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+}
+
+.terminal-canvas-zoom-controls button {
+  padding: 3px 8px;
+}
+
+.terminal-canvas-zoom-controls span {
+  min-width: 44px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--app-text);
+}
+
+.terminal-canvas-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.14) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.14) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+}
+
+.terminal-canvas-panels {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+body.is-panning-terminal-canvas,
+body.is-panning-terminal-canvas * {
+  cursor: move !important;
+  user-select: none !important;
+}
+
+.terminal-panel {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 70%, rgba(255, 255, 255, 0.12));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel-bg) 70%, #020617 30%);
+  box-shadow:
+    0 20px 38px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+.terminal-panel-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--panel-border) 70%, rgba(255, 255, 255, 0.12));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--panel-bg) 46%, rgba(226, 232, 240, 0.18)),
+    color-mix(in srgb, var(--panel-bg) 58%, rgba(15, 23, 42, 0.34))
+  );
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  cursor: grab;
+}
+
+.terminal-panel-header:active {
+  cursor: grabbing;
+}
+
+.terminal-chrome-status {
+  flex: 0 0 auto;
+}
+
+.terminal-panel-chrome-placeholder {
+  width: 20px;
+  height: 20px;
+  display: inline-block;
+}
+
+.terminal-panel-title-shell {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.terminal-panel-title {
+  font-size: 0.78rem;
+  height: 28px;
+  border-radius: 8px;
+  border-color: color-mix(in srgb, var(--panel-border) 66%, rgba(255, 255, 255, 0.2));
+  background: color-mix(in srgb, var(--panel-bg) 68%, rgba(15, 23, 42, 0.45));
+  color: color-mix(in srgb, var(--app-text) 86%, #cbd5e1);
+  letter-spacing: 0.02em;
+  font-family: "Cascadia Mono", Consolas, Menlo, Monaco, monospace;
+}
+
+.terminal-panel-title:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--active-item-border) 65%, #ffffff 20%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--active-item-border) 36%, transparent);
+}
+
+.terminal-panel-controls {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.terminal-panel-controls button {
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border-radius: 7px;
+  border-color: color-mix(in srgb, var(--panel-border) 72%, rgba(255, 255, 255, 0.16));
+  background: color-mix(in srgb, var(--panel-bg) 56%, rgba(15, 23, 42, 0.48));
+}
+
+.terminal-panel-controls button:hover {
+  background: color-mix(in srgb, var(--active-item-bg) 40%, rgba(255, 255, 255, 0.08));
+}
+
+.terminal-panel-viewport {
+  min-height: 0;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel-bg) 40%, rgba(148, 163, 184, 0.12)),
+      color-mix(in srgb, var(--panel-bg) 62%, rgba(15, 23, 42, 0.42))
+    );
+  padding: 0;
+  overflow: hidden;
+  backdrop-filter: blur(14px) saturate(128%);
+  -webkit-backdrop-filter: blur(14px) saturate(128%);
+}
+
+.terminal-panel-xterm {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 8px;
+  background: transparent;
+}
+
+.terminal-panel-xterm .xterm {
+  height: 100%;
+}
+
+.terminal-panel-xterm .xterm-viewport,
+.terminal-panel-xterm .xterm-screen,
+.terminal-panel-xterm .xterm-scroll-area {
+  background: transparent !important;
+}
+
+.terminal-panel-resize-handle {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+}
+
+.terminal-panel-error {
+  position: absolute;
+  left: 10px;
+  right: 28px;
+  bottom: 10px;
+  margin: 0;
+  font-size: 0.75rem;
+  color: #ff8181;
+}
+
+@media (max-width: 1200px) {
+  .terminal-command-center-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+}
+
+/* App-wide glass language for container surfaces */
+.glass-surface,
+.sidebar,
+.main-panel,
+.project-status,
+.dialog,
+.settings-dialog,
+.dialog-content,
+.kanban-toolbar,
+.kanban-column,
+.kanban-details-sidebar,
+.kanban-context-menu,
+.steam-achievement-entry-list,
+.steam-achievement-workbench,
+.steam-achievement-assets,
+.steam-achievement-style-sidebar,
+.steam-marketplace-entry-list,
+.steam-marketplace-workbench,
+.steam-marketplace-assets,
+.terminal-command-list,
+.terminal-canvas-shell,
+.terminal-panel,
+.terminal-panel-header,
+.terminal-panel-viewport {
+  background: var(--glass-surface-bg);
+  border-color: var(--glass-surface-border);
+  box-shadow: var(--glass-surface-shadow);
+  backdrop-filter: var(--glass-surface-blur);
+  -webkit-backdrop-filter: var(--glass-surface-blur);
+}
+
+.glass-surface-soft,
+.tree-item.editing,
+.settings-input,
+.kanban-card,
+.kanban-details-preview,
+.steam-achievement-entry,
+.steam-marketplace-entry-card,
+.steam-marketplace-preview-card {
+  background: var(--glass-surface-bg-soft);
+  border-color: var(--glass-surface-border);
 }

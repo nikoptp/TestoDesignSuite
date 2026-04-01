@@ -12,6 +12,7 @@ import type {
   ProjectStatusPayload,
   SteamAchievementArtData,
   SteamMarketplaceAssetData,
+  TerminalCommandCenterData,
   SpreadsheetData,
   SpreadsheetSheet,
   UserSettings,
@@ -46,6 +47,10 @@ import {
   createDefaultSteamMarketplaceAssetData,
   normalizeSteamMarketplaceAssetData,
 } from '../steam-marketplace/steam-marketplace-assets';
+import {
+  createDefaultTerminalCommandCenterData,
+  normalizeTerminalCommandCenterData,
+} from '../terminal-command-center/terminal-command-center';
 
 export type UiState = {
   editingNodeId: string | null;
@@ -736,6 +741,8 @@ const DEFAULT_SPREADSHEET_DATA: SpreadsheetData = {
 const DEFAULT_STEAM_ACHIEVEMENT_ART_DATA: SteamAchievementArtData = createDefaultSteamAchievementArtData();
 const DEFAULT_STEAM_MARKETPLACE_ASSET_DATA: SteamMarketplaceAssetData =
   createDefaultSteamMarketplaceAssetData();
+const DEFAULT_TERMINAL_COMMAND_CENTER_DATA: TerminalCommandCenterData =
+  createDefaultTerminalCommandCenterData();
 
 export const getKanbanBoardForNode = (
   state: PersistedTreeState,
@@ -792,6 +799,18 @@ export const getSteamMarketplaceAssetsForNode = (
   }
 
   return normalizeSteamMarketplaceAssetData(steamMarketplaceAssets);
+};
+
+export const getTerminalCommandCenterForNode = (
+  state: PersistedTreeState,
+  nodeId: string,
+): TerminalCommandCenterData => {
+  const terminalCommandCenter = state.nodeDataById[nodeId]?.terminalCommandCenter;
+  if (!terminalCommandCenter) {
+    return DEFAULT_TERMINAL_COMMAND_CENTER_DATA;
+  }
+
+  return normalizeTerminalCommandCenterData(terminalCommandCenter);
 };
 
 export const ensureKanbanData = (
@@ -1325,6 +1344,10 @@ export const ensureSteamAchievementArtData = (
     !steamAchievementArt ||
     steamAchievementArt.presetId !== nextSteamAchievementArt.presetId ||
     JSON.stringify(steamAchievementArt.borderStyle) !== JSON.stringify(nextSteamAchievementArt.borderStyle) ||
+    JSON.stringify(steamAchievementArt.backgroundAdjustments) !==
+      JSON.stringify(nextSteamAchievementArt.backgroundAdjustments) ||
+    JSON.stringify(steamAchievementArt.backgroundAssetRelativePaths ?? []) !==
+      JSON.stringify(nextSteamAchievementArt.backgroundAssetRelativePaths ?? []) ||
     steamAchievementArt.entries.length !== nextSteamAchievementArt.entries.length ||
     steamAchievementArt.entries.some((entry, index) => {
       const nextEntry = nextSteamAchievementArt.entries[index];
@@ -1338,6 +1361,7 @@ export const ensureSteamAchievementArtData = (
         entry.crop.zoom !== nextEntry.crop.zoom ||
         entry.crop.offsetX !== nextEntry.crop.offsetX ||
         entry.crop.offsetY !== nextEntry.crop.offsetY ||
+        JSON.stringify(entry.imageStyle) !== JSON.stringify(nextEntry.imageStyle) ||
         entry.createdAt !== nextEntry.createdAt ||
         entry.updatedAt !== nextEntry.updatedAt
       );
@@ -1382,6 +1406,33 @@ export const ensureSteamMarketplaceAssetsData = (
       [nodeId]: {
         ...(workspace ?? {}),
         steamMarketplaceAssets: nextSteamMarketplaceAssets,
+      },
+    },
+  };
+};
+
+export const ensureTerminalCommandCenterData = (
+  state: PersistedTreeState,
+  nodeId: string,
+): PersistedTreeState => {
+  const workspace = state.nodeDataById[nodeId];
+  const terminalCommandCenter = workspace?.terminalCommandCenter;
+  const nextTerminalCommandCenter = normalizeTerminalCommandCenterData(terminalCommandCenter);
+
+  const hasEffectiveChange =
+    !terminalCommandCenter || JSON.stringify(terminalCommandCenter) !== JSON.stringify(nextTerminalCommandCenter);
+
+  if (!hasEffectiveChange && workspace) {
+    return state;
+  }
+
+  return {
+    ...state,
+    nodeDataById: {
+      ...state.nodeDataById,
+      [nodeId]: {
+        ...(workspace ?? {}),
+        terminalCommandCenter: nextTerminalCommandCenter,
       },
     },
   };

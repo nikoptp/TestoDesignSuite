@@ -9,6 +9,25 @@ export type RasterSize = {
   height: number;
 };
 
+export type SimpleImageAdjustmentState = {
+  saturation: number;
+  contrast: number;
+};
+
+export type BlurLayerState = {
+  enabled: boolean;
+  blurRadius: number;
+  opacity: number;
+};
+
+export type ShadowLayerState = {
+  enabled: boolean;
+  blur: number;
+  opacity: number;
+  offsetX: number;
+  offsetY: number;
+};
+
 export const DEFAULT_MIN_COVER_ZOOM = 1;
 export const DEFAULT_MAX_COVER_ZOOM = 12;
 
@@ -181,6 +200,61 @@ export const renderCoverBitmap = (input: {
   return output;
 };
 
+export const renderScaledBitmap = (input: {
+  sourceWidth: number;
+  sourceHeight: number;
+  sourceBgra: Uint8Array;
+  width: number;
+  height: number;
+}): Uint8Array => {
+  const targetWidth = Math.max(1, Math.round(input.width));
+  const targetHeight = Math.max(1, Math.round(input.height));
+  const output = new Uint8Array(targetWidth * targetHeight * 4);
+
+  for (let y = 0; y < targetHeight; y += 1) {
+    for (let x = 0; x < targetWidth; x += 1) {
+      const sourceX = ((x + 0.5) / targetWidth) * input.sourceWidth - 0.5;
+      const sourceY = ((y + 0.5) / targetHeight) * input.sourceHeight - 0.5;
+      const offset = (y * targetWidth + x) * 4;
+
+      output[offset] = sampleBilinearChannel(
+        input.sourceBgra,
+        input.sourceWidth,
+        input.sourceHeight,
+        sourceX,
+        sourceY,
+        0,
+      );
+      output[offset + 1] = sampleBilinearChannel(
+        input.sourceBgra,
+        input.sourceWidth,
+        input.sourceHeight,
+        sourceX,
+        sourceY,
+        1,
+      );
+      output[offset + 2] = sampleBilinearChannel(
+        input.sourceBgra,
+        input.sourceWidth,
+        input.sourceHeight,
+        sourceX,
+        sourceY,
+        2,
+      );
+      output[offset + 3] = sampleBilinearChannel(
+        input.sourceBgra,
+        input.sourceWidth,
+        input.sourceHeight,
+        sourceX,
+        sourceY,
+        3,
+      );
+    }
+  }
+
+  return output;
+};
+
 export const createGrayscaleBitmap = (sourceBgra: Uint8Array): Uint8Array => {
   const next = new Uint8Array(sourceBgra);
   for (let index = 0; index < next.length; index += 4) {
@@ -194,6 +268,118 @@ export const createGrayscaleBitmap = (sourceBgra: Uint8Array): Uint8Array => {
   }
   return next;
 };
+
+export const blurBitmap = (
+  bitmap: Uint8Array,
+  width: number,
+  height: number,
+  radius: number,
+): Uint8Array => {
+  if (radius <= 0) {
+    return new Uint8Array(bitmap);
+  }
+  const next = new Uint8Array(bitmap.length);
+  const size = Math.max(1, Math.round(radius * 0.5));
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      let b = 0;
+      let g = 0;
+      let r = 0;
+      let a = 0;
+      let count = 0;
+      for (let sampleY = Math.max(0, y - size); sampleY <= Math.min(height - 1, y + size); sampleY += 1) {
+        for (let sampleX = Math.max(0, x - size); sampleX <= Math.min(width - 1, x + size); sampleX += 1) {
+          const offset = (sampleY * width + sampleX) * 4;
+          b += bitmap[offset];
+          g += bitmap[offset + 1];
+          r += bitmap[offset + 2];
+          a += bitmap[offset + 3];
+          count += 1;
+        }
+      }
+      const offset = (y * width + x) * 4;
+      next[offset] = Math.round(b / count);
+      next[offset + 1] = Math.round(g / count);
+      next[offset + 2] = Math.round(r / count);
+      next[offset + 3] = Math.round(a / count);
+    }
+  }
+  return next;
+};
+
+const applyContrastChannel = (value: number, contrast: number): number =>
+  Math.max(0, Math.min(255, Math.round((value - 128) * contrast + 128)));
+
+export const applyImageAdjustments = (
+  bitmap: Uint8Array,
+  width: number,
+  height: number,
+  adjustments: SimpleImageAdjustmentState,
+): Uint8Array => {
+  const next = new Uint8Array(bitmap);
+  const saturation = adjustments.saturation;
+  const contrast = adjustments.contrast;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      const blue = next[offset];
+      const green = next[offset + 1];
+      const red = next[offset + 2];
+      const luminance = red * 0.299 + green * 0.587 + blue * 0.114;
+
+      let adjustedBlue = luminance + (blue - luminance) * saturation;
+      let adjustedGreen = luminance + (green - luminance) * saturation;
+      let adjustedRed = luminance + (red - luminance) * saturation;
+
+      adjustedBlue = applyContrastChannel(adjustedBlue, contrast);
+      adjustedGreen = applyContrastChannel(adjustedGreen, contrast);
+      adjustedRed = applyContrastChannel(adjustedRed, contrast);
+
+      next[offset] = Math.max(0, Math.min(255, Math.round(adjustedBlue)));
+      next[offset + 1] = Math.max(0, Math.min(255, Math.round(adjustedGreen)));
+      next[offset + 2] = Math.max(0, Math.min(255, Math.round(adjustedRed)));
+    }
+  }
+
+  return next;
+};
+
+const blendChannel = (source: number, target: number, alpha: number): number =>
+  Math.round(source * (1 - alpha) + target * alpha);
+
+export const applyBlurLayer = (
+  bitmap: Uint8Array,
+  width: number,
+  height: number,
+  blur: BlurLayerState,
+): Uint8Array => {
+  if (!blur.enabled || blur.opacity <= 0 || blur.blurRadius <= 0) {
+    return new Uint8Array(bitmap);
+  }
+  const next = new Uint8Array(bitmap);
+  const blurred = blurBitmap(bitmap, width, height, blur.blurRadius);
+  for (let index = 0; index < next.length; index += 4) {
+    next[index] = blendChannel(next[index], blurred[index], blur.opacity);
+    next[index + 1] = blendChannel(next[index + 1], blurred[index + 1], blur.opacity);
+    next[index + 2] = blendChannel(next[index + 2], blurred[index + 2], blur.opacity);
+    next[index + 3] = Math.max(next[index + 3], blurred[index + 3]);
+  }
+  return next;
+};
+
+export const buildCssImageAdjustmentFilter = (adjustments: SimpleImageAdjustmentState): string =>
+  `saturate(${adjustments.saturation}) contrast(${adjustments.contrast})`;
+
+export const buildCssBlurFilter = (blur: BlurLayerState, scale = 1): string =>
+  blur.enabled && blur.opacity > 0 && blur.blurRadius > 0
+    ? `blur(${Math.max(0, blur.blurRadius * scale)}px)`
+    : 'none';
+
+export const buildCssShadowFilter = (shadow: ShadowLayerState): string =>
+  shadow.enabled && shadow.opacity > 0 && shadow.blur > 0
+    ? `drop-shadow(${shadow.offsetX}px ${shadow.offsetY}px ${shadow.blur}px rgba(0, 0, 0, ${shadow.opacity}))`
+    : 'none';
 
 export const sanitizeExportFileStem = (value: string, fallback: string): string => {
   const normalized = value

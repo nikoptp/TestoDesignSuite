@@ -8,6 +8,16 @@ import type {
   SavedImageAsset,
   SteamAchievementExportRequest,
   SteamAchievementExportResult,
+  TerminalActionResult,
+  TerminalCommandRequest,
+  TerminalCreateSessionRequest,
+  TerminalCreateSessionResult,
+  TerminalOutputPayload,
+  TerminalResizeRequest,
+  TerminalSessionStatusPayload,
+  TerminalStopByCommandRequest,
+  TerminalStopByCommandResult,
+  TerminalWriteRequest,
   SteamMarketplaceExportRequest,
   SteamMarketplaceExportResult,
   UserSettings,
@@ -29,6 +39,19 @@ declare global {
       exportSteamMarketplaceAssets: (
         request: SteamMarketplaceExportRequest,
       ) => Promise<SteamMarketplaceExportResult>;
+      terminalCreateSession: (
+        request: TerminalCreateSessionRequest,
+      ) => Promise<TerminalCreateSessionResult>;
+      terminalRunPreset: (request: TerminalCommandRequest) => Promise<TerminalActionResult>;
+      terminalWrite: (request: TerminalWriteRequest) => Promise<TerminalActionResult>;
+      terminalResize: (request: TerminalResizeRequest) => Promise<TerminalActionResult>;
+      terminalStopSession: (sessionId: string) => Promise<TerminalActionResult>;
+      terminalStopByCommand: (
+        request: TerminalStopByCommandRequest,
+      ) => Promise<TerminalStopByCommandResult>;
+      terminalCloseSession: (sessionId: string) => Promise<TerminalActionResult>;
+      terminalOnOutput: (listener: (payload: TerminalOutputPayload) => void) => () => void;
+      terminalOnStatus: (listener: (payload: TerminalSessionStatusPayload) => void) => () => void;
       exportCustomTheme: (theme: CustomThemeDefinition) => Promise<boolean>;
       importCustomTheme: () => Promise<CustomThemeDefinition | null>;
       onRequestProjectSnapshot: (
@@ -38,6 +61,7 @@ declare global {
       onProjectStatus: (listener: (payload: ProjectStatusPayload) => void) => () => void;
       getLaunchState: () => Promise<LaunchState>;
       openProjectFileDialog: () => Promise<boolean>;
+      terminalPickExecutionFolder: (defaultPath?: string) => Promise<string | null>;
       openRecentProject: (filePath: string) => Promise<boolean>;
       createNewProject: () => Promise<boolean>;
       checkForUpdates: () => Promise<void>;

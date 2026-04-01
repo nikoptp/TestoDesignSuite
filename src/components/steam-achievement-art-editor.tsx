@@ -3,17 +3,25 @@ import type {
   CategoryNode,
   ProjectImageAsset,
   SteamAchievementArtData,
+  SteamAchievementBackgroundAdjustmentState,
   SteamAchievementBorderStyle,
+  SteamAchievementEntryImageStyle,
   SteamAchievementTransform,
 } from '../shared/types';
 import { editorTypeMeta } from '../shared/editor-types';
 import { getImageAssetDragPayload } from '../shared/drag-payloads';
 import { ImageAssetSidebar } from './image-asset-sidebar';
 import {
+  buildSteamAchievementBackgroundBlurCss,
+  buildSteamAchievementBackgroundGradientOverlayCss,
   buildSteamAchievementBackgroundCss,
+  buildSteamAchievementBackgroundVignetteCss,
   buildSteamAchievementBorderCss,
+  buildSteamAchievementImageBlurCss,
+  buildSteamAchievementImageCss,
   MAX_STEAM_ACHIEVEMENT_ZOOM,
   MIN_STEAM_ACHIEVEMENT_ZOOM,
+  createDefaultSteamAchievementEntryImageStyle,
   createDefaultSteamAchievementTransform,
   getSteamAchievementAssetByPath,
   getSteamAchievementDrawRect,
@@ -31,11 +39,15 @@ type SteamAchievementArtEditorProps = {
   onRenameEntry: (entryId: string, name: string) => void;
   onAssignAssetToEntry: (entryId: string, relativePath: string) => void;
   onCreateEntryFromAsset: (relativePath: string) => void;
-  onImportFiles: (files: File[], targetEntryId?: string) => Promise<void>;
+  onImportFiles: (files: File[], target: 'entry' | 'background', targetEntryId?: string) => Promise<void>;
   onBeginCropInteraction: () => void;
   onCropChange: (entryId: string, transform: SteamAchievementTransform) => void;
   onResetCrop: (entryId: string) => void;
   onBorderStyleChange: (patch: Partial<SteamAchievementBorderStyle>) => void;
+  onBackgroundAdjustmentsChange: (patch: Partial<SteamAchievementBackgroundAdjustmentState>) => void;
+  onEntryImageStyleChange: (entryId: string, patch: Partial<SteamAchievementEntryImageStyle>) => void;
+  onAssignBackgroundAsset: (relativePath: string | null) => void;
+  onRemoveBackgroundAsset: (relativePath: string) => void;
   onExport: () => Promise<void>;
   onDeleteImageAsset: (relativePath: string) => void;
 };
@@ -63,13 +75,31 @@ const rectToPercentStyle = (
   top: `${(rect.top / preset.height) * 100}%`,
 });
 
+const SNAP_THRESHOLD = 12;
+
+const snapAxisOffset = (
+  offset: number,
+  drawSize: number,
+  frameSize: number,
+): number => {
+  const halfDelta = (drawSize - frameSize) * 0.5;
+  const candidates = [-halfDelta, 0, halfDelta];
+  const snapped = candidates.find((candidate) => Math.abs(offset - candidate) <= SNAP_THRESHOLD);
+  return snapped ?? offset;
+};
+
 type PreviewFrameProps = {
   asset: ProjectImageAsset | null;
   assetAlt: string;
   drawStyle: React.CSSProperties | null;
   backgroundStyle: React.CSSProperties;
+  backgroundGradientStyle: React.CSSProperties;
+  backgroundBlurStyle?: React.CSSProperties;
+  backgroundVignetteStyle?: React.CSSProperties;
   imageFrameStyle: React.CSSProperties;
   borderStyle: React.CSSProperties;
+  imageStyle?: React.CSSProperties;
+  imageBlurStyle?: React.CSSProperties;
   grayscale?: boolean;
   emptyLabel?: string;
 };
@@ -79,16 +109,33 @@ const PreviewFrame = ({
   assetAlt,
   drawStyle,
   backgroundStyle,
+  backgroundGradientStyle,
+  backgroundBlurStyle,
+  backgroundVignetteStyle,
   imageFrameStyle,
   borderStyle,
+  imageStyle,
+  imageBlurStyle,
   grayscale = false,
   emptyLabel,
 }: PreviewFrameProps): React.ReactElement => (
   <div className={`steam-achievement-preview-shell ${grayscale ? 'is-grayscale' : ''}`}>
     <div className="steam-achievement-preview-background" style={backgroundStyle}></div>
+    {backgroundBlurStyle ? (
+      <div className="steam-achievement-preview-background" style={backgroundBlurStyle}></div>
+    ) : null}
+    {backgroundVignetteStyle ? (
+      <div className="steam-achievement-preview-background" style={backgroundVignetteStyle}></div>
+    ) : null}
+    <div className="steam-achievement-preview-background" style={backgroundGradientStyle}></div>
     <div className="steam-achievement-preview-frame" style={imageFrameStyle}>
       {asset && drawStyle ? (
-        <img src={asset.assetUrl} alt={assetAlt} style={drawStyle} />
+        <>
+          <img src={asset.assetUrl} alt={assetAlt} style={{ ...drawStyle, ...imageStyle }} />
+          {imageBlurStyle && (imageBlurStyle.opacity as number) > 0 ? (
+            <img src={asset.assetUrl} alt="" aria-hidden="true" style={{ ...drawStyle, ...imageBlurStyle }} />
+          ) : null}
+        </>
       ) : (
         <span>{emptyLabel ?? 'Drop image'}</span>
       )}
@@ -111,12 +158,19 @@ export const SteamAchievementArtEditor = ({
   onCropChange,
   onResetCrop,
   onBorderStyleChange,
+  onBackgroundAdjustmentsChange,
+  onEntryImageStyleChange,
+  onAssignBackgroundAsset,
+  onRemoveBackgroundAsset,
   onExport,
   onDeleteImageAsset,
 }: SteamAchievementArtEditorProps): React.ReactElement => {
   const meta = editorTypeMeta(node.editorType);
   const preset = React.useMemo(() => getSteamImagePreset(art.presetId), [art.presetId]);
-  const [activeStyleTab, setActiveStyleTab] = React.useState<'border' | 'background'>('border');
+  const [activeStyleTab, setActiveStyleTab] = React.useState<'background' | 'image'>('image');
+  const [isSnapEnabled, setIsSnapEnabled] = React.useState(false);
+  const [isDraggingCropImage, setIsDraggingCropImage] = React.useState(false);
+  const [isCenterGridEnabled, setIsCenterGridEnabled] = React.useState(false);
   const frameRect = React.useMemo(
     () => getSteamAchievementFrameRect(preset.width, preset.height, art.borderStyle),
     [art.borderStyle, preset.height, preset.width],
@@ -133,10 +187,16 @@ export const SteamAchievementArtEditor = ({
     assets,
     art.borderStyle.backgroundImageRelativePath,
   );
+  const backgroundAssets = React.useMemo(() => {
+    const knownBackgroundPaths = new Set(art.backgroundAssetRelativePaths ?? []);
+    return assets.filter((asset) => knownBackgroundPaths.has(asset.relativePath));
+  }, [art.backgroundAssetRelativePaths, assets]);
+  const hasBackgroundAsset = Boolean(backgroundAsset);
   const [selectedEntryId, setSelectedEntryId] = React.useState<string | null>(art.entries[0]?.id ?? null);
   const [isExporting, setIsExporting] = React.useState(false);
   const [cropFrameScale, setCropFrameScale] = React.useState(1);
   const [cropFrameOffset, setCropFrameOffset] = React.useState({ left: 0, top: 0 });
+  const backgroundFileInputRef = React.useRef<HTMLInputElement | null>(null);
   const cropStageRef = React.useRef<HTMLDivElement | null>(null);
   const cropFrameRef = React.useRef<HTMLDivElement | null>(null);
   const dragStateRef = React.useRef<{
@@ -212,7 +272,7 @@ export const SteamAchievementArtEditor = ({
         return false;
       }
 
-      await onImportFiles(files, selectedEntry?.id);
+      await onImportFiles(files, 'entry', selectedEntry?.id);
       return true;
     },
     [onImportFiles, selectedEntry?.id],
@@ -236,7 +296,7 @@ export const SteamAchievementArtEditor = ({
 
       const files = Array.from(event.dataTransfer.files).filter(isImageFile);
       if (files.length > 0) {
-        await onImportFiles(files, targetEntryId);
+        await onImportFiles(files, 'entry', targetEntryId);
       }
     },
     [onAssignAssetToEntry, onCreateEntryFromAsset, onImportFiles],
@@ -273,6 +333,7 @@ export const SteamAchievementArtEditor = ({
 
       event.preventDefault();
       onBeginCropInteraction();
+      setIsDraggingCropImage(true);
       const nextDrag = {
         pointerId: event.pointerId,
         entryId: selectedEntry.id,
@@ -294,7 +355,7 @@ export const SteamAchievementArtEditor = ({
 
         const frameWidth = Math.max(1, frame.clientWidth);
         const frameHeight = Math.max(1, frame.clientHeight);
-        const nextTransform = {
+        const rawTransform = {
           ...nextDrag.startTransform,
           offsetX:
             nextDrag.startTransform.offsetX +
@@ -303,13 +364,29 @@ export const SteamAchievementArtEditor = ({
             nextDrag.startTransform.offsetY +
             (moveEvent.clientY - nextDrag.startY) * (framePreset.height / frameHeight),
         };
-        onCropChange(nextDrag.entryId, nextTransform);
+        if (!isSnapEnabled) {
+          onCropChange(nextDrag.entryId, rawTransform);
+          return;
+        }
+
+        const drawRect = getSteamAchievementDrawRect(
+          selectedAsset.width,
+          selectedAsset.height,
+          framePreset,
+          rawTransform,
+        );
+        onCropChange(nextDrag.entryId, {
+          ...rawTransform,
+          offsetX: snapAxisOffset(rawTransform.offsetX, drawRect.width, framePreset.width),
+          offsetY: snapAxisOffset(rawTransform.offsetY, drawRect.height, framePreset.height),
+        });
       };
       const onPointerEnd = (endEvent: PointerEvent): void => {
         if (dragStateRef.current?.pointerId !== endEvent.pointerId) {
           return;
         }
         dragStateRef.current = null;
+        setIsDraggingCropImage(false);
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerEnd);
         window.removeEventListener('pointercancel', onPointerEnd);
@@ -318,11 +395,23 @@ export const SteamAchievementArtEditor = ({
       window.addEventListener('pointerup', onPointerEnd);
       window.addEventListener('pointercancel', onPointerEnd);
     },
-    [framePreset.height, framePreset.width, onBeginCropInteraction, onCropChange, selectedAsset, selectedEntry],
+    [
+      framePreset,
+      isSnapEnabled,
+      onBeginCropInteraction,
+      onCropChange,
+      selectedAsset,
+      selectedEntry,
+    ],
   );
 
-  const onCropWheel = React.useCallback(
-    (event: React.WheelEvent<HTMLDivElement>): void => {
+  React.useEffect(() => {
+    const frame = cropFrameRef.current;
+    if (!frame) {
+      return;
+    }
+
+    const onWheel = (event: WheelEvent): void => {
       if (!selectedEntry || !selectedAsset) {
         return;
       }
@@ -337,9 +426,11 @@ export const SteamAchievementArtEditor = ({
           Math.min(MAX_STEAM_ACHIEVEMENT_ZOOM, selectedEntry.crop.zoom + zoomDelta),
         ),
       });
-    },
-    [onBeginCropInteraction, onCropChange, selectedAsset, selectedEntry],
-  );
+    };
+
+    frame.addEventListener('wheel', onWheel, { passive: false });
+    return () => frame.removeEventListener('wheel', onWheel);
+  }, [onBeginCropInteraction, onCropChange, selectedAsset, selectedEntry]);
 
   const backdropRect =
     selectedAsset && selectedEntry
@@ -373,8 +464,30 @@ export const SteamAchievementArtEditor = ({
         })()
       : null;
   const previewBackgroundStyle = React.useMemo(
-    () => buildSteamAchievementBackgroundCss(art.borderStyle, backgroundAsset?.assetUrl ?? null),
-    [art.borderStyle, backgroundAsset?.assetUrl],
+    () =>
+      buildSteamAchievementBackgroundCss(
+        art.borderStyle,
+        art.backgroundAdjustments,
+        backgroundAsset?.assetUrl ?? null,
+      ),
+    [art.backgroundAdjustments, art.borderStyle, backgroundAsset?.assetUrl],
+  );
+  const previewBackgroundGradientStyle = React.useMemo(
+    () => buildSteamAchievementBackgroundGradientOverlayCss(art.borderStyle),
+    [art.borderStyle],
+  );
+  const previewBackgroundVignetteStyle = React.useMemo(
+    () => buildSteamAchievementBackgroundVignetteCss(art.backgroundAdjustments),
+    [art.backgroundAdjustments],
+  );
+  const previewBackgroundBlurStyle = React.useMemo(
+    () =>
+      buildSteamAchievementBackgroundBlurCss(
+        art.borderStyle,
+        art.backgroundAdjustments,
+        backgroundAsset?.assetUrl ?? null,
+      ),
+    [art.backgroundAdjustments, art.borderStyle, backgroundAsset?.assetUrl],
   );
   const previewFrameStyle = React.useMemo(
     () => ({
@@ -395,8 +508,30 @@ export const SteamAchievementArtEditor = ({
   );
   const thumbFrameStyle = React.useMemo(() => rectToPercentStyle(frameRect, preset), [frameRect, preset]);
   const thumbBackgroundStyle = React.useMemo(
-    () => buildSteamAchievementBackgroundCss(art.borderStyle, backgroundAsset?.assetUrl ?? null),
-    [art.borderStyle, backgroundAsset?.assetUrl],
+    () =>
+      buildSteamAchievementBackgroundCss(
+        art.borderStyle,
+        art.backgroundAdjustments,
+        backgroundAsset?.assetUrl ?? null,
+      ),
+    [art.backgroundAdjustments, art.borderStyle, backgroundAsset?.assetUrl],
+  );
+  const thumbBackgroundGradientStyle = React.useMemo(
+    () => buildSteamAchievementBackgroundGradientOverlayCss(art.borderStyle),
+    [art.borderStyle],
+  );
+  const thumbBackgroundVignetteStyle = React.useMemo(
+    () => buildSteamAchievementBackgroundVignetteCss(art.backgroundAdjustments),
+    [art.backgroundAdjustments],
+  );
+  const thumbBackgroundBlurStyle = React.useMemo(
+    () =>
+      buildSteamAchievementBackgroundBlurCss(
+        art.borderStyle,
+        art.backgroundAdjustments,
+        backgroundAsset?.assetUrl ?? null,
+      ),
+    [art.backgroundAdjustments, art.borderStyle, backgroundAsset?.assetUrl],
   );
   const thumbImageFrameStyle = React.useMemo(
     () => ({
@@ -412,6 +547,15 @@ export const SteamAchievementArtEditor = ({
     }),
     [art.borderStyle, thumbImageFrameStyle],
   );
+  const selectedImageStyle = selectedEntry?.imageStyle ?? createDefaultSteamAchievementEntryImageStyle();
+  const previewImageStyle = React.useMemo(
+    () => buildSteamAchievementImageCss(selectedImageStyle),
+    [selectedImageStyle],
+  );
+  const previewImageBlurStyle = React.useMemo(
+    () => buildSteamAchievementImageBlurCss(selectedImageStyle, 0.12),
+    [selectedImageStyle],
+  );
   const stylePanel = (
     <div className="steam-achievement-style-sidebar">
       <div className="draw-sidebar-header">
@@ -419,8 +563,8 @@ export const SteamAchievementArtEditor = ({
       </div>
       <div className="tool-style-grid steam-achievement-tab-grid">
         {([
-          { key: 'border', label: 'Border', icon: 'fa-draw-polygon' },
           { key: 'background', label: 'Background', icon: 'fa-layer-group' },
+          { key: 'image', label: 'Artwork', icon: 'fa-sliders' },
         ] as const).map((tab) => (
           <button
             key={tab.key}
@@ -433,7 +577,246 @@ export const SteamAchievementArtEditor = ({
           </button>
         ))}
       </div>
-      {activeStyleTab === 'border' ? (
+      {activeStyleTab === 'background' ? (
+        <>
+      <label className="settings-field">
+        <span className="settings-field-label">Background Image Opacity ({Math.round(art.borderStyle.backgroundOpacity * 100)}%)</span>
+        <input
+          className="settings-input"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          disabled={!hasBackgroundAsset}
+          value={art.borderStyle.backgroundOpacity}
+          onChange={(event) => onBorderStyleChange({ backgroundOpacity: Number(event.target.value) })}
+        />
+      </label>
+      <label className="settings-field">
+        <span className="settings-field-label">Gradient Overlay</span>
+        <div className="tool-style-grid steam-achievement-toggle-grid">
+          <button
+            type="button"
+            className={`tool-style-option ${art.borderStyle.backgroundGradientOverlayEnabled ? 'active' : ''}`}
+            onClick={() =>
+              onBorderStyleChange({
+                backgroundGradientOverlayEnabled: true,
+              })
+            }
+            disabled={!hasBackgroundAsset}
+          >
+            <span className="tool-style-icon"><i className="fa-solid fa-wand-magic-sparkles"></i></span>
+            <span className="tool-style-name">On</span>
+          </button>
+          <button
+            type="button"
+            className={`tool-style-option ${!art.borderStyle.backgroundGradientOverlayEnabled ? 'active' : ''}`}
+            onClick={() =>
+              onBorderStyleChange({
+                backgroundGradientOverlayEnabled: false,
+              })
+            }
+            disabled={!hasBackgroundAsset}
+          >
+            <span className="tool-style-icon"><i className="fa-regular fa-square-minus"></i></span>
+            <span className="tool-style-name">Off</span>
+          </button>
+        </div>
+      </label>
+      <label className="settings-field">
+        <span className="settings-field-label">Background Angle ({Math.round(art.borderStyle.backgroundAngle)}deg)</span>
+        <input
+          className="settings-input"
+          type="range"
+          min="0"
+          max="359"
+          step="1"
+          disabled={!hasBackgroundAsset || !art.borderStyle.backgroundGradientOverlayEnabled}
+          value={art.borderStyle.backgroundAngle}
+          onChange={(event) => onBorderStyleChange({ backgroundAngle: Number(event.target.value) })}
+        />
+      </label>
+      <label className="settings-field">
+        <span className="settings-field-label">Gradient Opacity ({Math.round(art.borderStyle.backgroundGradientOpacity * 100)}%)</span>
+        <input
+          className="settings-input"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          disabled={!hasBackgroundAsset || !art.borderStyle.backgroundGradientOverlayEnabled}
+          value={art.borderStyle.backgroundGradientOpacity}
+          onChange={(event) => onBorderStyleChange({ backgroundGradientOpacity: Number(event.target.value) })}
+        />
+      </label>
+      <label className="settings-field">
+        <span className="settings-field-label">Background Colors</span>
+        <div className="preset-color-grid steam-achievement-color-grid">
+          {[
+            { value: art.borderStyle.backgroundColor, key: 'backgroundColor' as const },
+            { value: art.borderStyle.backgroundMidColor, key: 'backgroundMidColor' as const },
+            { value: art.borderStyle.backgroundGradientColor, key: 'backgroundGradientColor' as const },
+          ].map((colorStop) => (
+            <input
+              key={colorStop.key}
+              className="settings-input color-input"
+              type="color"
+              disabled={!hasBackgroundAsset || !art.borderStyle.backgroundGradientOverlayEnabled}
+              value={colorStop.value}
+              onChange={(event) => onBorderStyleChange({ [colorStop.key]: event.target.value })}
+            />
+          ))}
+        </div>
+      </label>
+      <label className="settings-field">
+        <span className="settings-field-label">Background Saturation ({Math.round(art.backgroundAdjustments.saturation * 100)}%)</span>
+        <input
+          className="settings-input"
+          type="range"
+          min="0"
+          max="2"
+          step="0.01"
+          disabled={!hasBackgroundAsset}
+          value={art.backgroundAdjustments.saturation}
+          onChange={(event) => onBackgroundAdjustmentsChange({ saturation: Number(event.target.value) })}
+        />
+      </label>
+      <label className="settings-field">
+        <span className="settings-field-label">Background Contrast ({Math.round(art.backgroundAdjustments.contrast * 100)}%)</span>
+        <input
+          className="settings-input"
+          type="range"
+          min="0.4"
+          max="2"
+          step="0.01"
+          disabled={!hasBackgroundAsset}
+          value={art.backgroundAdjustments.contrast}
+          onChange={(event) => onBackgroundAdjustmentsChange({ contrast: Number(event.target.value) })}
+        />
+      </label>
+      <label className="settings-field">
+        <span className="settings-field-label">Background Vignette ({Math.round(art.backgroundAdjustments.vignette * 100)}%)</span>
+        <input
+          className="settings-input"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          disabled={!hasBackgroundAsset}
+          value={art.backgroundAdjustments.vignette}
+          onChange={(event) => onBackgroundAdjustmentsChange({ vignette: Number(event.target.value) })}
+        />
+      </label>
+      <label className="settings-field">
+        <span className="settings-field-label">Background Blur Opacity ({Math.round(art.backgroundAdjustments.blurOpacity * 100)}%)</span>
+        <input
+          className="settings-input"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          disabled={!hasBackgroundAsset}
+          value={art.backgroundAdjustments.blurOpacity}
+          onChange={(event) =>
+            onBackgroundAdjustmentsChange({
+              blurOpacity: Number(event.target.value),
+              blurEnabled:
+                Number(event.target.value) > 0 || art.backgroundAdjustments.blurRadius > 0,
+            })
+          }
+        />
+      </label>
+      <label className="settings-field">
+        <span className="settings-field-label">Background Blur Radius ({Math.round(art.backgroundAdjustments.blurRadius)}px)</span>
+        <input
+          className="settings-input"
+          type="range"
+          min="0"
+          max="64"
+          step="1"
+          disabled={!hasBackgroundAsset}
+          value={art.backgroundAdjustments.blurRadius}
+          onChange={(event) =>
+            onBackgroundAdjustmentsChange({
+              blurRadius: Number(event.target.value),
+              blurEnabled:
+                Number(event.target.value) > 0 || art.backgroundAdjustments.blurOpacity > 0,
+            })
+          }
+        />
+      </label>
+      <div
+        className="steam-marketplace-logo-dropzone"
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          const draggedAsset = getImageAssetDragPayload(event.dataTransfer);
+          if (draggedAsset) {
+            onAssignBackgroundAsset(draggedAsset.relativePath);
+            return;
+          }
+          const files = Array.from(event.dataTransfer.files).filter(isImageFile);
+          if (files.length > 0) {
+            void onImportFiles(files, 'background');
+          }
+        }}
+      >
+        <strong>Drop background here</strong>
+        <span>Assign a dragged asset or upload a new image for the frame background.</span>
+      </div>
+      <div className="settings-field">
+        <span className="settings-field-label">Background Assets</span>
+        <div className="steam-marketplace-logo-list">
+          {backgroundAssets.length === 0 ? (
+            <p className="steam-marketplace-logo-empty">Upload and assign a background to add it here.</p>
+          ) : (
+          backgroundAssets.map((asset) => (
+            <div key={asset.relativePath} className="steam-marketplace-logo-list-row">
+              <button
+                type="button"
+                className={`steam-marketplace-logo-list-item ${art.borderStyle.backgroundImageRelativePath === asset.relativePath ? 'active' : ''}`}
+                onClick={() => onAssignBackgroundAsset(asset.relativePath)}
+                title={asset.relativePath.split('/').pop()}
+              >
+                <img src={asset.assetUrl} alt={asset.relativePath} loading="lazy" />
+                <span>{asset.relativePath.split('/').pop() ?? asset.relativePath}</span>
+              </button>
+              <button
+                type="button"
+                className="icon-action danger steam-marketplace-logo-delete"
+                onClick={() => {
+                  onRemoveBackgroundAsset(asset.relativePath);
+                }}
+                title="Remove background from list"
+                aria-label="Remove background from list"
+              >
+                <i className="fa-solid fa-trash"></i>
+              </button>
+            </div>
+          )))}
+        </div>
+      </div>
+      <div className="steam-marketplace-upload-actions">
+        <button type="button" onClick={() => backgroundFileInputRef.current?.click()}>
+          Upload Background
+        </button>
+      </div>
+      <input
+        ref={backgroundFileInputRef}
+        hidden
+        type="file"
+        accept="image/*"
+        onChange={(event) => {
+          const files = Array.from(event.target.files ?? []);
+          event.currentTarget.value = '';
+          if (files.length > 0) {
+            void onImportFiles(files, 'background');
+          }
+        }}
+      />
+        </>
+      ) : null}
+      {activeStyleTab === 'image' && selectedEntry ? (
         <>
       <label className="settings-field">
         <span className="settings-field-label">Border</span>
@@ -481,7 +864,7 @@ export const SteamAchievementArtEditor = ({
         />
       </label>
       <label className="settings-field">
-        <span className="settings-field-label">Opacity ({Math.round(art.borderStyle.opacity * 100)}%)</span>
+        <span className="settings-field-label">Border Opacity ({Math.round(art.borderStyle.opacity * 100)}%)</span>
         <input
           className="settings-input"
           type="range"
@@ -493,7 +876,7 @@ export const SteamAchievementArtEditor = ({
         />
       </label>
       <label className="settings-field">
-        <span className="settings-field-label">Margin ({Math.round(art.borderStyle.margin)}px)</span>
+        <span className="settings-field-label">Border Margin ({Math.round(art.borderStyle.margin)}px)</span>
         <input
           className="settings-input"
           type="range"
@@ -505,7 +888,7 @@ export const SteamAchievementArtEditor = ({
         />
       </label>
       <label className="settings-field">
-        <span className="settings-field-label">Rounding ({Math.round(art.borderStyle.radius)}px)</span>
+        <span className="settings-field-label">Border Rounding ({Math.round(art.borderStyle.radius)}px)</span>
         <input
           className="settings-input"
           type="range"
@@ -534,101 +917,164 @@ export const SteamAchievementArtEditor = ({
           ))}
         </div>
       </label>
-        </>
-      ) : null}
-      {activeStyleTab === 'background' ? (
-        <>
       <label className="settings-field">
-        <span className="settings-field-label">Background</span>
-        <div className="tool-style-grid steam-achievement-bgmode-grid">
-          {([
-            { value: 'none', label: 'None', icon: 'fa-ban' },
-            { value: 'gradient', label: 'Gradient', icon: 'fa-swatchbook' },
-            { value: 'image', label: 'Image', icon: 'fa-image' },
-          ] as const).map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={`tool-style-option ${art.borderStyle.backgroundMode === option.value ? 'active' : ''}`}
-              onClick={() =>
-                onBorderStyleChange({
-                  backgroundMode: option.value,
-                })
-              }
-            >
-              <span className="tool-style-icon"><i className={`fa-solid ${option.icon}`}></i></span>
-              <span className="tool-style-name">{option.label}</span>
-            </button>
-          ))}
-        </div>
+        <span className="settings-field-label">Artwork Saturation ({Math.round(selectedImageStyle.adjustments.saturation * 100)}%)</span>
+        <input
+          className="settings-input"
+          type="range"
+          min="0"
+          max="2"
+          step="0.01"
+          value={selectedImageStyle.adjustments.saturation}
+          onChange={(event) =>
+            onEntryImageStyleChange(selectedEntry.id, {
+              adjustments: {
+                ...selectedImageStyle.adjustments,
+                saturation: Number(event.target.value),
+              },
+            })
+          }
+        />
       </label>
       <label className="settings-field">
-        <span className="settings-field-label">Background Opacity ({Math.round(art.borderStyle.backgroundOpacity * 100)}%)</span>
+        <span className="settings-field-label">Artwork Contrast ({Math.round(selectedImageStyle.adjustments.contrast * 100)}%)</span>
+        <input
+          className="settings-input"
+          type="range"
+          min="0.4"
+          max="2"
+          step="0.01"
+          value={selectedImageStyle.adjustments.contrast}
+          onChange={(event) =>
+            onEntryImageStyleChange(selectedEntry.id, {
+              adjustments: {
+                ...selectedImageStyle.adjustments,
+                contrast: Number(event.target.value),
+              },
+            })
+          }
+        />
+      </label>
+      <label className="settings-field">
+        <span className="settings-field-label">Artwork Blur Opacity ({Math.round(selectedImageStyle.adjustments.blurOpacity * 100)}%)</span>
         <input
           className="settings-input"
           type="range"
           min="0"
           max="1"
           step="0.01"
-          value={art.borderStyle.backgroundOpacity}
-          onChange={(event) => onBorderStyleChange({ backgroundOpacity: Number(event.target.value) })}
+          value={selectedImageStyle.adjustments.blurOpacity}
+          onChange={(event) =>
+            onEntryImageStyleChange(selectedEntry.id, {
+              adjustments: {
+                ...selectedImageStyle.adjustments,
+                blurOpacity: Number(event.target.value),
+                blurEnabled:
+                  Number(event.target.value) > 0 || selectedImageStyle.adjustments.blurRadius > 0,
+              },
+            })
+          }
         />
       </label>
       <label className="settings-field">
-        <span className="settings-field-label">Background Angle ({Math.round(art.borderStyle.backgroundAngle)}deg)</span>
+        <span className="settings-field-label">Artwork Blur Radius ({Math.round(selectedImageStyle.adjustments.blurRadius)}px)</span>
         <input
           className="settings-input"
           type="range"
           min="0"
-          max="359"
+          max="64"
           step="1"
-          disabled={art.borderStyle.backgroundMode !== 'gradient'}
-          value={art.borderStyle.backgroundAngle}
-          onChange={(event) => onBorderStyleChange({ backgroundAngle: Number(event.target.value) })}
+          value={selectedImageStyle.adjustments.blurRadius}
+          onChange={(event) =>
+            onEntryImageStyleChange(selectedEntry.id, {
+              adjustments: {
+                ...selectedImageStyle.adjustments,
+                blurRadius: Number(event.target.value),
+                blurEnabled:
+                  Number(event.target.value) > 0 || selectedImageStyle.adjustments.blurOpacity > 0,
+              },
+            })
+          }
         />
       </label>
       <label className="settings-field">
-        <span className="settings-field-label">Background Colors</span>
-        <div className="preset-color-grid steam-achievement-color-grid">
-          {[
-            { value: art.borderStyle.backgroundColor, key: 'backgroundColor' as const },
-            { value: art.borderStyle.backgroundMidColor, key: 'backgroundMidColor' as const },
-            { value: art.borderStyle.backgroundGradientColor, key: 'backgroundGradientColor' as const },
-          ].map((colorStop) => (
-            <input
-              key={colorStop.key}
-              className="settings-input color-input"
-              type="color"
-              disabled={art.borderStyle.backgroundMode !== 'gradient'}
-              value={colorStop.value}
-              onChange={(event) => onBorderStyleChange({ [colorStop.key]: event.target.value })}
-            />
-          ))}
-        </div>
-      </label>
-      <label className="settings-field">
-        <span className="settings-field-label">Background Image</span>
-        <select
+        <span className="settings-field-label">Shadow Blur ({Math.round(selectedImageStyle.shadow.blur)}px)</span>
+        <input
           className="settings-input"
-          disabled={art.borderStyle.backgroundMode !== 'image'}
-          value={art.borderStyle.backgroundImageRelativePath ?? ''}
+          type="range"
+          min="0"
+          max="96"
+          step="1"
+          value={selectedImageStyle.shadow.blur}
           onChange={(event) =>
-            onBorderStyleChange({
-              backgroundImageRelativePath: event.target.value || null,
+            onEntryImageStyleChange(selectedEntry.id, {
+              shadow: {
+                ...selectedImageStyle.shadow,
+                blur: Number(event.target.value),
+                enabled: Number(event.target.value) > 0 || selectedImageStyle.shadow.opacity > 0,
+              },
             })
           }
-        >
-          <option value="">Select image</option>
-          {assets.map((asset) => (
-            <option key={asset.relativePath} value={asset.relativePath}>
-              {asset.relativePath.split('/').pop()}
-            </option>
-          ))}
-        </select>
+        />
       </label>
-      <p className="steam-achievement-sidebar-hint">
-        Select a project image to fill the background layer behind the cropped artwork.
-      </p>
+      <label className="settings-field">
+        <span className="settings-field-label">Shadow Opacity ({Math.round(selectedImageStyle.shadow.opacity * 100)}%)</span>
+        <input
+          className="settings-input"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value={selectedImageStyle.shadow.opacity}
+          onChange={(event) =>
+            onEntryImageStyleChange(selectedEntry.id, {
+              shadow: {
+                ...selectedImageStyle.shadow,
+                opacity: Number(event.target.value),
+                enabled: Number(event.target.value) > 0 || selectedImageStyle.shadow.blur > 0,
+              },
+            })
+          }
+        />
+      </label>
+      <label className="settings-field">
+        <span className="settings-field-label">Shadow X ({Math.round(selectedImageStyle.shadow.offsetX)}px)</span>
+        <input
+          className="settings-input"
+          type="range"
+          min="-64"
+          max="64"
+          step="1"
+          value={selectedImageStyle.shadow.offsetX}
+          onChange={(event) =>
+            onEntryImageStyleChange(selectedEntry.id, {
+              shadow: {
+                ...selectedImageStyle.shadow,
+                offsetX: Number(event.target.value),
+              },
+            })
+          }
+        />
+      </label>
+      <label className="settings-field">
+        <span className="settings-field-label">Shadow Y ({Math.round(selectedImageStyle.shadow.offsetY)}px)</span>
+        <input
+          className="settings-input"
+          type="range"
+          min="-64"
+          max="64"
+          step="1"
+          value={selectedImageStyle.shadow.offsetY}
+          onChange={(event) =>
+            onEntryImageStyleChange(selectedEntry.id, {
+              shadow: {
+                ...selectedImageStyle.shadow,
+                offsetY: Number(event.target.value),
+              },
+            })
+          }
+        />
+      </label>
         </>
       ) : null}
     </div>
@@ -688,6 +1134,7 @@ export const SteamAchievementArtEditor = ({
           ) : (
             art.entries.map((entry) => {
               const asset = getSteamAchievementAssetByPath(assets, entry.sourceImageRelativePath);
+              const entryImageStyle = entry.imageStyle ?? createDefaultSteamAchievementEntryImageStyle();
               const rect = asset
                 ? getSteamAchievementDrawRect(asset.width, asset.height, framePreset, entry.crop)
                 : null;
@@ -711,8 +1158,13 @@ export const SteamAchievementArtEditor = ({
                         assetAlt={entry.name}
                         drawStyle={thumbStyle}
                         backgroundStyle={thumbBackgroundStyle}
+                        backgroundBlurStyle={thumbBackgroundBlurStyle}
+                        backgroundVignetteStyle={thumbBackgroundVignetteStyle}
+                        backgroundGradientStyle={thumbBackgroundGradientStyle}
                         imageFrameStyle={thumbImageFrameStyle}
                         borderStyle={thumbBorderStyle}
+                        imageStyle={buildSteamAchievementImageCss(entryImageStyle)}
+                        imageBlurStyle={buildSteamAchievementImageBlurCss(entryImageStyle, 0.06)}
                       />
                     </div>
                     <div className="steam-achievement-thumb">
@@ -721,8 +1173,13 @@ export const SteamAchievementArtEditor = ({
                         assetAlt={`${entry.name} grayscale preview`}
                         drawStyle={thumbStyle}
                         backgroundStyle={thumbBackgroundStyle}
+                        backgroundBlurStyle={thumbBackgroundBlurStyle}
+                        backgroundVignetteStyle={thumbBackgroundVignetteStyle}
+                        backgroundGradientStyle={thumbBackgroundGradientStyle}
                         imageFrameStyle={thumbImageFrameStyle}
                         borderStyle={thumbBorderStyle}
+                        imageStyle={buildSteamAchievementImageCss(entryImageStyle)}
+                        imageBlurStyle={buildSteamAchievementImageBlurCss(entryImageStyle, 0.06)}
                         grayscale
                         emptyLabel="Gray"
                       />
@@ -778,6 +1235,22 @@ export const SteamAchievementArtEditor = ({
                   <button type="button" onClick={() => onResetCrop(selectedEntry.id)}>
                     Fit Image
                   </button>
+                  <button
+                    type="button"
+                    className={isCenterGridEnabled ? 'active' : undefined}
+                    onClick={() => setIsCenterGridEnabled((current) => !current)}
+                    title="Toggle center grid guides"
+                  >
+                    Grid {isCenterGridEnabled ? 'On' : 'Off'}
+                  </button>
+                  <button
+                    type="button"
+                    className={isSnapEnabled ? 'active' : undefined}
+                    onClick={() => setIsSnapEnabled((current) => !current)}
+                    title="Snap movement to center and crop edges"
+                  >
+                    Snap {isSnapEnabled ? 'On' : 'Off'}
+                  </button>
                 </div>
               </div>
               <div
@@ -804,9 +1277,11 @@ export const SteamAchievementArtEditor = ({
                   ref={cropFrameRef}
                   className={`steam-achievement-crop-surface ${selectedAsset ? 'has-image' : ''}`}
                   onPointerDown={onCropPointerDown}
-                  onWheel={onCropWheel}
                 >
                   <div className="steam-achievement-preview-background" style={previewBackgroundStyle}></div>
+                  <div className="steam-achievement-preview-background" style={previewBackgroundBlurStyle}></div>
+                  <div className="steam-achievement-preview-background" style={previewBackgroundVignetteStyle}></div>
+                  <div className="steam-achievement-preview-background" style={previewBackgroundGradientStyle}></div>
                   <div className="steam-achievement-preview-frame" style={previewFrameStyle}>
                   {selectedAsset && previewRect ? (
                     <>
@@ -819,8 +1294,24 @@ export const SteamAchievementArtEditor = ({
                           height: `${previewRect.height}px`,
                           left: `${previewRect.left}px`,
                           top: `${previewRect.top}px`,
+                          ...previewImageStyle,
                         }}
                       />
+                      {(previewImageBlurStyle.opacity as number) > 0 ? (
+                        <img
+                          src={selectedAsset.assetUrl}
+                          alt=""
+                          aria-hidden="true"
+                          className="steam-achievement-crop-image"
+                          style={{
+                            width: `${previewRect.width}px`,
+                            height: `${previewRect.height}px`,
+                            left: `${previewRect.left}px`,
+                            top: `${previewRect.top}px`,
+                            ...previewImageBlurStyle,
+                          }}
+                        />
+                      ) : null}
                     </>
                   ) : (
                     <div className="steam-achievement-drop-hint">
@@ -829,10 +1320,29 @@ export const SteamAchievementArtEditor = ({
                     </div>
                   )}
                   </div>
+                  {isSnapEnabled && isDraggingCropImage && previewRect ? (
+                    <div
+                      className="steam-achievement-snap-image-bounds"
+                      style={{
+                        width: `${previewRect.width}px`,
+                        height: `${previewRect.height}px`,
+                        left: `${frameRect.left * cropFrameScale + previewRect.left}px`,
+                        top: `${frameRect.top * cropFrameScale + previewRect.top}px`,
+                      }}
+                      aria-hidden="true"
+                    >
+                      <span className="steam-achievement-snap-image-line vertical"></span>
+                      <span className="steam-achievement-snap-image-line horizontal"></span>
+                    </div>
+                  ) : null}
                   <div className="steam-achievement-preview-border steam-achievement-crop-border" style={previewBorderStyle}></div>
                   <div className="steam-achievement-crop-guides" aria-hidden="true">
-                    <span className="steam-achievement-guide-line vertical"></span>
-                    <span className="steam-achievement-guide-line horizontal"></span>
+                    {isCenterGridEnabled ? (
+                      <>
+                        <span className="steam-achievement-guide-line vertical"></span>
+                        <span className="steam-achievement-guide-line horizontal"></span>
+                      </>
+                    ) : null}
                     <span className="steam-achievement-guide-corner top-left"></span>
                     <span className="steam-achievement-guide-corner top-right"></span>
                     <span className="steam-achievement-guide-corner bottom-left"></span>

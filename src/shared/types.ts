@@ -4,7 +4,8 @@ export type EditorType =
   | 'spreadsheet'
   | 'story-document'
   | 'steam-achievement-art'
-  | 'steam-marketplace-assets';
+  | 'steam-marketplace-assets'
+  | 'terminal-command-center';
 
 export type CategoryNode = {
   id: string;
@@ -135,11 +136,38 @@ export type SteamAchievementBorderStyle = {
   gradientColor: string;
   backgroundMode: 'none' | 'gradient' | 'image';
   backgroundOpacity: number;
+  backgroundGradientOverlayEnabled: boolean;
+  backgroundGradientOpacity: number;
   backgroundAngle: number;
   backgroundColor: string;
   backgroundMidColor: string;
   backgroundGradientColor: string;
   backgroundImageRelativePath: string | null;
+};
+
+export type SteamAchievementImageAdjustmentState = {
+  saturation: number;
+  contrast: number;
+  blurEnabled: boolean;
+  blurRadius: number;
+  blurOpacity: number;
+};
+
+export type SteamAchievementShadowState = {
+  enabled: boolean;
+  blur: number;
+  opacity: number;
+  offsetX: number;
+  offsetY: number;
+};
+
+export type SteamAchievementBackgroundAdjustmentState = SteamAchievementImageAdjustmentState & {
+  vignette: number;
+};
+
+export type SteamAchievementEntryImageStyle = {
+  adjustments: SteamAchievementImageAdjustmentState;
+  shadow: SteamAchievementShadowState;
 };
 
 export type SteamAchievementTransform = {
@@ -153,6 +181,7 @@ export type SteamAchievementEntry = {
   name: string;
   sourceImageRelativePath: string | null;
   crop: SteamAchievementTransform;
+  imageStyle: SteamAchievementEntryImageStyle;
   createdAt: number;
   updatedAt: number;
 };
@@ -160,6 +189,8 @@ export type SteamAchievementEntry = {
 export type SteamAchievementArtData = {
   presetId: string;
   borderStyle: SteamAchievementBorderStyle;
+  backgroundAdjustments: SteamAchievementBackgroundAdjustmentState;
+  backgroundAssetRelativePaths?: string[];
   entries: SteamAchievementEntry[];
 };
 
@@ -255,6 +286,122 @@ export type SteamMarketplaceAssetData = {
   logoAssetRelativePaths?: string[];
 };
 
+export type TerminalCommandPreset = {
+  id: string;
+  name: string;
+  command: string;
+  executionFolder: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type TerminalPanelLayout = {
+  id: string;
+  title: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  defaultExecutionFolder: string | null;
+};
+
+export type TerminalCommandCenterData = {
+  commands: TerminalCommandPreset[];
+  panels: TerminalPanelLayout[];
+};
+
+export type TerminalSessionState = 'idle' | 'running' | 'stopped' | 'error';
+
+export type TerminalSessionErrorCode =
+  | 'INVALID_EXECUTION_FOLDER'
+  | 'SESSION_NOT_FOUND'
+  | 'SPAWN_FAILED'
+  | 'PROCESS_EXITED'
+  | 'UNKNOWN';
+
+export type TerminalSessionStatusPayload = {
+  sessionId: string;
+  commandId: string | null;
+  panelId: string | null;
+  state: TerminalSessionState;
+  exitCode?: number | null;
+  errorCode?: TerminalSessionErrorCode;
+  message?: string;
+  at: number;
+};
+
+export type TerminalOutputPayload = {
+  sessionId: string;
+  stream: 'stdout' | 'stderr' | 'system';
+  chunk: string;
+  at: number;
+};
+
+export type TerminalCreateSessionRequest = {
+  panelId?: string | null;
+  commandId?: string | null;
+  executionFolder?: string | null;
+  cols?: number;
+  rows?: number;
+};
+
+export type TerminalCreateSessionResult =
+  | {
+      ok: true;
+      sessionId: string;
+      state: TerminalSessionState;
+      executionFolder: string;
+      commandId: string | null;
+      panelId: string | null;
+    }
+  | {
+      ok: false;
+      errorCode: TerminalSessionErrorCode;
+      message: string;
+    };
+
+export type TerminalCommandRequest = {
+  sessionId: string;
+  command: string;
+};
+
+export type TerminalWriteRequest = {
+  sessionId: string;
+  data: string;
+};
+
+export type TerminalResizeRequest = {
+  sessionId: string;
+  cols: number;
+  rows: number;
+};
+
+export type TerminalStopByCommandRequest = {
+  commandId: string;
+};
+
+export type TerminalActionResult =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      errorCode: TerminalSessionErrorCode;
+      message: string;
+    };
+
+export type TerminalStopByCommandResult =
+  | {
+      ok: true;
+      stoppedSessionIds: string[];
+    }
+  | {
+      ok: false;
+      errorCode: TerminalSessionErrorCode;
+      message: string;
+      stoppedSessionIds: string[];
+    };
+
 export type NodeWorkspaceData = {
   noteboard?: {
     cards: NoteboardCard[];
@@ -277,6 +424,7 @@ export type NodeWorkspaceData = {
   spreadsheet?: SpreadsheetData;
   steamAchievementArt?: SteamAchievementArtData;
   steamMarketplaceAssets?: SteamMarketplaceAssetData;
+  terminalCommandCenter?: TerminalCommandCenterData;
 };
 
 export type CardTemplate = {
