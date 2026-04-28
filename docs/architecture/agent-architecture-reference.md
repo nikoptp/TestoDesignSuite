@@ -7,6 +7,7 @@ Use this before making cross-cutting changes.
 ## Runtime Boundaries
 - Main process: `src/index.ts`
 - Owns window lifecycle, application menu, filesystem persistence, `.testo` project bundle import/export, asset protocol registration, and privileged dialogs.
+- Hosts external local Agent API server (`127.0.0.1`) for capabilities/docs/nodes access.
 - Preload bridge: `src/preload.ts`
 - Exposes typed and limited API on `window.testoApi`.
 - Renderer: `src/renderer.ts` -> `src/mount.tsx` -> `src/app.tsx`
@@ -68,6 +69,8 @@ Use this before making cross-cutting changes.
 - `project:snapshot-response`
 - Source of truth for renderer typings:
 - `src/global.d.ts`
+- External HTTP agent API contract:
+- `docs/architecture/agent-api.md`
 
 ## Critical Invariants
 - Do not call Node/Electron APIs directly in renderer components/hooks.

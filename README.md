@@ -103,6 +103,7 @@ npm run make
 
 - `docs/architecture/system-notes.md`
 - `docs/architecture/agent-architecture-reference.md`
+- `docs/architecture/agent-api.md`
 - `docs/architecture/agent-change-checklist.md`
 - `docs/architecture/testing-plan-v1.md`
 - `docs/architecture/public-release-followups.md`
