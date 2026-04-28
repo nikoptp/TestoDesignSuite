@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
+  ApiCapabilities,
   CustomThemeDefinition,
   LaunchState,
   PersistedTreeState,
@@ -21,6 +22,12 @@ import type {
   TerminalWriteRequest,
   SteamMarketplaceExportRequest,
   SteamMarketplaceExportResult,
+  DocsReadResult,
+  DocsRenameRequest,
+  DocsWriteRequest,
+  ExternalNodeCreateRequestPayload,
+  ExternalNodeCreateResponsePayload,
+  ProjectDocFileEntry,
   UserSettings,
 } from './shared/types';
 
@@ -39,6 +46,20 @@ contextBridge.exposeInMainWorld('testoApi', {
     ipcRenderer.invoke('assets:list-images') as Promise<ProjectImageAsset[]>,
   deleteImageAsset: (relativePath: string): Promise<void> =>
     ipcRenderer.invoke('assets:delete-image', relativePath) as Promise<void>,
+  listDocs: (): Promise<ProjectDocFileEntry[]> =>
+    ipcRenderer.invoke('docs:list') as Promise<ProjectDocFileEntry[]>,
+  readDoc: (relativePath: string): Promise<DocsReadResult> =>
+    ipcRenderer.invoke('docs:read', relativePath) as Promise<DocsReadResult>,
+  writeDoc: (request: DocsWriteRequest): Promise<DocsReadResult> =>
+    ipcRenderer.invoke('docs:write', request) as Promise<DocsReadResult>,
+  createDoc: (request: Omit<DocsWriteRequest, 'expectedHash'>): Promise<DocsReadResult> =>
+    ipcRenderer.invoke('docs:create', request) as Promise<DocsReadResult>,
+  renameDoc: (request: DocsRenameRequest): Promise<{ relativePath: string }> =>
+    ipcRenderer.invoke('docs:rename', request) as Promise<{ relativePath: string }>,
+  deleteDoc: (relativePath: string): Promise<void> =>
+    ipcRenderer.invoke('docs:delete', relativePath) as Promise<void>,
+  getCapabilities: (): Promise<ApiCapabilities> =>
+    ipcRenderer.invoke('api:get-capabilities') as Promise<ApiCapabilities>,
   exportSteamAchievementSet: (
     request: SteamAchievementExportRequest,
   ): Promise<SteamAchievementExportResult> =>
@@ -126,6 +147,36 @@ contextBridge.exposeInMainWorld('testoApi', {
     ipcRenderer.on('menu:project-status', wrapped);
     return () => {
       ipcRenderer.removeListener('menu:project-status', wrapped);
+    };
+  },
+  onExternalNodeCreateRequest: (
+    listener: (
+      payload: ExternalNodeCreateRequestPayload,
+    ) => Promise<Omit<ExternalNodeCreateResponsePayload, 'requestId'>> | Omit<ExternalNodeCreateResponsePayload, 'requestId'>,
+  ): (() => void) => {
+    const wrapped = async (
+      _event: Electron.IpcRendererEvent,
+      payload: ExternalNodeCreateRequestPayload,
+    ): Promise<void> => {
+      try {
+        const result = await listener(payload);
+        const responsePayload: ExternalNodeCreateResponsePayload = {
+          requestId: payload.requestId,
+          ...result,
+        };
+        ipcRenderer.send('external:nodes-create-response', responsePayload);
+      } catch (error: unknown) {
+        const responsePayload: ExternalNodeCreateResponsePayload = {
+          requestId: payload.requestId,
+          ok: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        };
+        ipcRenderer.send('external:nodes-create-response', responsePayload);
+      }
+    };
+    ipcRenderer.on('external:nodes-create-request', wrapped);
+    return () => {
+      ipcRenderer.removeListener('external:nodes-create-request', wrapped);
     };
   },
   getLaunchState: (): Promise<LaunchState> =>

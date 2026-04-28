@@ -264,8 +264,8 @@ describe('steam-achievement-art helpers', () => {
     const preset = getSteamImagePreset(STEAM_ACHIEVEMENT_256_PRESET_ID);
     const fileNames = buildSteamAchievementExportFileNames('Boss Clear!', preset);
 
-    expect(fileNames.color).toBe('boss_clear.png');
-    expect(fileNames.grayscale).toBe('boss_clear_gray.png');
+    expect(fileNames.color).toBe('boss_clear.jpg');
+    expect(fileNames.grayscale).toBe('boss_clear_gray.jpg');
   });
 
   it('normalizes new achievement image style fields for entries', () => {
@@ -291,6 +291,22 @@ describe('steam-achievement-art helpers', () => {
     expect(normalized.entries[0]?.imageStyle.adjustments.blurEnabled).toBe(false);
     expect(normalized.entries[0]?.imageStyle.shadow.blur).toBe(96);
     expect(normalized.entries[0]?.imageStyle.shadow.opacity).toBe(1);
+  });
+
+  it('preserves explicitly empty achievement entry names during normalization', () => {
+    const normalized = normalizeSteamAchievementArtData({
+      presetId: STEAM_ACHIEVEMENT_256_PRESET_ID,
+      entries: [
+        {
+          id: 'entry-empty-name',
+          name: '',
+          sourceImageRelativePath: null,
+          crop: { zoom: 1, offsetX: 0, offsetY: 0 },
+        },
+      ],
+    });
+
+    expect(normalized.entries[0]?.name).toBe('');
   });
 
   it('builds gradient overlay and image styles for preview use', () => {
@@ -471,6 +487,50 @@ describe('steam-achievement-art helpers', () => {
     expect(edgePixel[3]).toBeGreaterThan(0);
   });
 
+  it('renders gradient overlay in exports when no background image is assigned', () => {
+    const preset = getSteamImagePreset(STEAM_ACHIEVEMENT_256_PRESET_ID);
+    const bitmap = composeSteamAchievementFrameBitmap({
+      sourceWidth: 1,
+      sourceHeight: 1,
+      sourceBgra: new Uint8Array([0, 0, 0, 0]),
+      preset: { ...preset, width: 8, height: 8 },
+      transform: { zoom: 0.1, offsetX: 0, offsetY: 0 },
+      imageStyle: createDefaultSteamAchievementEntryImageStyle(),
+      borderStyle: {
+        ...createDefaultSteamAchievementBorderStyle(),
+        enabled: false,
+        margin: 0,
+        radius: 0,
+        backgroundMode: 'none',
+        backgroundOpacity: 0,
+        backgroundGradientOverlayEnabled: true,
+        backgroundGradientOpacity: 1,
+        backgroundAngle: 90,
+        backgroundColor: '#ff0000',
+        backgroundMidColor: '#ff0000',
+        backgroundGradientColor: '#0000ff',
+      },
+      backgroundAdjustments: {
+        saturation: 1,
+        contrast: 1,
+        blurEnabled: false,
+        blurRadius: 0,
+        blurOpacity: 0,
+        vignette: 0,
+      },
+      backgroundImageBgra: null,
+      backgroundImageWidth: 0,
+      backgroundImageHeight: 0,
+    });
+
+    const leftPixel = getPixel(bitmap, 8, 0, 4);
+    const rightPixel = getPixel(bitmap, 8, 7, 4);
+    expect(leftPixel[3]).toBe(255);
+    expect(rightPixel[3]).toBe(255);
+    expect(leftPixel[2]).toBeGreaterThan(leftPixel[0]);
+    expect(rightPixel[0]).toBeGreaterThan(rightPixel[2]);
+  });
+
   it('applies artwork transform, adjustments, shadow, and border layers during export', () => {
     const preset = getSteamImagePreset(STEAM_ACHIEVEMENT_256_PRESET_ID);
     const bitmap = composeSteamAchievementFrameBitmap({
@@ -531,4 +591,50 @@ describe('steam-achievement-art helpers', () => {
     expect(leftBorderPixel[2]).toBeGreaterThan(leftBorderPixel[0]);
     expect(rightBorderPixel[0]).toBeGreaterThan(rightBorderPixel[2]);
   });
+
+  it('renders shadow in exports when shadow blur is zero', () => {
+    const preset = getSteamImagePreset(STEAM_ACHIEVEMENT_256_PRESET_ID);
+    const bitmap = composeSteamAchievementFrameBitmap({
+      sourceWidth: 1,
+      sourceHeight: 1,
+      sourceBgra: new Uint8Array([0, 0, 255, 255]),
+      preset: { ...preset, width: 10, height: 10 },
+      transform: { zoom: 0.5, offsetX: 2, offsetY: 2 },
+      imageStyle: {
+        adjustments: {
+          saturation: 1,
+          contrast: 1,
+          blurEnabled: false,
+          blurRadius: 0,
+          blurOpacity: 0,
+        },
+        shadow: {
+          enabled: true,
+          blur: 0,
+          opacity: 1,
+          offsetX: 2,
+          offsetY: 2,
+        },
+      },
+      borderStyle: {
+        ...createDefaultSteamAchievementBorderStyle(),
+        enabled: false,
+        margin: 1,
+        radius: 0,
+        backgroundMode: 'none',
+      },
+      backgroundAdjustments: {
+        saturation: 1,
+        contrast: 1,
+        blurEnabled: false,
+        blurRadius: 0,
+        blurOpacity: 0,
+        vignette: 0,
+      },
+    });
+
+    const shadowPixel = getPixel(bitmap, 10, 8, 8);
+    expect(shadowPixel[3]).toBeGreaterThan(0);
+  });
+
 });

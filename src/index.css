@@ -77,21 +77,6 @@
   --kanban-column-default: #5f6f8a;
   --splash-image-shadow-start: rgba(0, 0, 0, 0.24);
   --splash-image-shadow-end: rgba(0, 0, 0, 0.44);
-  --glass-surface-bg: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--panel-bg-start) 58%, rgba(226, 232, 240, 0.12)),
-    color-mix(in srgb, var(--panel-bg-end) 70%, rgba(15, 23, 42, 0.26))
-  );
-  --glass-surface-bg-soft: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface-soft) 70%, rgba(226, 232, 240, 0.08)),
-    color-mix(in srgb, var(--panel-bg-end) 74%, rgba(15, 23, 42, 0.2))
-  );
-  --glass-surface-border: color-mix(in srgb, var(--dialog-border) 66%, rgba(255, 255, 255, 0.2));
-  --glass-surface-shadow:
-    0 16px 30px color-mix(in srgb, var(--context-shadow) 48%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  --glass-surface-blur: blur(14px) saturate(128%);
 
   color: var(--app-text);
   background: var(--app-bg);
@@ -177,21 +162,6 @@
   --kanban-column-default: #5f6f8a;
   --splash-image-shadow-start: rgba(0, 0, 0, 0.24);
   --splash-image-shadow-end: rgba(0, 0, 0, 0.44);
-  --glass-surface-bg: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--panel-bg-start) 64%, rgba(255, 255, 255, 0.09)),
-    color-mix(in srgb, var(--panel-bg-end) 76%, rgba(12, 16, 22, 0.26))
-  );
-  --glass-surface-bg-soft: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface-soft) 74%, rgba(255, 255, 255, 0.06)),
-    color-mix(in srgb, var(--panel-bg-end) 82%, rgba(12, 16, 22, 0.22))
-  );
-  --glass-surface-border: color-mix(in srgb, var(--dialog-border) 72%, rgba(255, 255, 255, 0.14));
-  --glass-surface-shadow:
-    0 14px 28px color-mix(in srgb, var(--context-shadow) 52%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  --glass-surface-blur: blur(12px) saturate(120%);
 }
 
 :root[data-theme='evergreen'] {
@@ -273,21 +243,6 @@
   --kanban-column-default: #5f6f8a;
   --splash-image-shadow-start: rgba(0, 0, 0, 0.24);
   --splash-image-shadow-end: rgba(0, 0, 0, 0.44);
-  --glass-surface-bg: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--panel-bg-start) 62%, rgba(255, 239, 222, 0.09)),
-    color-mix(in srgb, var(--panel-bg-end) 78%, rgba(30, 18, 10, 0.24))
-  );
-  --glass-surface-bg-soft: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface-soft) 76%, rgba(255, 239, 222, 0.06)),
-    color-mix(in srgb, var(--panel-bg-end) 84%, rgba(30, 18, 10, 0.2))
-  );
-  --glass-surface-border: color-mix(in srgb, var(--dialog-border) 74%, rgba(255, 232, 210, 0.14));
-  --glass-surface-shadow:
-    0 14px 28px color-mix(in srgb, var(--context-shadow) 52%, transparent),
-    inset 0 1px 0 rgba(255, 244, 233, 0.08);
-  --glass-surface-blur: blur(12px) saturate(118%);
 }
 
 * {
@@ -3837,48 +3792,6 @@ input[type='range']::-moz-range-thumb {
   pointer-events: none;
 }
 
-.steam-achievement-snap-image-bounds {
-  position: absolute;
-  pointer-events: none;
-  z-index: 2;
-  border: 1px solid rgba(120, 213, 255, 0.48);
-  box-shadow:
-    0 0 0 1px rgba(9, 18, 32, 0.38),
-    inset 0 0 18px rgba(120, 213, 255, 0.08),
-    0 0 18px rgba(120, 213, 255, 0.16);
-}
-
-.steam-achievement-snap-image-line {
-  position: absolute;
-  opacity: 0.8;
-}
-
-.steam-achievement-snap-image-line.vertical {
-  top: 8px;
-  bottom: 8px;
-  left: 50%;
-  width: 1px;
-  transform: translateX(-50%);
-  background-image: repeating-linear-gradient(
-    to bottom,
-    rgba(120, 213, 255, 0.85) 0 6px,
-    transparent 6px 12px
-  );
-}
-
-.steam-achievement-snap-image-line.horizontal {
-  left: 8px;
-  right: 8px;
-  top: 50%;
-  height: 1px;
-  transform: translateY(-50%);
-  background-image: repeating-linear-gradient(
-    to right,
-    rgba(120, 213, 255, 0.85) 0 6px,
-    transparent 6px 12px
-  );
-}
-
 .steam-achievement-guide-line {
   position: absolute;
   background: rgba(255, 255, 255, 0.18);
@@ -4459,10 +4372,10 @@ input[type='range']::-moz-range-thumb {
 
 .terminal-command-list {
   min-height: 0;
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--dialog-border);
   border-radius: 12px;
   padding: 12px;
-  background: color-mix(in srgb, var(--panel-bg) 90%, #0f172a 10%);
+  background: color-mix(in srgb, var(--dialog-bg) 88%, var(--panel-bg-end) 12%);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -4486,10 +4399,10 @@ input[type='range']::-moz-range-thumb {
   grid-template-columns: auto 1fr auto auto;
   gap: 6px;
   align-items: center;
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--input-border);
   border-radius: 10px;
   padding: 6px;
-  background: color-mix(in srgb, var(--panel-bg) 88%, #111827 12%);
+  background: color-mix(in srgb, var(--surface-soft) 85%, var(--panel-bg-end) 15%);
 }
 
 .terminal-command-delete-confirm {
@@ -4497,7 +4410,7 @@ input[type='range']::-moz-range-thumb {
   border: 1px solid color-mix(in srgb, var(--danger-border) 64%, transparent);
   border-radius: 8px;
   padding: 8px;
-  background: color-mix(in srgb, var(--danger-bg) 58%, var(--panel-bg));
+  background: color-mix(in srgb, var(--danger-bg) 58%, var(--dialog-bg));
 }
 
 .terminal-command-delete-confirm p {
@@ -4515,7 +4428,7 @@ input[type='range']::-moz-range-thumb {
 }
 
 .terminal-empty-help {
-  color: var(--app-subtext);
+  color: var(--muted-text);
   font-size: 0.86rem;
 }
 
@@ -4527,9 +4440,9 @@ input[type='range']::-moz-range-thumb {
   justify-content: center;
   font-size: 0.72rem;
   border-radius: 999px;
-  border: 1px solid var(--panel-border);
-  background: color-mix(in srgb, var(--panel-bg) 50%, rgba(15, 23, 42, 0.38));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--input-border);
+  background: color-mix(in srgb, var(--dialog-bg) 60%, var(--panel-bg-end) 40%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .terminal-status-chip.is-running {
@@ -4544,24 +4457,21 @@ input[type='range']::-moz-range-thumb {
   color: #ffd866;
 }
 
-.terminal-status-chip.is-stopped {
-  color: #ff7a7a;
-}
-
+.terminal-status-chip.is-stopped,
 .terminal-status-chip.is-error {
-  color: #ff6b6b;
+  color: #ff7a7a;
 }
 
 .terminal-canvas-shell {
   position: relative;
   min-height: 0;
-  border: 1px solid var(--panel-border);
+  border: 1px solid var(--dialog-border);
   border-radius: 12px;
   overflow: hidden;
   background: linear-gradient(
     150deg,
-    color-mix(in srgb, var(--panel-bg) 92%, #0b1220 8%),
-    color-mix(in srgb, var(--panel-bg) 80%, #05080f 20%)
+    color-mix(in srgb, var(--panel-bg-start) 92%, #0b1220 8%),
+    color-mix(in srgb, var(--panel-bg-end) 80%, #05080f 20%)
   );
   cursor: default;
 }
@@ -4576,10 +4486,10 @@ input[type='range']::-moz-range-thumb {
   gap: 6px;
   padding: 6px 8px;
   border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--panel-border) 68%, rgba(255, 255, 255, 0.16));
-  background: color-mix(in srgb, var(--panel-bg) 50%, rgba(15, 23, 42, 0.48));
-  backdrop-filter: blur(10px) saturate(130%);
-  -webkit-backdrop-filter: blur(10px) saturate(130%);
+  border: 1px solid var(--input-border);
+  background: color-mix(in srgb, var(--dialog-bg) 56%, rgba(15, 23, 42, 0.44));
+  backdrop-filter: blur(8px) saturate(120%);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
 }
 
 .terminal-canvas-zoom-controls button {
@@ -4617,12 +4527,12 @@ body.is-panning-terminal-canvas * {
 
 .terminal-panel {
   position: absolute;
-  border: 1px solid color-mix(in srgb, var(--panel-border) 70%, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--input-border);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--panel-bg) 70%, #020617 30%);
+  background: color-mix(in srgb, var(--dialog-bg) 72%, #020617 28%);
   box-shadow:
     0 20px 38px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   display: grid;
   grid-template-rows: auto 1fr;
   overflow: hidden;
@@ -4634,14 +4544,12 @@ body.is-panning-terminal-canvas * {
   align-items: center;
   gap: 10px;
   padding: 7px 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--panel-border) 70%, rgba(255, 255, 255, 0.12));
+  border-bottom: 1px solid var(--input-border);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--panel-bg) 46%, rgba(226, 232, 240, 0.18)),
-    color-mix(in srgb, var(--panel-bg) 58%, rgba(15, 23, 42, 0.34))
+    color-mix(in srgb, var(--dialog-bg) 52%, rgba(226, 232, 240, 0.14)),
+    color-mix(in srgb, var(--dialog-bg) 66%, rgba(15, 23, 42, 0.3))
   );
-  backdrop-filter: blur(14px) saturate(130%);
-  -webkit-backdrop-filter: blur(14px) saturate(130%);
   cursor: grab;
 }
 
@@ -4671,8 +4579,8 @@ body.is-panning-terminal-canvas * {
   font-size: 0.78rem;
   height: 28px;
   border-radius: 8px;
-  border-color: color-mix(in srgb, var(--panel-border) 66%, rgba(255, 255, 255, 0.2));
-  background: color-mix(in srgb, var(--panel-bg) 68%, rgba(15, 23, 42, 0.45));
+  border-color: var(--input-border);
+  background: color-mix(in srgb, var(--dialog-bg) 70%, rgba(15, 23, 42, 0.4));
   color: color-mix(in srgb, var(--app-text) 86%, #cbd5e1);
   letter-spacing: 0.02em;
   font-family: "Cascadia Mono", Consolas, Menlo, Monaco, monospace;
@@ -4694,8 +4602,8 @@ body.is-panning-terminal-canvas * {
   height: 24px;
   padding: 0;
   border-radius: 7px;
-  border-color: color-mix(in srgb, var(--panel-border) 72%, rgba(255, 255, 255, 0.16));
-  background: color-mix(in srgb, var(--panel-bg) 56%, rgba(15, 23, 42, 0.48));
+  border-color: var(--input-border);
+  background: color-mix(in srgb, var(--dialog-bg) 60%, rgba(15, 23, 42, 0.45));
 }
 
 .terminal-panel-controls button:hover {
@@ -4707,13 +4615,11 @@ body.is-panning-terminal-canvas * {
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--panel-bg) 40%, rgba(148, 163, 184, 0.12)),
-      color-mix(in srgb, var(--panel-bg) 62%, rgba(15, 23, 42, 0.42))
+      color-mix(in srgb, var(--dialog-bg) 44%, rgba(148, 163, 184, 0.12)),
+      color-mix(in srgb, var(--dialog-bg) 64%, rgba(15, 23, 42, 0.38))
     );
   padding: 0;
   overflow: hidden;
-  backdrop-filter: blur(14px) saturate(128%);
-  -webkit-backdrop-filter: blur(14px) saturate(128%);
 }
 
 .terminal-panel-xterm {
@@ -4763,47 +4669,4 @@ body.is-panning-terminal-canvas * {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
   }
-}
-
-/* App-wide glass language for container surfaces */
-.glass-surface,
-.sidebar,
-.main-panel,
-.project-status,
-.dialog,
-.settings-dialog,
-.dialog-content,
-.kanban-toolbar,
-.kanban-column,
-.kanban-details-sidebar,
-.kanban-context-menu,
-.steam-achievement-entry-list,
-.steam-achievement-workbench,
-.steam-achievement-assets,
-.steam-achievement-style-sidebar,
-.steam-marketplace-entry-list,
-.steam-marketplace-workbench,
-.steam-marketplace-assets,
-.terminal-command-list,
-.terminal-canvas-shell,
-.terminal-panel,
-.terminal-panel-header,
-.terminal-panel-viewport {
-  background: var(--glass-surface-bg);
-  border-color: var(--glass-surface-border);
-  box-shadow: var(--glass-surface-shadow);
-  backdrop-filter: var(--glass-surface-blur);
-  -webkit-backdrop-filter: var(--glass-surface-blur);
-}
-
-.glass-surface-soft,
-.tree-item.editing,
-.settings-input,
-.kanban-card,
-.kanban-details-preview,
-.steam-achievement-entry,
-.steam-marketplace-entry-card,
-.steam-marketplace-preview-card {
-  background: var(--glass-surface-bg-soft);
-  border-color: var(--glass-surface-border);
 }

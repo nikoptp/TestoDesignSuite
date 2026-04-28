@@ -3,6 +3,8 @@ import {
   composeSteamAchievementFrameBitmap,
   createGrayscaleBitmap,
   getSteamImagePreset,
+  normalizeSteamAchievementEntryImageStyle,
+  normalizeSteamAchievementTransform,
 } from '../features/steam-achievement/steam-achievement-art';
 import type { SteamAchievementEntry, SteamAchievementExportRequest } from '../shared/types';
 
@@ -26,14 +28,16 @@ export const renderSteamAchievementEntryPngs = async (
     ? nativeImage.createFromPath(backgroundAbsolutePath)
     : null;
   const backgroundSize = backgroundImage?.getSize() ?? { width: 0, height: 0 };
+  const normalizedCrop = normalizeSteamAchievementTransform(entry.crop);
+  const normalizedImageStyle = normalizeSteamAchievementEntryImageStyle(entry.imageStyle);
 
   const colorBitmap = composeSteamAchievementFrameBitmap({
     sourceWidth: width,
     sourceHeight: height,
     sourceBgra: sourceImage.toBitmap(),
     preset,
-    transform: entry.crop,
-    imageStyle: entry.imageStyle,
+    transform: normalizedCrop,
+    imageStyle: normalizedImageStyle,
     borderStyle: request.data.borderStyle,
     backgroundAdjustments: request.data.backgroundAdjustments,
     backgroundImageBgra:
@@ -49,7 +53,7 @@ export const renderSteamAchievementEntryPngs = async (
       height: preset.height,
       scaleFactor: 1,
     })
-    .toPNG();
+    .toJPEG(100);
 
   const grayscalePng = preset.exportGrayscale
     ? nativeImage
@@ -58,7 +62,7 @@ export const renderSteamAchievementEntryPngs = async (
           height: preset.height,
           scaleFactor: 1,
         })
-        .toPNG()
+        .toJPEG(100)
     : null;
 
   return {

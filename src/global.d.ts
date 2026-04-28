@@ -1,4 +1,5 @@
 import type {
+  ApiCapabilities,
   CustomThemeDefinition,
   LaunchState,
   PersistedTreeState,
@@ -20,6 +21,12 @@ import type {
   TerminalWriteRequest,
   SteamMarketplaceExportRequest,
   SteamMarketplaceExportResult,
+  DocsReadResult,
+  DocsRenameRequest,
+  DocsWriteRequest,
+  ExternalNodeCreateRequestPayload,
+  ExternalNodeCreateResponsePayload,
+  ProjectDocFileEntry,
   UserSettings,
 } from './shared/types';
 
@@ -33,6 +40,13 @@ declare global {
       saveImageAsset: (input: { bytes: Uint8Array; mimeType: string }) => Promise<SavedImageAsset>;
       listImageAssets: () => Promise<ProjectImageAsset[]>;
       deleteImageAsset: (relativePath: string) => Promise<void>;
+      listDocs: () => Promise<ProjectDocFileEntry[]>;
+      readDoc: (relativePath: string) => Promise<DocsReadResult>;
+      writeDoc: (request: DocsWriteRequest) => Promise<DocsReadResult>;
+      createDoc: (request: Omit<DocsWriteRequest, 'expectedHash'>) => Promise<DocsReadResult>;
+      renameDoc: (request: DocsRenameRequest) => Promise<{ relativePath: string }>;
+      deleteDoc: (relativePath: string) => Promise<void>;
+      getCapabilities: () => Promise<ApiCapabilities>;
       exportSteamAchievementSet: (
         request: SteamAchievementExportRequest,
       ) => Promise<SteamAchievementExportResult>;
@@ -59,6 +73,13 @@ declare global {
       ) => () => void;
       onOpenSettings: (listener: () => void) => () => void;
       onProjectStatus: (listener: (payload: ProjectStatusPayload) => void) => () => void;
+      onExternalNodeCreateRequest: (
+        listener: (
+          payload: ExternalNodeCreateRequestPayload,
+        ) =>
+          | Promise<Omit<ExternalNodeCreateResponsePayload, 'requestId'>>
+          | Omit<ExternalNodeCreateResponsePayload, 'requestId'>,
+      ) => () => void;
       getLaunchState: () => Promise<LaunchState>;
       openProjectFileDialog: () => Promise<boolean>;
       terminalPickExecutionFolder: (defaultPath?: string) => Promise<string | null>;

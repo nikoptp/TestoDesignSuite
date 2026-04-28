@@ -1,6 +1,7 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type {
+  CreateProjectNodeRequest,
   KanbanPriority,
   LaunchState,
   PersistedTreeState,
@@ -20,6 +21,7 @@ import {
 } from './shared/noteboard-constants';
 import {
   countDescendants,
+  createNode,
   findNodeById,
   moveNodeById,
 } from './shared/tree-utils';
@@ -227,6 +229,68 @@ export const App = (): React.ReactElement => {
   React.useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
+
+  React.useEffect(() => {
+    if (!window.testoApi?.onExternalNodeCreateRequest) {
+      return;
+    }
+    return window.testoApi.onExternalNodeCreateRequest(({ request }) => {
+      const input = request as CreateProjectNodeRequest;
+      const snapshot = stateRef.current;
+      const parentRef = input.parentId ?? null;
+      if (parentRef && !findNodeById(snapshot.nodes, parentRef)) {
+        return {
+          ok: false,
+          error: 'Parent node not found.',
+        };
+      }
+      const nextNode = createNode(
+        input.name?.trim() ? input.name.trim() : `Untitled Node ${snapshot.nextNodeNumber}`,
+        input.editorType,
+      );
+      const createdNodeId = nextNode.id;
+      setState((prev) => {
+        const nextNodes = [...prev.nodes];
+        if (!parentRef) {
+          nextNodes.push(nextNode);
+        } else {
+          const parent = findNodeById(nextNodes, parentRef);
+          if (!parent) {
+            return prev;
+          }
+          parent.children.push(nextNode);
+        }
+        const nextNodeData = { ...prev.nodeDataById, [nextNode.id]: {} };
+        if (input.editorType === 'story-document') {
+          nextNodeData[nextNode.id] = {
+            ...nextNodeData[nextNode.id],
+            document: {
+              markdown: typeof input.initialMarkdown === 'string' ? input.initialMarkdown : '',
+            },
+          };
+        }
+        return {
+          ...prev,
+          nodes: nextNodes,
+          selectedNodeId: nextNode.id,
+          nextNodeNumber: prev.nextNodeNumber + 1,
+          nodeDataById: nextNodeData,
+          collapsedNodeIds:
+            parentRef === null
+              ? prev.collapsedNodeIds ?? []
+              : (prev.collapsedNodeIds ?? []).filter((id) => id !== parentRef),
+        };
+      });
+      setUiState((prev) => ({
+        ...prev,
+        pendingCreateParentRef: null,
+      }));
+      return {
+        ok: true,
+        createdNodeId,
+      };
+    });
+  }, [setState, setUiState]);
 
   useProjectSnapshotResponder(stateRef, settingsRef);
 
@@ -1318,7 +1382,7 @@ export const App = (): React.ReactElement => {
               entry.id === entryId
                 ? {
                     ...entry,
-                    name: normalizeSteamAchievementEntryName(name),
+                    name: normalizeSteamAchievementEntryName(name, ''),
                     updatedAt: Date.now(),
                   }
                 : entry,

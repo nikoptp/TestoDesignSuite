@@ -603,7 +603,6 @@ export const SteamAchievementArtEditor = ({
                 backgroundGradientOverlayEnabled: true,
               })
             }
-            disabled={!hasBackgroundAsset}
           >
             <span className="tool-style-icon"><i className="fa-solid fa-wand-magic-sparkles"></i></span>
             <span className="tool-style-name">On</span>
@@ -616,7 +615,6 @@ export const SteamAchievementArtEditor = ({
                 backgroundGradientOverlayEnabled: false,
               })
             }
-            disabled={!hasBackgroundAsset}
           >
             <span className="tool-style-icon"><i className="fa-regular fa-square-minus"></i></span>
             <span className="tool-style-name">Off</span>
@@ -631,7 +629,7 @@ export const SteamAchievementArtEditor = ({
           min="0"
           max="359"
           step="1"
-          disabled={!hasBackgroundAsset || !art.borderStyle.backgroundGradientOverlayEnabled}
+          disabled={!art.borderStyle.backgroundGradientOverlayEnabled}
           value={art.borderStyle.backgroundAngle}
           onChange={(event) => onBorderStyleChange({ backgroundAngle: Number(event.target.value) })}
         />
@@ -644,7 +642,7 @@ export const SteamAchievementArtEditor = ({
           min="0"
           max="1"
           step="0.01"
-          disabled={!hasBackgroundAsset || !art.borderStyle.backgroundGradientOverlayEnabled}
+          disabled={!art.borderStyle.backgroundGradientOverlayEnabled}
           value={art.borderStyle.backgroundGradientOpacity}
           onChange={(event) => onBorderStyleChange({ backgroundGradientOpacity: Number(event.target.value) })}
         />
@@ -661,7 +659,7 @@ export const SteamAchievementArtEditor = ({
               key={colorStop.key}
               className="settings-input color-input"
               type="color"
-              disabled={!hasBackgroundAsset || !art.borderStyle.backgroundGradientOverlayEnabled}
+              disabled={!art.borderStyle.backgroundGradientOverlayEnabled}
               value={colorStop.value}
               onChange={(event) => onBorderStyleChange({ [colorStop.key]: event.target.value })}
             />

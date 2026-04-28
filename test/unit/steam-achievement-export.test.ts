@@ -54,10 +54,10 @@ describe('steam achievement export writer', () => {
     );
 
     const files = (await readdir(outputDir)).sort();
-    expect(files).toEqual(['boss_clear.png', 'boss_clear_gray.png']);
+    expect(files).toEqual(['boss_clear.jpg', 'boss_clear_gray.jpg']);
     expect(result.exportedEntryCount).toBe(1);
     expect(result.writtenFileCount).toBe(2);
-    await expect(readFile(path.join(outputDir, 'boss_clear.png'))).resolves.toEqual(
+    await expect(readFile(path.join(outputDir, 'boss_clear.jpg'))).resolves.toEqual(
       Buffer.from([1, 2, 3]),
     );
   });

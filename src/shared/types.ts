@@ -514,3 +514,83 @@ export type LaunchState = {
   recentProjects: RecentProjectEntry[];
   lastActiveProjectPath: string | null;
 };
+
+export type ProjectDocFileEntry = {
+  relativePath: string;
+  name: string;
+  directory: string;
+  sizeBytes: number;
+  updatedAt: number;
+};
+
+export type DocsReadResult = {
+  relativePath: string;
+  content: string;
+  updatedAt: number;
+  hash: string;
+};
+
+export type DocsWriteRequest = {
+  relativePath: string;
+  content: string;
+  expectedHash?: string;
+};
+
+export type DocsRenameRequest = {
+  fromRelativePath: string;
+  toRelativePath: string;
+};
+
+export type ProjectEditorNodeEntry = {
+  id: string;
+  name: string;
+  editorType: EditorType;
+  parentId: string | null;
+};
+
+export type CreateProjectNodeRequest = {
+  editorType: EditorType;
+  name?: string;
+  parentId?: string | null;
+  initialMarkdown?: string;
+};
+
+export type ExternalNodeCreateRequestPayload = {
+  requestId: number;
+  request: CreateProjectNodeRequest;
+};
+
+export type ExternalNodeCreateResponsePayload = {
+  requestId: number;
+  ok: boolean;
+  createdNodeId?: string;
+  error?: string;
+};
+
+export type ApiCapabilityMethod = {
+  name: string;
+  description: string;
+  params: string[];
+  returns: string;
+};
+
+export type ApiCapabilityError = {
+  code: string;
+  message: string;
+};
+
+export type ApiCapabilities = {
+  name: string;
+  apiVersion: string;
+  generatedAt: number;
+  docs: {
+    scope: string;
+    extensions: string[];
+    methods: ApiCapabilityMethod[];
+    errors: ApiCapabilityError[];
+  };
+  nodes: {
+    methods: ApiCapabilityMethod[];
+    errors: ApiCapabilityError[];
+  };
+};

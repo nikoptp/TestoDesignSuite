@@ -3,6 +3,7 @@ import { createId } from '../../shared/tree-utils';
 import {
   applyBlurLayer,
   applyImageAdjustments,
+  blurBitmap,
   buildCssBlurFilter,
   buildCssImageAdjustmentFilter,
   buildCssShadowFilter,
@@ -459,9 +460,10 @@ export const normalizeSteamAchievementArtData = (input: unknown): SteamAchieveme
         return [
           {
             id: item.id,
-            name: normalizeSteamAchievementEntryName(
-              typeof item.name === 'string' ? item.name : DEFAULT_NAME,
-            ),
+            name:
+              typeof item.name === 'string'
+                ? normalizeSteamAchievementEntryName(item.name, '')
+                : normalizeSteamAchievementEntryName(DEFAULT_NAME),
             sourceImageRelativePath:
               typeof item.sourceImageRelativePath === 'string' && item.sourceImageRelativePath.trim()
                 ? item.sourceImageRelativePath.trim()
@@ -517,8 +519,8 @@ export const buildSteamAchievementExportFileNames = (
 ): { color: string; grayscale: string | null } => {
   const stem = sanitizeExportFileStem(entryName, DEFAULT_NAME);
   return {
-    color: `${stem}.png`,
-    grayscale: preset.exportGrayscale ? `${stem}${preset.grayscaleSuffix}.png` : null,
+    color: `${stem}.jpg`,
+    grayscale: preset.exportGrayscale ? `${stem}${preset.grayscaleSuffix}.jpg` : null,
   };
 };
 
@@ -755,17 +757,12 @@ export const composeSteamAchievementFrameBitmap = (input: {
       opacity: imageStyle.adjustments.blurOpacity,
     },
   );
-  if (imageStyle.shadow.enabled && imageStyle.shadow.opacity > 0 && imageStyle.shadow.blur > 0) {
-    const shadowBitmap = applyBlurLayer(
-      createShadowMask(imageBitmap, imageStyle.shadow.opacity),
-      imageRect.width,
-      imageRect.height,
-      {
-        enabled: true,
-        blurRadius: imageStyle.shadow.blur,
-        opacity: 1,
-      },
-    );
+  if (imageStyle.shadow.enabled && imageStyle.shadow.opacity > 0) {
+    const shadowMask = createShadowMask(imageBitmap, imageStyle.shadow.opacity);
+    const shadowBitmap =
+      imageStyle.shadow.blur > 0
+        ? blurBitmap(shadowMask, imageRect.width, imageRect.height, imageStyle.shadow.blur)
+        : shadowMask;
     compositeBitmap(backgroundBitmap, input.preset.width, input.preset.height, shadowBitmap, {
       left: imageRect.left + Math.round(imageStyle.shadow.offsetX),
       top: imageRect.top + Math.round(imageStyle.shadow.offsetY),
@@ -804,11 +801,10 @@ export const createSteamAchievementBackgroundBitmap = (input: {
   const adjustments =
     input.backgroundAdjustments ?? createDefaultSteamAchievementBackgroundAdjustmentState();
   const shouldApplyGradient =
-    style.backgroundMode === 'image' &&
     style.backgroundGradientOverlayEnabled &&
     style.backgroundGradientOpacity > 0;
 
-  if (style.backgroundMode === 'none') {
+  if (style.backgroundMode === 'none' && !shouldApplyGradient) {
     return applyVignetteOverlay(output, input.width, input.height, adjustments.vignette);
   }
 
@@ -861,6 +857,9 @@ export const createSteamAchievementBackgroundBitmap = (input: {
       return applyVignetteOverlay(output, input.width, input.height, adjustments.vignette);
     }
   }
+  const hasBackgroundImage =
+    style.backgroundMode === 'image' &&
+    Boolean(input.backgroundImageBgra && input.backgroundImageWidth && input.backgroundImageHeight);
 
   const backgroundWithVignette = applyVignetteOverlay(output, input.width, input.height, adjustments.vignette);
   if (!shouldApplyGradient) {
@@ -893,10 +892,12 @@ export const createSteamAchievementBackgroundBitmap = (input: {
         color.r,
         style.backgroundGradientOpacity,
       );
-      backgroundWithVignette[offset + 3] = Math.max(
-        backgroundWithVignette[offset + 3],
-        Math.round(255 * style.backgroundGradientOpacity),
-      );
+      backgroundWithVignette[offset + 3] = hasBackgroundImage
+        ? Math.max(
+            backgroundWithVignette[offset + 3],
+            Math.round(255 * style.backgroundGradientOpacity),
+          )
+        : 255;
     }
   }
   return backgroundWithVignette;
@@ -1056,7 +1057,7 @@ export const buildSteamAchievementBackgroundBlurCss = (
 export const buildSteamAchievementBackgroundGradientOverlayCss = (
   borderStyle: SteamAchievementBorderStyle,
 ): React.CSSProperties => {
-  const showGradient = borderStyle.backgroundMode === 'image' && borderStyle.backgroundGradientOverlayEnabled;
+  const showGradient = borderStyle.backgroundGradientOverlayEnabled;
   if (!showGradient || borderStyle.backgroundGradientOpacity <= 0) {
     return { display: 'none' };
   }

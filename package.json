@@ -1,7 +1,7 @@
 {
   "name": "testo-design-suite",
   "productName": "testo-design-suite",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "My Electron application description",
   "main": ".webpack/main",
   "private": true,
